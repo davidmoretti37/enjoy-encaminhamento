@@ -1,0 +1,179 @@
+================================================================================
+                    DATABASE MIGRATION - QUICK REFERENCE
+================================================================================
+
+STEP 1: DELETE EVERYTHING
+--------------------------
+Location: supabase/migrations/000_cleanup.sql
+Action: Copy this entire file and run it in Supabase SQL Editor
+
+This will remove:
+- All 10 tables (if they exist)
+- All custom types
+- All functions
+- All triggers
+- All policies
+
+Time: ~2 seconds
+
+
+STEP 2: CREATE EVERYTHING
+--------------------------
+Location: supabase/migrations/001_initial_schema.sql
+Action: Copy this entire file and run it in Supabase SQL Editor
+
+This will create:
+- 16 custom enum types
+- 10 tables with full schema
+- Foreign key relationships
+- Indexes for performance
+- Row Level Security (RLS) policies
+- Automatic timestamp triggers
+- UUID extension
+
+Time: ~10-15 seconds
+
+
+STEP 3: ENABLE AUTHENTICATION
+------------------------------
+Location: Supabase Dashboard → Authentication → Providers
+Action: Toggle ON the "Email" provider
+
+This enables:
+- Email/password authentication
+- User signup
+- User login
+- Password reset
+
+
+STEP 4: TEST
+-------------
+Run: npm run dev
+Visit: http://localhost:5000
+Action: Sign up a new account
+
+
+STEP 5: MAKE ADMIN (OPTIONAL)
+------------------------------
+After signing up, run this in SQL Editor:
+
+UPDATE public.users
+SET role = 'admin'
+WHERE id = 'YOUR-USER-ID-HERE';
+
+Get your user ID from: Authentication → Users in Supabase dashboard
+
+
+================================================================================
+                              FILES YOU NEED
+================================================================================
+
+1. supabase/migrations/000_cleanup.sql
+   Purpose: Deletes all existing tables and types
+   Run: FIRST
+   Size: ~60 lines
+
+2. supabase/migrations/001_initial_schema.sql
+   Purpose: Creates complete database schema
+   Run: SECOND
+   Size: ~800 lines
+
+3. .env (already created)
+   Purpose: Contains your Supabase credentials
+   SUPABASE_URL=https://jpdqxjaosattvzjjumxz.supabase.co
+   SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+
+
+================================================================================
+                           VERIFICATION STEPS
+================================================================================
+
+After running migrations, verify:
+
+✓ Table Editor shows 10 tables:
+  - users
+  - companies
+  - candidates
+  - jobs
+  - applications
+  - contracts
+  - feedback
+  - payments
+  - documents
+  - notifications
+
+✓ Each table has "RLS enabled" badge
+
+✓ Authentication → Providers shows Email enabled
+
+✓ Dev server starts without errors
+
+✓ Can visit /login page
+
+✓ Can create an account
+
+
+================================================================================
+                            COMMON ERRORS
+================================================================================
+
+Error: "relation already exists"
+Fix: Run 000_cleanup.sql first
+
+Error: "type already exists"
+Fix: Run 000_cleanup.sql again
+
+Error: "syntax error"
+Fix: Copy the ENTIRE file, check you got all lines
+
+Error: "tables not showing"
+Fix: Refresh page, check for SQL errors
+
+Error: "authentication not working"
+Fix: Enable Email provider in Authentication settings
+
+
+================================================================================
+                          DASHBOARD QUICK LINKS
+================================================================================
+
+Project Dashboard:
+https://app.supabase.com/project/jpdqxjaosattvzjjumxz
+
+SQL Editor (run migrations here):
+https://app.supabase.com/project/jpdqxjaosattvzjjumxz/sql
+
+Table Editor (verify tables):
+https://app.supabase.com/project/jpdqxjaosattvzjjumxz/editor
+
+Authentication Settings:
+https://app.supabase.com/project/jpdqxjaosattvzjjumxz/auth/users
+
+Database Logs:
+https://app.supabase.com/project/jpdqxjaosattvzjjumxz/logs/postgres-logs
+
+
+================================================================================
+                            NEED HELP?
+================================================================================
+
+Documentation Files:
+- RUN_MIGRATIONS.md (detailed step-by-step)
+- QUICKSTART.md (5 minute guide)
+- MIGRATION_INSTRUCTIONS.md (complete guide)
+- MIGRATION_CHECKLIST.md (task checklist)
+
+Support:
+- Supabase Docs: https://supabase.com/docs
+- Supabase Discord: https://discord.supabase.com
+
+
+================================================================================
+                         YOU'RE ALL SET! 🚀
+================================================================================
+
+Once migrations are complete:
+1. npm run dev
+2. Visit http://localhost:5000
+3. Click "Entrar" or "Começar Agora"
+4. Sign up and start building!
