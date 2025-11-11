@@ -42,10 +42,18 @@ const trpcClient = trpc.createClient({
     httpBatchLink({
       url: "/api/trpc",
       transformer: superjson,
-      fetch(input, init) {
+      async fetch(input, init) {
+        // Get Supabase session token
+        const { supabase } = await import("./lib/supabase");
+        const { data: { session } } = await supabase.auth.getSession();
+
         return globalThis.fetch(input, {
           ...(init ?? {}),
           credentials: "include",
+          headers: {
+            ...init?.headers,
+            ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+          },
         });
       },
     }),

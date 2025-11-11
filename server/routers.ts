@@ -5,10 +5,11 @@ import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import * as db from "./db";
+import { agentRouter } from "./agents/agentRouter";
 
 // Admin-only procedure
 const adminProcedure = protectedProcedure.use(({ ctx, next }) => {
-  if (ctx.user.role !== 'admin') {
+  if (ctx.user.role !== 'admin' && ctx.user.role !== 'super_admin') {
     throw new TRPCError({ code: 'FORBIDDEN', message: 'Admin access required' });
   }
   return next({ ctx });
@@ -16,7 +17,7 @@ const adminProcedure = protectedProcedure.use(({ ctx, next }) => {
 
 // Company-only procedure
 const companyProcedure = protectedProcedure.use(async ({ ctx, next }) => {
-  if (ctx.user.role !== 'company' && ctx.user.role !== 'admin') {
+  if (ctx.user.role !== 'company' && ctx.user.role !== 'admin' && ctx.user.role !== 'super_admin') {
     throw new TRPCError({ code: 'FORBIDDEN', message: 'Company access required' });
   }
   return next({ ctx });
@@ -24,7 +25,7 @@ const companyProcedure = protectedProcedure.use(async ({ ctx, next }) => {
 
 // Candidate-only procedure
 const candidateProcedure = protectedProcedure.use(({ ctx, next }) => {
-  if (ctx.user.role !== 'candidate' && ctx.user.role !== 'admin') {
+  if (ctx.user.role !== 'candidate' && ctx.user.role !== 'admin' && ctx.user.role !== 'super_admin') {
     throw new TRPCError({ code: 'FORBIDDEN', message: 'Candidate access required' });
   }
   return next({ ctx });
@@ -32,7 +33,8 @@ const candidateProcedure = protectedProcedure.use(({ ctx, next }) => {
 
 export const appRouter = router({
   system: systemRouter,
-  
+  agent: agentRouter,
+
   auth: router({
     me: publicProcedure.query(opts => opts.ctx.user),
     logout: publicProcedure.mutation(async ({ ctx }) => {
@@ -112,6 +114,72 @@ export const appRouter = router({
     getAll: adminProcedure.query(async () => {
       return await db.getAllCompanies();
     }),
+
+    // Update company status (admin only)
+    updateStatus: adminProcedure
+      .input(z.object({
+        id: z.string().uuid(),
+        status: z.enum(['pending', 'active', 'suspended', 'inactive']),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        await db.updateCompanyStatus(input.id, input.status, ctx.user.id);
+        return { success: true };
+      }),
+  }),
+
+  // School routes (NEW - for franchise structure)
+  school: router({
+    // Get all schools (admin only)
+    getAll: adminProcedure.query(async () => {
+      return await db.getAllSchools();
+    }),
+
+    // Get school by ID
+    getById: adminProcedure
+      .input(z.object({ id: z.string().uuid() }))
+      .query(async ({ input }) => {
+        return await db.getSchoolById(input.id);
+      }),
+
+    // Update school status (approve/suspend)
+    updateStatus: adminProcedure
+      .input(z.object({
+        id: z.string().uuid(),
+        status: z.enum(['pending', 'active', 'suspended'])
+      }))
+      .mutation(async ({ input }) => {
+        await db.updateSchoolStatus(input.id, input.status);
+        return { success: true };
+      }),
+
+    // Update school details
+    update: adminProcedure
+      .input(z.object({
+        id: z.string().uuid(),
+        school_name: z.string().optional(),
+        trade_name: z.string().optional(),
+        legal_name: z.string().optional(),
+        cnpj: z.string().optional(),
+        address: z.string().optional(),
+        city: z.string().optional(),
+        state: z.string().optional(),
+        postal_code: z.string().optional(),
+        phone: z.string().optional(),
+        website: z.string().optional(),
+        notes: z.string().optional()
+      }))
+      .mutation(async ({ input }) => {
+        const { id, ...data } = input;
+        await db.updateSchool(id, data);
+        return { success: true };
+      }),
+
+    // Get school statistics
+    getStats: adminProcedure
+      .input(z.object({ id: z.string().uuid() }))
+      .query(async ({ input }) => {
+        return await db.getSchoolStats(input.id);
+      }),
   }),
 
   // Candidate routes
@@ -194,7 +262,7 @@ export const appRouter = router({
         status: z.string().optional(),
       }))
       .query(async ({ ctx, input }) => {
-        if (ctx.user.role !== 'company' && ctx.user.role !== 'admin') {
+        if (ctx.user.role !== 'company' && ctx.user.role !== 'admin' && ctx.user.role !== 'super_admin') {
           throw new TRPCError({ code: 'FORBIDDEN' });
         }
         return await db.searchCandidates(input);
@@ -210,6 +278,52 @@ export const appRouter = router({
       .input(z.object({ id: z.number() }))
       .query(async ({ input }) => {
         return await db.getCandidateById(input.id);
+      }),
+
+    // Admin-only routes for candidate management
+    getAllForAdmin: adminProcedure.query(async () => {
+      return await db.getAllCandidatesForAdmin();
+    }),
+
+    getByIdForAdmin: adminProcedure
+      .input(z.object({ id: z.string().uuid() }))
+      .query(async ({ input }) => {
+        return await db.getCandidateByIdForAdmin(input.id);
+      }),
+
+    updateStatus: adminProcedure
+      .input(z.object({
+        id: z.string().uuid(),
+        status: z.enum(['active', 'inactive', 'employed'])
+      }))
+      .mutation(async ({ input }) => {
+        await db.updateCandidateStatus(input.id, input.status);
+        return { success: true };
+      }),
+
+    searchForAdmin: adminProcedure
+      .input(z.object({
+        search: z.string().optional(),
+        educationLevel: z.string().optional(),
+        city: z.string().optional(),
+        status: z.string().optional(),
+        availableForInternship: z.boolean().optional(),
+        availableForCLT: z.boolean().optional(),
+      }))
+      .query(async ({ input }) => {
+        return await db.searchCandidatesForAdmin(input);
+      }),
+
+    getApplications: adminProcedure
+      .input(z.object({ candidateId: z.string().uuid() }))
+      .query(async ({ input }) => {
+        return await db.getCandidateApplications(input.candidateId);
+      }),
+
+    getStats: adminProcedure
+      .input(z.object({ candidateId: z.string().uuid() }))
+      .query(async ({ input }) => {
+        return await db.getCandidateStats(input.candidateId);
       }),
   }),
 
@@ -259,7 +373,7 @@ export const appRouter = router({
         }
         
         const company = await db.getCompanyByUserId(ctx.user.id);
-        if (job.companyId !== company?.id && ctx.user.role !== 'admin') {
+        if (job.companyId !== company?.id && ctx.user.role !== 'admin' && ctx.user.role !== 'super_admin') {
           throw new TRPCError({ code: 'FORBIDDEN' });
         }
         
@@ -295,6 +409,21 @@ export const appRouter = router({
       }))
       .query(async ({ input }) => {
         return await db.searchJobs(input);
+      }),
+
+    // Admin routes for job management
+    getAll: adminProcedure.query(async () => {
+      return await db.getAllJobs();
+    }),
+
+    updateStatus: adminProcedure
+      .input(z.object({
+        id: z.string().uuid(),
+        status: z.enum(['draft', 'open', 'closed', 'filled']),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        await db.updateJobStatus(input.id, input.status, ctx.user.id);
+        return { success: true };
       }),
   }),
 
@@ -335,7 +464,7 @@ export const appRouter = router({
         }
         
         const company = await db.getCompanyByUserId(ctx.user.id);
-        if (job.companyId !== company?.id && ctx.user.role !== 'admin') {
+        if (job.companyId !== company?.id && ctx.user.role !== 'admin' && ctx.user.role !== 'super_admin') {
           throw new TRPCError({ code: 'FORBIDDEN' });
         }
         
@@ -484,6 +613,157 @@ export const appRouter = router({
     markAllAsRead: protectedProcedure.mutation(async ({ ctx }) => {
       await db.markAllNotificationsAsRead(ctx.user.id);
       return { success: true };
+    }),
+  }),
+
+  // School Invitations (NEW)
+  invitation: router({
+    // Create invitation (admin only)
+    create: adminProcedure
+      .input(z.object({
+        email: z.string().email(),
+        franchiseId: z.string().uuid(),
+        notes: z.string().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        return await db.createSchoolInvitation(
+          input.email,
+          input.franchiseId,
+          ctx.user.id,
+          input.notes
+        );
+      }),
+
+    // Validate invitation token (public)
+    validate: publicProcedure
+      .input(z.object({ token: z.string().uuid() }))
+      .query(async ({ input }) => {
+        const invitation = await db.getInvitationByToken(input.token);
+        if (!invitation) {
+          throw new TRPCError({ code: 'NOT_FOUND', message: 'Invitation not found' });
+        }
+        return invitation;
+      }),
+
+    // Accept invitation (authenticated)
+    accept: protectedProcedure
+      .input(z.object({
+        token: z.string().uuid(),
+        schoolData: z.object({
+          school_name: z.string().min(1),
+          trade_name: z.string().optional(),
+          legal_name: z.string().optional(),
+          cnpj: z.string().min(14),
+          email: z.string().email(),
+          phone: z.string().optional(),
+          address: z.string().optional(),
+          city: z.string().optional(),
+          state: z.string().optional(),
+          postal_code: z.string().optional(),
+          website: z.string().optional(),
+        }),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        return await db.acceptInvitation(
+          input.token,
+          ctx.user.id,
+          input.schoolData
+        );
+      }),
+
+    // List all invitations (admin only)
+    list: adminProcedure.query(async () => {
+      return await db.getAllInvitations();
+    }),
+
+    // Revoke invitation (admin only)
+    revoke: adminProcedure
+      .input(z.object({ token: z.string().uuid() }))
+      .mutation(async ({ ctx, input }) => {
+        await db.revokeInvitation(input.token, ctx.user.id);
+        return { success: true };
+      }),
+
+    // Get all franchises for dropdown (admin only)
+    getFranchises: adminProcedure.query(async () => {
+      return await db.getAllFranchises();
+    }),
+  }),
+
+  // Admin dashboard analytics
+  admin: router({
+    // Get dashboard statistics
+    getStats: adminProcedure.query(async () => {
+      return await db.getAdminDashboardStats();
+    }),
+
+    // Application management
+    getAllApplications: adminProcedure.query(async () => {
+      return await db.getAllApplications();
+    }),
+
+    updateApplicationStatus: adminProcedure
+      .input(z.object({
+        id: z.string().uuid(),
+        status: z.enum(['applied', 'screening', 'interview-scheduled', 'interviewed', 'selected', 'rejected', 'withdrawn']),
+      }))
+      .mutation(async ({ input }) => {
+        await db.updateApplicationStatus(input.id, input.status);
+        return { success: true };
+      }),
+
+    // Contract management
+    getAllContracts: adminProcedure.query(async () => {
+      return await db.getAllContracts();
+    }),
+
+    updateContractStatus: adminProcedure
+      .input(z.object({
+        id: z.string().uuid(),
+        status: z.enum(['pending-signature', 'active', 'suspended', 'terminated', 'completed']),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        await db.updateContractStatus(input.id, input.status, ctx.user.id);
+        return { success: true };
+      }),
+
+    // Payment management
+    getAllPayments: adminProcedure.query(async () => {
+      return await db.getAllPayments();
+    }),
+
+    updatePaymentStatus: adminProcedure
+      .input(z.object({
+        id: z.string().uuid(),
+        status: z.enum(['pending', 'paid', 'overdue', 'failed', 'refunded']),
+      }))
+      .mutation(async ({ input }) => {
+        await db.updatePaymentStatus(input.id, input.status);
+        return { success: true };
+      }),
+
+    // Feedback management
+    getAllFeedback: adminProcedure.query(async () => {
+      return await db.getAllFeedback();
+    }),
+
+    updateFeedbackStatus: adminProcedure
+      .input(z.object({
+        id: z.string().uuid(),
+        status: z.enum(['pending', 'submitted', 'reviewed']),
+      }))
+      .mutation(async ({ input }) => {
+        await db.updateFeedbackStatus(input.id, input.status);
+        return { success: true };
+      }),
+
+    // AI Matching oversight
+    getAIMatchingStats: adminProcedure.query(async () => {
+      return await db.getAIMatchingStats();
+    }),
+
+    getApplicationsWithScores: adminProcedure.query(async () => {
+      return await db.getApplicationsWithScores();
     }),
   }),
 });

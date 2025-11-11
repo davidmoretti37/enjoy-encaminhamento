@@ -209,15 +209,31 @@ const normalizeToolChoice = (
   return toolChoice;
 };
 
-const resolveApiUrl = () =>
-  ENV.forgeApiUrl && ENV.forgeApiUrl.trim().length > 0
+const resolveApiUrl = () => {
+  // Prefer OpenRouter if configured
+  if (ENV.openrouterApiKey && ENV.openrouterApiKey.trim().length > 0) {
+    return "https://openrouter.ai/api/v1/chat/completions";
+  }
+
+  // Fall back to Forge API
+  return ENV.forgeApiUrl && ENV.forgeApiUrl.trim().length > 0
     ? `${ENV.forgeApiUrl.replace(/\/$/, "")}/v1/chat/completions`
     : "https://forge.manus.im/v1/chat/completions";
+};
 
 const assertApiKey = () => {
-  if (!ENV.forgeApiKey) {
-    throw new Error("OPENAI_API_KEY is not configured");
+  // Check for either OpenRouter or Forge API key
+  if (!ENV.openrouterApiKey && !ENV.forgeApiKey) {
+    throw new Error("Neither OPENROUTER_API_KEY nor FORGE_API_KEY is configured");
   }
+};
+
+const getApiKey = () => {
+  // Prefer OpenRouter if configured
+  if (ENV.openrouterApiKey && ENV.openrouterApiKey.trim().length > 0) {
+    return ENV.openrouterApiKey;
+  }
+  return ENV.forgeApiKey;
 };
 
 const normalizeResponseFormat = ({
@@ -280,7 +296,7 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
   } = params;
 
   const payload: Record<string, unknown> = {
-    model: "gemini-2.5-flash",
+    model: ENV.llmModel,
     messages: messages.map(normalizeMessage),
   };
 
@@ -296,9 +312,13 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
     payload.tool_choice = normalizedToolChoice;
   }
 
-  payload.max_tokens = 32768
-  payload.thinking = {
-    "budget_tokens": 128
+  payload.max_tokens = 32768;
+
+  // Only add thinking for Gemini models (not supported by OpenRouter/Claude)
+  if (ENV.llmModel.includes("gemini")) {
+    payload.thinking = {
+      "budget_tokens": 128
+    };
   }
 
   const normalizedResponseFormat = normalizeResponseFormat({
@@ -316,7 +336,7 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
     method: "POST",
     headers: {
       "content-type": "application/json",
-      authorization: `Bearer ${ENV.forgeApiKey}`,
+      authorization: `Bearer ${getApiKey()}`,
     },
     body: JSON.stringify(payload),
   });

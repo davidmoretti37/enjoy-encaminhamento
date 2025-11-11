@@ -21,15 +21,22 @@ import {
 } from "@/components/ui/sidebar";
 import { APP_LOGO, APP_TITLE, getLoginUrl } from "@/const";
 import { useIsMobile } from "@/hooks/useMobile";
-import { LayoutDashboard, LogOut, PanelLeft, Users } from "lucide-react";
+import { LayoutDashboard, LogOut, PanelLeft, Users, Building2, Building, GraduationCap, Briefcase, FileText, FileCheck, DollarSign, MessageSquare, Brain } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
 import { Button } from "./ui/button";
 
 const menuItems = [
-  { icon: LayoutDashboard, label: "Page 1", path: "/" },
-  { icon: Users, label: "Page 2", path: "/some-path" },
+  { icon: LayoutDashboard, label: "Dashboard", path: "/admin/dashboard" },
+  { icon: Building2, label: "Escolas", path: "/admin/schools" },
+  { icon: Building, label: "Empresas", path: "/admin/companies" },
+  { icon: Briefcase, label: "Vagas", path: "/admin/jobs" },
+  { icon: Users, label: "Candidatos", path: "/admin/candidates" },
+  { icon: FileText, label: "Candidaturas", path: "/admin/applications" },
+  { icon: FileCheck, label: "Contratos", path: "/admin/contracts" },
+  { icon: DollarSign, label: "Pagamentos", path: "/admin/payments" },
+  { icon: MessageSquare, label: "Feedbacks", path: "/admin/feedback" },
 ];
 
 const SIDEBAR_WIDTH_KEY = "sidebar-width";
@@ -93,6 +100,7 @@ export default function DashboardLayout({
 
   return (
     <SidebarProvider
+      defaultOpen={false}
       style={
         {
           "--sidebar-width": `${sidebarWidth}px`,

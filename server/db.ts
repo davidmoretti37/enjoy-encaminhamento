@@ -90,9 +90,12 @@ export async function getCompanyById(id: string): Promise<Company | undefined> {
 }
 
 export async function getAllCompanies(): Promise<Company[]> {
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from('companies')
-    .select('*')
+    .select(`
+      *,
+      users!companies_user_id_fkey1(email, name)
+    `)
     .order('created_at', { ascending: false });
 
   if (error) {
@@ -101,6 +104,31 @@ export async function getAllCompanies(): Promise<Company[]> {
   }
 
   return data || [];
+}
+
+export async function updateCompanyStatus(id: string, status: 'pending' | 'active' | 'suspended' | 'inactive', updatedBy: string): Promise<void> {
+  const updates: any = { status };
+
+  if (status === 'active') {
+    updates.approved_at = new Date().toISOString();
+    updates.approved_by = updatedBy;
+    updates.suspended_at = null;
+    updates.suspended_by = null;
+    updates.suspended_reason = null;
+  } else if (status === 'suspended') {
+    updates.suspended_at = new Date().toISOString();
+    updates.suspended_by = updatedBy;
+  }
+
+  const { error } = await supabaseAdmin
+    .from('companies')
+    .update(updates)
+    .eq('id', id);
+
+  if (error) {
+    console.error('[Database] Failed to update company status:', error);
+    throw error;
+  }
 }
 
 export async function updateCompany(id: string, data: Partial<InsertCompany>): Promise<void> {
@@ -277,6 +305,48 @@ export async function searchJobs(filters: {
 
   if (error) return [];
   return data || [];
+}
+
+export async function getAllJobs(): Promise<any[]> {
+  const { data, error } = await supabaseAdmin
+    .from('jobs')
+    .select(`
+      *,
+      companies(company_name, email),
+      users(name, email)
+    `)
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error('[Database] Failed to get jobs:', error);
+    return [];
+  }
+
+  return data || [];
+}
+
+export async function updateJobStatus(id: string, status: 'draft' | 'open' | 'closed' | 'filled', updatedBy: string): Promise<void> {
+  const updates: any = { status };
+
+  if (status === 'open') {
+    updates.published_at = new Date().toISOString();
+  } else if (status === 'closed' || status === 'filled') {
+    updates.closed_at = new Date().toISOString();
+    updates.closed_by = updatedBy;
+    if (status === 'filled') {
+      updates.filled_at = new Date().toISOString();
+    }
+  }
+
+  const { error } = await supabaseAdmin
+    .from('jobs')
+    .update(updates)
+    .eq('id', id);
+
+  if (error) {
+    console.error('[Database] Failed to update job status:', error);
+    throw error;
+  }
 }
 
 // ==================== APPLICATION FUNCTIONS ====================
@@ -598,6 +668,665 @@ export async function getDashboardStats() {
     activeContracts: activeContracts || 0,
     pendingApplications: pendingApplications || 0
   };
+}
+
+// ==================== SCHOOL FUNCTIONS (NEW) ====================
+
+export async function getAllSchools() {
+  const { data, error } = await supabaseAdmin
+    .from('schools')
+    .select('*, franchises(name, contact_email)')
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error('[Database] Failed to get schools:', error);
+    return [];
+  }
+
+  return data || [];
+}
+
+export async function getSchoolById(id: string) {
+  const { data, error } = await supabaseAdmin
+    .from('schools')
+    .select('*, franchises(name, contact_email, region)')
+    .eq('id', id)
+    .single();
+
+  if (error && error.code !== 'PGRST116') {
+    console.error('[Database] Failed to get school:', error);
+    return null;
+  }
+
+  return data;
+}
+
+export async function updateSchoolStatus(id: string, status: 'pending' | 'active' | 'suspended') {
+  const { error } = await supabaseAdmin
+    .from('schools')
+    .update({ status, updated_at: new Date().toISOString() })
+    .eq('id', id);
+
+  if (error) {
+    console.error('[Database] Failed to update school status:', error);
+    throw error;
+  }
+}
+
+export async function updateSchool(id: string, data: any) {
+  const { error } = await supabaseAdmin
+    .from('schools')
+    .update({ ...data, updated_at: new Date().toISOString() })
+    .eq('id', id);
+
+  if (error) {
+    console.error('[Database] Failed to update school:', error);
+    throw error;
+  }
+}
+
+export async function getSchoolStats(schoolId: string) {
+  const [jobsResult, contractsResult] = await Promise.all([
+    supabaseAdmin.from('jobs').select('id, status').eq('school_id', schoolId),
+    supabaseAdmin.from('contracts').select('id, status').eq('school_id', schoolId)
+  ]);
+
+  return {
+    totalJobs: jobsResult.data?.length || 0,
+    openJobs: jobsResult.data?.filter(j => j.status === 'open').length || 0,
+    totalContracts: contractsResult.data?.length || 0,
+    activeContracts: contractsResult.data?.filter(c => c.status === 'active').length || 0
+  };
+}
+
+// ==================== CANDIDATE ADMIN FUNCTIONS (NEW) ====================
+
+export async function getAllCandidatesForAdmin() {
+  const { data, error } = await supabaseAdmin
+    .from('candidates')
+    .select(`
+      *,
+      users(email, name)
+    `)
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error('[Database] Failed to get candidates for admin:', error);
+    return [];
+  }
+
+  return data || [];
+}
+
+export async function getCandidateByIdForAdmin(id: string) {
+  const { data, error } = await supabaseAdmin
+    .from('candidates')
+    .select(`
+      *,
+      users(email, name),
+      applications(
+        id,
+        status,
+        applied_at,
+        jobs(
+          id,
+          title,
+          schools(school_name, franchises(name))
+        )
+      ),
+      contracts(
+        id,
+        status,
+        start_date,
+        end_date,
+        schools(school_name)
+      )
+    `)
+    .eq('id', id)
+    .single();
+
+  if (error && error.code !== 'PGRST116') {
+    console.error('[Database] Failed to get candidate for admin:', error);
+    return null;
+  }
+
+  return data;
+}
+
+export async function updateCandidateStatus(id: string, status: 'active' | 'inactive' | 'employed') {
+  const { error } = await supabaseAdmin
+    .from('candidates')
+    .update({ status, updated_at: new Date().toISOString() })
+    .eq('id', id);
+
+  if (error) {
+    console.error('[Database] Failed to update candidate status:', error);
+    throw error;
+  }
+}
+
+export async function searchCandidatesForAdmin(filters: {
+  search?: string;
+  educationLevel?: string;
+  city?: string;
+  status?: string;
+  availableForInternship?: boolean;
+  availableForCLT?: boolean;
+}) {
+  let query = supabaseAdmin
+    .from('candidates')
+    .select(`
+      *,
+      users(email, name)
+    `);
+
+  if (filters.search) {
+    query = query.or(`full_name.ilike.%${filters.search}%,cpf.ilike.%${filters.search}%`);
+  }
+  if (filters.educationLevel) {
+    query = query.eq('education_level', filters.educationLevel);
+  }
+  if (filters.city) {
+    query = query.ilike('city', `%${filters.city}%`);
+  }
+  if (filters.status) {
+    query = query.eq('status', filters.status);
+  }
+  if (filters.availableForInternship !== undefined) {
+    query = query.eq('available_for_internship', filters.availableForInternship);
+  }
+  if (filters.availableForCLT !== undefined) {
+    query = query.eq('available_for_clt', filters.availableForCLT);
+  }
+
+  const { data, error } = await query.order('created_at', { ascending: false });
+
+  if (error) {
+    console.error('[Database] Failed to search candidates:', error);
+    return [];
+  }
+
+  return data || [];
+}
+
+export async function getCandidateApplications(candidateId: string) {
+  const { data, error } = await supabaseAdmin
+    .from('applications')
+    .select(`
+      *,
+      jobs(
+        id,
+        title,
+        contract_type,
+        schools(school_name, franchises(name))
+      )
+    `)
+    .eq('candidate_id', candidateId)
+    .order('applied_at', { ascending: false });
+
+  if (error) {
+    console.error('[Database] Failed to get candidate applications:', error);
+    return [];
+  }
+
+  return data || [];
+}
+
+export async function getCandidateStats(candidateId: string) {
+  const [applicationsResult, contractsResult] = await Promise.all([
+    supabaseAdmin.from('applications').select('id, status').eq('candidate_id', candidateId),
+    supabaseAdmin.from('contracts').select('id, status').eq('candidate_id', candidateId)
+  ]);
+
+  return {
+    totalApplications: applicationsResult.data?.length || 0,
+    pendingApplications: applicationsResult.data?.filter(a => a.status === 'applied').length || 0,
+    totalContracts: contractsResult.data?.length || 0,
+    activeContracts: contractsResult.data?.filter(c => c.status === 'active').length || 0
+  };
+}
+
+// ==================== SCHOOL INVITATION FUNCTIONS (NEW) ====================
+
+export async function createSchoolInvitation(
+  email: string,
+  franchiseId: string,
+  createdBy: string,
+  notes?: string
+) {
+  const { data, error } = await supabaseAdmin
+    .from('school_invitations')
+    .insert({
+      email,
+      franchise_id: franchiseId,
+      created_by: createdBy,
+      notes,
+    })
+    .select('*')
+    .single();
+
+  if (error) {
+    console.error('[Database] Failed to create school invitation:', error);
+    throw error;
+  }
+
+  return data;
+}
+
+export async function getInvitationByToken(token: string) {
+  const { data, error } = await supabaseAdmin
+    .from('school_invitations')
+    .select(`
+      *,
+      franchises(id, name, region)
+    `)
+    .eq('token', token)
+    .single();
+
+  if (error && error.code !== 'PGRST116') {
+    console.error('[Database] Failed to get invitation by token:', error);
+    return null;
+  }
+
+  // Check if invitation is valid
+  if (data) {
+    const now = new Date();
+    const expiresAt = new Date(data.expires_at);
+
+    if (data.status !== 'pending') {
+      return { ...data, isValid: false, reason: `Invitation is ${data.status}` };
+    }
+
+    if (expiresAt < now) {
+      // Auto-expire the invitation
+      await supabaseAdmin
+        .from('school_invitations')
+        .update({ status: 'expired' })
+        .eq('token', token);
+
+      return { ...data, isValid: false, reason: 'Invitation has expired' };
+    }
+
+    return { ...data, isValid: true };
+  }
+
+  return null;
+}
+
+export async function acceptInvitation(
+  token: string,
+  userId: string,
+  schoolData: {
+    school_name: string;
+    trade_name?: string;
+    legal_name?: string;
+    cnpj: string;
+    email: string;
+    phone?: string;
+    address?: string;
+    city?: string;
+    state?: string;
+    postal_code?: string;
+    website?: string;
+  }
+) {
+  // Get and validate invitation
+  const invitation = await getInvitationByToken(token);
+
+  if (!invitation || !invitation.isValid) {
+    throw new Error(invitation?.reason || 'Invalid invitation');
+  }
+
+  // Create school
+  const { data: school, error: schoolError } = await supabaseAdmin
+    .from('schools')
+    .insert({
+      user_id: userId,
+      franchise_id: invitation.franchise_id,
+      status: 'pending', // Requires admin approval
+      ...schoolData,
+    })
+    .select('*')
+    .single();
+
+  if (schoolError) {
+    console.error('[Database] Failed to create school:', schoolError);
+    throw schoolError;
+  }
+
+  // Mark invitation as accepted
+  const { error: updateError } = await supabaseAdmin
+    .from('school_invitations')
+    .update({
+      status: 'accepted',
+      accepted_at: new Date().toISOString(),
+      school_id: school.id,
+    })
+    .eq('token', token);
+
+  if (updateError) {
+    console.error('[Database] Failed to mark invitation as accepted:', updateError);
+    // Don't throw - school was created successfully
+  }
+
+  // Update user role to 'school'
+  const { error: userError } = await supabaseAdmin
+    .from('users')
+    .update({ role: 'school' })
+    .eq('id', userId);
+
+  if (userError) {
+    console.error('[Database] Failed to update user role:', userError);
+  }
+
+  return school;
+}
+
+export async function getAllInvitations() {
+  const { data, error } = await supabaseAdmin
+    .from('school_invitations')
+    .select(`
+      *,
+      franchises(name, region),
+      created_by_user:users!school_invitations_created_by_fkey(name, email),
+      schools(school_name, status)
+    `)
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error('[Database] Failed to get invitations:', error);
+    return [];
+  }
+
+  return data || [];
+}
+
+export async function revokeInvitation(token: string, revokedBy: string) {
+  const { error } = await supabaseAdmin
+    .from('school_invitations')
+    .update({
+      status: 'revoked',
+      revoked_at: new Date().toISOString(),
+      revoked_by: revokedBy,
+    })
+    .eq('token', token);
+
+  if (error) {
+    console.error('[Database] Failed to revoke invitation:', error);
+    throw error;
+  }
+}
+
+export async function getAllFranchises() {
+  const { data, error } = await supabaseAdmin
+    .from('franchises')
+    .select('id, name, region, contact_email')
+    .eq('is_active', true)
+    .order('name', { ascending: true });
+
+  if (error) {
+    console.error('[Database] Failed to get franchises:', error);
+    return [];
+  }
+
+  return data || [];
+}
+
+// ==================== ADMIN ANALYTICS FUNCTIONS ====================
+
+export async function getAdminDashboardStats(): Promise<any> {
+  const [companies, candidates, jobs, contracts, applications, payments] = await Promise.all([
+    supabaseAdmin.from('companies').select('status'),
+    supabaseAdmin.from('candidates').select('status'),
+    supabaseAdmin.from('jobs').select('status'),
+    supabaseAdmin.from('contracts').select('status'),
+    supabaseAdmin.from('applications').select('status'),
+    supabaseAdmin.from('payments').select('status, amount'),
+  ]);
+
+  const stats = {
+    totalCompanies: companies.data?.length || 0,
+    activeCompanies: companies.data?.filter((c: any) => c.status === 'active').length || 0,
+    pendingCompanies: companies.data?.filter((c: any) => c.status === 'pending').length || 0,
+    suspendedCompanies: companies.data?.filter((c: any) => c.status === 'suspended').length || 0,
+
+    totalCandidates: candidates.data?.length || 0,
+    activeCandidates: candidates.data?.filter((c: any) => c.status === 'active').length || 0,
+    employedCandidates: candidates.data?.filter((c: any) => c.status === 'employed').length || 0,
+    inactiveCandidates: candidates.data?.filter((c: any) => c.status === 'inactive').length || 0,
+
+    totalJobs: jobs.data?.length || 0,
+    openJobs: jobs.data?.filter((j: any) => j.status === 'open').length || 0,
+    closedJobs: jobs.data?.filter((j: any) => j.status === 'closed').length || 0,
+    filledJobs: jobs.data?.filter((j: any) => j.status === 'filled').length || 0,
+
+    totalContracts: contracts.data?.length || 0,
+    activeContracts: contracts.data?.filter((c: any) => c.status === 'active').length || 0,
+    pendingContracts: contracts.data?.filter((c: any) => c.status === 'pending-signature').length || 0,
+    completedContracts: contracts.data?.filter((c: any) => c.status === 'completed').length || 0,
+
+    totalApplications: applications.data?.length || 0,
+    pendingApplications: applications.data?.filter((a: any) => a.status === 'applied').length || 0,
+    selectedApplications: applications.data?.filter((a: any) => a.status === 'selected').length || 0,
+    rejectedApplications: applications.data?.filter((a: any) => a.status === 'rejected').length || 0,
+
+    totalPayments: payments.data?.length || 0,
+    paidPayments: payments.data?.filter((p: any) => p.status === 'paid').length || 0,
+    pendingPayments: payments.data?.filter((p: any) => p.status === 'pending').length || 0,
+    overduePayments: payments.data?.filter((p: any) => p.status === 'overdue').length || 0,
+    totalRevenue: payments.data?.filter((p: any) => p.status === 'paid').reduce((sum: number, p: any) => sum + (p.amount || 0), 0) || 0,
+    pendingRevenue: payments.data?.filter((p: any) => p.status === 'pending').reduce((sum: number, p: any) => sum + (p.amount || 0), 0) || 0,
+  };
+
+  return stats;
+}
+
+// ==================== ADMIN APPLICATION FUNCTIONS ====================
+
+export async function getAllApplications(): Promise<any[]> {
+  const { data, error } = await supabaseAdmin
+    .from('applications')
+    .select(`
+      *,
+      jobs(title, company_id, companies(company_name)),
+      candidates(full_name, email)
+    `)
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error('[Database] Failed to get applications:', error);
+    return [];
+  }
+
+  return data || [];
+}
+
+export async function updateApplicationStatus(id: string, status: string): Promise<void> {
+  const { error } = await supabaseAdmin
+    .from('applications')
+    .update({ status })
+    .eq('id', id);
+
+  if (error) {
+    console.error('[Database] Failed to update application status:', error);
+    throw error;
+  }
+}
+
+// ==================== ADMIN CONTRACT FUNCTIONS ====================
+
+export async function getAllContracts(): Promise<any[]> {
+  const { data, error } = await supabaseAdmin
+    .from('contracts')
+    .select(`
+      *,
+      companies(company_name, email),
+      candidates(full_name, email),
+      jobs(title)
+    `)
+    .order('created_at', { ascending: false});
+
+  if (error) {
+    console.error('[Database] Failed to get contracts:', error);
+    return [];
+  }
+
+  return data || [];
+}
+
+export async function updateContractStatus(id: string, status: string, updatedBy: string): Promise<void> {
+  const updates: any = { status };
+
+  if (status === 'active') {
+    updates.signed_at = new Date().toISOString();
+  } else if (status === 'terminated' || status === 'completed') {
+    updates.terminated_at = new Date().toISOString();
+  }
+
+  const { error } = await supabaseAdmin
+    .from('contracts')
+    .update(updates)
+    .eq('id', id);
+
+  if (error) {
+    console.error('[Database] Failed to update contract status:', error);
+    throw error;
+  }
+}
+
+// ==================== ADMIN PAYMENT FUNCTIONS ====================
+
+export async function getAllPayments(): Promise<any[]> {
+  const { data, error } = await supabaseAdmin
+    .from('payments')
+    .select(`
+      *,
+      contracts(contract_number),
+      companies(company_name, email)
+    `)
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error('[Database] Failed to get payments:', error);
+    return [];
+  }
+
+  return data || [];
+}
+
+export async function updatePaymentStatus(id: string, status: string): Promise<void> {
+  const updates: any = { status };
+
+  if (status === 'paid') {
+    updates.paid_at = new Date().toISOString();
+  }
+
+  const { error } = await supabaseAdmin
+    .from('payments')
+    .update(updates)
+    .eq('id', id);
+
+  if (error) {
+    console.error('[Database] Failed to update payment status:', error);
+    throw error;
+  }
+}
+
+// ==================== ADMIN FEEDBACK FUNCTIONS ====================
+
+export async function getAllFeedback(): Promise<any[]> {
+  const { data, error } = await supabaseAdmin
+    .from('feedback')
+    .select(`
+      *,
+      contracts(contract_number, companies(company_name, email)),
+      candidates(full_name, email)
+    `)
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error('[Database] Failed to get feedback:', error);
+    return [];
+  }
+
+  return data || [];
+}
+
+export async function updateFeedbackStatus(id: string, status: string): Promise<void> {
+  const updates: any = { status };
+
+  if (status === 'reviewed') {
+    updates.reviewed_at = new Date().toISOString();
+  }
+
+  const { error } = await supabaseAdmin
+    .from('feedback')
+    .update(updates)
+    .eq('id', id);
+
+  if (error) {
+    console.error('[Database] Failed to update feedback status:', error);
+    throw error;
+  }
+}
+
+// ==================== AI MATCHING FUNCTIONS ====================
+
+export async function getAIMatchingStats(): Promise<any> {
+  const { data: applications, error } = await supabaseAdmin
+    .from('applications')
+    .select('ai_match_score, status');
+
+  if (error) {
+    console.error('[Database] Failed to get AI matching stats:', error);
+    return {
+      totalMatches: 0,
+      averageScore: 0,
+      highQualityMatches: 0,
+      successRate: 0,
+    };
+  }
+
+  const totalMatches = applications?.length || 0;
+  const withScores = applications?.filter((a: any) => a.ai_match_score != null) || [];
+  const averageScore = withScores.length > 0
+    ? Math.round(withScores.reduce((sum: number, a: any) => sum + (a.ai_match_score || 0), 0) / withScores.length)
+    : 0;
+  const highQualityMatches = withScores.filter((a: any) => (a.ai_match_score || 0) >= 75).length;
+  const selectedApplications = applications?.filter((a: any) => a.status === 'selected').length || 0;
+  const successRate = totalMatches > 0 ? Math.round((selectedApplications / totalMatches) * 100) : 0;
+
+  return {
+    totalMatches,
+    averageScore,
+    highQualityMatches,
+    successRate,
+    lowScoreMatches: withScores.filter((a: any) => (a.ai_match_score || 0) < 50).length,
+    mediumScoreMatches: withScores.filter((a: any) => {
+      const score = a.ai_match_score || 0;
+      return score >= 50 && score < 75;
+    }).length,
+  };
+}
+
+export async function getApplicationsWithScores(): Promise<any[]> {
+  const { data, error } = await supabaseAdmin
+    .from('applications')
+    .select(`
+      *,
+      jobs(title, company_id),
+      candidates(full_name, email),
+      companies:jobs(companies(company_name))
+    `)
+    .not('ai_match_score', 'is', null)
+    .order('ai_match_score', { ascending: false });
+
+  if (error) {
+    console.error('[Database] Failed to get applications with scores:', error);
+    return [];
+  }
+
+  return data || [];
 }
 
 // Export types
