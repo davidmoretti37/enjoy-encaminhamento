@@ -45,16 +45,16 @@
 }
 
 :root {
-  --primary: var(--color-blue-700);
-  --primary-foreground: var(--color-blue-50);
-  --sidebar-primary: var(--color-blue-600);
-  --sidebar-primary-foreground: var(--color-blue-50);
+  --primary: var(--color-slate-900);
+  --primary-foreground: var(--color-slate-50);
+  --sidebar-primary: var(--color-slate-800);
+  --sidebar-primary-foreground: var(--color-slate-50);
   --chart-1: var(--color-blue-300);
   --chart-2: var(--color-blue-500);
   --chart-3: var(--color-blue-600);
   --chart-4: var(--color-blue-700);
   --chart-5: var(--color-blue-800);
-  --radius: 0.65rem;
+  --radius: 0.5rem;
   --background: oklch(1 0 0);
   --foreground: oklch(0.235 0.015 65);
   --card: oklch(1 0 0);
@@ -128,9 +128,9 @@
   }
   
   h1, h2, h3, h4, h5, h6 {
-    font-family: 'Poppins', 'Inter', sans-serif;
-    font-weight: 700;
-    letter-spacing: -0.02em;
+    font-family: 'Inter', sans-serif;
+    font-weight: 600;
+    letter-spacing: -0.01em;
   }
   
   h1 {
@@ -195,7 +195,7 @@
   }
   
   .shadow-glow {
-    box-shadow: 0 0 40px -10px oklch(0.623 0.214 259.815 / 0.3);
+    box-shadow: 0 10px 40px -10px oklch(0.623 0.214 259.815 / 0.15);
   }
   
   .shadow-soft {
@@ -213,15 +213,31 @@
   .animate-slide-up {
     animation: slideUp 0.6s ease-out;
   }
-  
+
+  .animate-fade-in-up {
+    animation: fadeInUp 0.5s ease-out forwards;
+    opacity: 0;
+  }
+
   @keyframes fadeIn {
     from { opacity: 0; }
     to { opacity: 1; }
   }
-  
+
   @keyframes slideUp {
     from { opacity: 0; transform: translateY(30px); }
     to { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes fadeInUp {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
   }
 
   @media (min-width: 640px) {

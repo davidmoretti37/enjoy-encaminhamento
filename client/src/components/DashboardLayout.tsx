@@ -21,23 +21,52 @@ import {
 } from "@/components/ui/sidebar";
 import { APP_LOGO, APP_TITLE, getLoginUrl } from "@/const";
 import { useIsMobile } from "@/hooks/useMobile";
-import { LayoutDashboard, LogOut, PanelLeft, Users, Building2, Building, GraduationCap, Briefcase, FileText, FileCheck, DollarSign, MessageSquare, Brain } from "lucide-react";
+import { LayoutDashboard, LogOut, PanelLeft, Users, Building2, Building, GraduationCap, Briefcase, FileText, FileCheck, DollarSign, MessageSquare, Brain, MapPin } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
 import { Button } from "./ui/button";
 
-const menuItems = [
-  { icon: LayoutDashboard, label: "Dashboard", path: "/admin/dashboard" },
-  { icon: Building2, label: "Escolas", path: "/admin/schools" },
-  { icon: Building, label: "Empresas", path: "/admin/companies" },
-  { icon: Briefcase, label: "Vagas", path: "/admin/jobs" },
-  { icon: Users, label: "Candidatos", path: "/admin/candidates" },
-  { icon: FileText, label: "Candidaturas", path: "/admin/applications" },
-  { icon: FileCheck, label: "Contratos", path: "/admin/contracts" },
-  { icon: DollarSign, label: "Pagamentos", path: "/admin/payments" },
-  { icon: MessageSquare, label: "Feedbacks", path: "/admin/feedback" },
-];
+const getMenuItems = (userRole: string | undefined) => {
+  // Admin/Super Admin menu
+  if (userRole === 'admin' || userRole === 'super_admin') {
+    return [
+      { icon: LayoutDashboard, label: "Dashboard", path: "/admin/dashboard" },
+      { icon: MapPin, label: "Gestão Regional", path: "/admin/regional" },
+      { icon: Building, label: "Empresas", path: "/admin/companies" },
+      { icon: Briefcase, label: "Vagas", path: "/admin/jobs" },
+      { icon: Users, label: "Candidatos", path: "/admin/candidates" },
+      { icon: FileCheck, label: "Contratos", path: "/admin/contracts" },
+      { icon: DollarSign, label: "Pagamentos", path: "/admin/payments" },
+      { icon: MessageSquare, label: "Feedbacks", path: "/admin/feedback" },
+    ];
+  }
+
+  // Affiliate (Franchise Owner) menu
+  if (userRole === 'affiliate') {
+    return [
+      { icon: LayoutDashboard, label: "Dashboard", path: "/affiliate/dashboard" },
+      { icon: Building2, label: "Escolas", path: "/affiliate/schools" },
+      { icon: Building, label: "Empresas", path: "/affiliate/companies" },
+      { icon: Briefcase, label: "Vagas", path: "/affiliate/jobs" },
+      { icon: Users, label: "Candidatos", path: "/affiliate/candidates" },
+      { icon: FileCheck, label: "Contratos", path: "/affiliate/contracts" },
+      { icon: DollarSign, label: "Pagamentos", path: "/affiliate/payments" },
+    ];
+  }
+
+  // School menu
+  if (userRole === 'school') {
+    return [
+      { icon: LayoutDashboard, label: "Dashboard", path: "/school/dashboard" },
+      { icon: Users, label: "Candidatos", path: "/school/candidates" },
+      { icon: Building, label: "Empresas", path: "/school/companies" },
+    ];
+  }
+
+  // Default empty menu
+  return [];
+};
 
 const SIDEBAR_WIDTH_KEY = "sidebar-width";
 const DEFAULT_WIDTH = 280;
@@ -129,6 +158,7 @@ function DashboardLayoutContent({
   const isCollapsed = state === "collapsed";
   const [isResizing, setIsResizing] = useState(false);
   const sidebarRef = useRef<HTMLDivElement>(null);
+  const menuItems = getMenuItems(user?.role);
   const activeMenuItem = menuItems.find(item => item.path === location);
   const isMobile = useIsMobile();
 

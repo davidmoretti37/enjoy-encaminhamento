@@ -1,4 +1,5 @@
 import { useAuth } from "@/_core/hooks/useAuth";
+import ClassicLoader from "@/components/ui/ClassicLoader";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { trpc } from "@/lib/trpc";
@@ -29,7 +30,7 @@ export default function CompanyDashboard() {
   if (authLoading || profileLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <ClassicLoader />
       </div>
     );
   }
@@ -102,7 +103,7 @@ export default function CompanyDashboard() {
             </CardHeader>
             <CardContent>
               {statsLoading ? (
-                <Loader2 className="h-6 w-6 animate-spin" />
+                <ClassicLoader />
               ) : (
                 <>
                   <div className="text-2xl font-bold">{stats?.totalJobs || 0}</div>
@@ -121,7 +122,7 @@ export default function CompanyDashboard() {
             </CardHeader>
             <CardContent>
               {statsLoading ? (
-                <Loader2 className="h-6 w-6 animate-spin" />
+                <ClassicLoader />
               ) : (
                 <>
                   <div className="text-2xl font-bold">{stats?.activeContracts || 0}</div>
@@ -176,7 +177,7 @@ export default function CompanyDashboard() {
           <CardContent>
             {jobsLoading ? (
               <div className="flex justify-center py-8">
-                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                <ClassicLoader />
               </div>
             ) : jobs && jobs.length > 0 ? (
               <div className="space-y-4">
@@ -245,7 +246,7 @@ export default function CompanyDashboard() {
           <CardContent>
             {contractsLoading ? (
               <div className="flex justify-center py-8">
-                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                <ClassicLoader />
               </div>
             ) : contracts && contracts.filter(c => c.status === 'active').length > 0 ? (
               <div className="space-y-4">

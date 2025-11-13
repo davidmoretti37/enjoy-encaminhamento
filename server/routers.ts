@@ -31,6 +31,14 @@ const candidateProcedure = protectedProcedure.use(({ ctx, next }) => {
   return next({ ctx });
 });
 
+// School-only procedure
+const schoolProcedure = protectedProcedure.use(({ ctx, next }) => {
+  if (ctx.user.role !== 'school' && ctx.user.role !== 'admin' && ctx.user.role !== 'super_admin') {
+    throw new TRPCError({ code: 'FORBIDDEN', message: 'School access required' });
+  }
+  return next({ ctx });
+});
+
 export const appRouter = router({
   system: systemRouter,
   agent: agentRouter,
@@ -180,6 +188,74 @@ export const appRouter = router({
       .query(async ({ input }) => {
         return await db.getSchoolStats(input.id);
       }),
+
+    // School-specific endpoints (for logged-in school users)
+
+    // Get current school profile
+    getProfile: schoolProcedure.query(async ({ ctx }) => {
+      const school = await db.getSchoolByUserId(ctx.user.id);
+      if (!school) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'School profile not found' });
+      }
+      return school;
+    }),
+
+    // Update own school profile
+    updateProfile: schoolProcedure
+      .input(z.object({
+        school_name: z.string().optional(),
+        trade_name: z.string().optional(),
+        phone: z.string().optional(),
+        website: z.string().optional(),
+        address: z.string().optional(),
+        city: z.string().optional(),
+        state: z.string().optional(),
+        postal_code: z.string().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const school = await db.getSchoolByUserId(ctx.user.id);
+        if (!school) {
+          throw new TRPCError({ code: 'NOT_FOUND', message: 'School not found' });
+        }
+        await db.updateSchool(school.id, input);
+        return { success: true };
+      }),
+
+    // Get dashboard statistics for school
+    getDashboardStats: schoolProcedure.query(async ({ ctx }) => {
+      const school = await db.getSchoolByUserId(ctx.user.id);
+      if (!school) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'School not found' });
+      }
+      return await db.getSchoolDashboardStats(school.id);
+    }),
+
+    // Get candidates registered by this school
+    getCandidates: schoolProcedure.query(async ({ ctx }) => {
+      const school = await db.getSchoolByUserId(ctx.user.id);
+      if (!school) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'School not found' });
+      }
+      return await db.getCandidatesBySchoolId(school.id);
+    }),
+
+    // Get applications from school's candidates
+    getApplications: schoolProcedure.query(async ({ ctx }) => {
+      const school = await db.getSchoolByUserId(ctx.user.id);
+      if (!school) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'School not found' });
+      }
+      return await db.getApplicationsBySchoolId(school.id);
+    }),
+
+    // Get companies from school's city
+    getCompanies: schoolProcedure.query(async ({ ctx }) => {
+      const school = await db.getSchoolByUserId(ctx.user.id);
+      if (!school) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'School not found' });
+      }
+      return await db.getCompaniesBySchoolId(school.id);
+    }),
   }),
 
   // Candidate routes
@@ -638,14 +714,43 @@ export const appRouter = router({
     validate: publicProcedure
       .input(z.object({ token: z.string().uuid() }))
       .query(async ({ input }) => {
+        console.log('[Invitation] Validating token:', input.token);
         const invitation = await db.getInvitationByToken(input.token);
+        console.log('[Invitation] Result:', invitation ? 'Found' : 'Not found', invitation);
         if (!invitation) {
           throw new TRPCError({ code: 'NOT_FOUND', message: 'Invitation not found' });
         }
         return invitation;
       }),
 
-    // Accept invitation (authenticated)
+    // Accept invitation (public - creates user account)
+    acceptWithPassword: publicProcedure
+      .input(z.object({
+        token: z.string().uuid(),
+        password: z.string().min(6),
+        schoolData: z.object({
+          school_name: z.string().min(1),
+          trade_name: z.string().optional(),
+          legal_name: z.string().optional(),
+          cnpj: z.string().min(14),
+          email: z.string().email(),
+          phone: z.string().optional(),
+          address: z.string().optional(),
+          city: z.string().optional(),
+          state: z.string().optional(),
+          postal_code: z.string().optional(),
+          website: z.string().optional(),
+        }),
+      }))
+      .mutation(async ({ input }) => {
+        return await db.acceptSchoolInvitationWithPassword({
+          token: input.token,
+          password: input.password,
+          schoolData: input.schoolData,
+        });
+      }),
+
+    // Accept invitation (authenticated - legacy)
     accept: protectedProcedure
       .input(z.object({
         token: z.string().uuid(),
@@ -688,6 +793,234 @@ export const appRouter = router({
     getFranchises: adminProcedure.query(async () => {
       return await db.getAllFranchises();
     }),
+  }),
+
+  // Affiliate (Franchise Owner) routes
+  affiliate: router({
+    // Get all affiliates (super admin only)
+    getAll: adminProcedure.query(async () => {
+      return await db.getAllAffiliates();
+    }),
+
+    // Get affiliate by ID
+    getById: adminProcedure
+      .input(z.object({ id: z.string().uuid() }))
+      .query(async ({ input }) => {
+        return await db.getAffiliateById(input.id);
+      }),
+
+    // Get affiliate by user ID
+    getByUserId: protectedProcedure.query(async ({ ctx }) => {
+      return await db.getAffiliateByUserId(ctx.user.id);
+    }),
+
+    // Get all invitations (super admin only)
+    getInvitations: adminProcedure.query(async () => {
+      return await db.getAllAffiliateInvitations();
+    }),
+
+    // Create affiliate invitation (super admin only) - admin fills all details
+    createInvitation: adminProcedure
+      .input(z.object({
+        email: z.string().email(),
+        cities: z.array(z.string().min(1)).min(1).max(100),
+        franchise: z.object({
+          name: z.string().min(1),
+          trade_name: z.string().optional(),
+          legal_name: z.string().min(1),
+          cnpj: z.string().min(14),
+          contact_email: z.string().email(),
+          contact_phone: z.string().optional(),
+          address: z.string().optional(),
+          city: z.string().min(1),
+          state: z.string().optional(),
+          postal_code: z.string().optional(),
+          website: z.string().optional(),
+        }),
+        schools: z.array(z.object({
+          city: z.string().min(1),
+          school_name: z.string().min(1),
+          trade_name: z.string().optional(),
+          legal_name: z.string().optional(),
+          cnpj: z.string().min(14),
+          email: z.string().email(),
+          phone: z.string().optional(),
+          address: z.string().optional(),
+          state: z.string().optional(),
+          postal_code: z.string().optional(),
+          website: z.string().optional(),
+        })).min(1),
+        commission_rate: z.number().min(0).max(100).default(10).optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        return await db.createAffiliateInvitation({
+          email: input.email,
+          cities: input.cities,
+          franchiseData: input.franchise,
+          schoolsData: input.schools,
+          commission_rate: input.commission_rate || 10,
+          createdBy: ctx.user.id,
+        });
+      }),
+
+    // Verify invitation token (public - anyone with link can check)
+    verifyInvitation: publicProcedure
+      .input(z.object({ token: z.string() }))
+      .query(async ({ input }) => {
+        return await db.verifyAffiliateInvitation(input.token);
+      }),
+
+    // Accept invitation - affiliate only provides name, phone, password
+    acceptInvitation: publicProcedure
+      .input(z.object({
+        token: z.string(),
+        name: z.string().min(1),
+        phone: z.string().min(1),
+        password: z.string().min(6),
+      }))
+      .mutation(async ({ input }) => {
+        return await db.acceptAffiliateInvitation(input);
+      }),
+
+    // Update affiliate status (super admin only)
+    updateStatus: adminProcedure
+      .input(z.object({
+        id: z.string().uuid(),
+        is_active: z.boolean(),
+      }))
+      .mutation(async ({ input }) => {
+        await db.updateAffiliateStatus(input.id, input.is_active);
+        return { success: true };
+      }),
+
+    // Get schools in affiliate's region
+    getSchools: protectedProcedure.query(async ({ ctx }) => {
+      const affiliate = await db.getAffiliateByUserId(ctx.user.id);
+      if (!affiliate) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Affiliate not found' });
+      }
+      return await db.getSchoolsByAffiliateId(affiliate.id);
+    }),
+
+    // Get companies from affiliate's region
+    getCompanies: protectedProcedure.query(async ({ ctx }) => {
+      const affiliate = await db.getAffiliateByUserId(ctx.user.id);
+      if (!affiliate) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Affiliate not found' });
+      }
+      return await db.getCompaniesByAffiliateId(affiliate.id);
+    }),
+
+    // Create school invitation (affiliates can invite schools to their region)
+    createSchoolInvitation: protectedProcedure
+      .input(z.object({
+        email: z.string().email(),
+        notes: z.string().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        // Get the affiliate's ID
+        const affiliate = await db.getAffiliateByUserId(ctx.user.id);
+        if (!affiliate) {
+          throw new TRPCError({ code: 'NOT_FOUND', message: 'Affiliate not found' });
+        }
+
+        // Create invitation with affiliate's franchise ID
+        return await db.createSchoolInvitation(
+          input.email,
+          affiliate.id,
+          ctx.user.id,
+          input.notes
+        );
+      }),
+
+    // Update school status (affiliates can approve/suspend schools in their region)
+    updateSchoolStatus: protectedProcedure
+      .input(z.object({
+        id: z.string().uuid(),
+        status: z.enum(['pending', 'active', 'suspended'])
+      }))
+      .mutation(async ({ ctx, input }) => {
+        // Verify the school belongs to this affiliate
+        const affiliate = await db.getAffiliateByUserId(ctx.user.id);
+        if (!affiliate) {
+          throw new TRPCError({ code: 'NOT_FOUND', message: 'Affiliate not found' });
+        }
+
+        const school = await db.getSchoolById(input.id);
+        if (!school || school.affiliate_id !== affiliate.id) {
+          throw new TRPCError({ code: 'FORBIDDEN', message: 'You can only manage schools in your region' });
+        }
+
+        await db.updateSchoolStatus(input.id, input.status);
+        return { success: true };
+      }),
+
+    // Get affiliate's dashboard stats
+    getDashboardStats: protectedProcedure.query(async ({ ctx }) => {
+      const affiliate = await db.getAffiliateByUserId(ctx.user.id);
+      if (!affiliate) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Affiliate not found' });
+      }
+      return await db.getAffiliateDashboardStats(affiliate.id);
+    }),
+
+    // Get candidates from affiliate's region
+    getCandidates: protectedProcedure.query(async ({ ctx }) => {
+      const affiliate = await db.getAffiliateByUserId(ctx.user.id);
+      if (!affiliate) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Affiliate not found' });
+      }
+      return await db.getCandidatesByAffiliateId(affiliate.id);
+    }),
+
+    // Get jobs from affiliate's region
+    getJobs: protectedProcedure.query(async ({ ctx }) => {
+      const affiliate = await db.getAffiliateByUserId(ctx.user.id);
+      if (!affiliate) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Affiliate not found' });
+      }
+      return await db.getJobsByAffiliateId(affiliate.id);
+    }),
+
+    // Get applications from affiliate's region
+    getApplications: protectedProcedure.query(async ({ ctx }) => {
+      const affiliate = await db.getAffiliateByUserId(ctx.user.id);
+      if (!affiliate) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Affiliate not found' });
+      }
+      return await db.getApplicationsByAffiliateId(affiliate.id);
+    }),
+
+    // Get contracts from affiliate's region
+    getContracts: protectedProcedure.query(async ({ ctx }) => {
+      const affiliate = await db.getAffiliateByUserId(ctx.user.id);
+      if (!affiliate) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Affiliate not found' });
+      }
+      return await db.getContractsByAffiliateId(affiliate.id);
+    }),
+
+    // Get payments from affiliate's region
+    getPayments: protectedProcedure.query(async ({ ctx }) => {
+      const affiliate = await db.getAffiliateByUserId(ctx.user.id);
+      if (!affiliate) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Affiliate not found' });
+      }
+      return await db.getPaymentsByAffiliateId(affiliate.id);
+    }),
+
+    // DEV ONLY: Create test franchise account (remove in production)
+    createTestAccount: publicProcedure
+      .input(z.object({
+        email: z.string().email().default('test-franchise@example.com'),
+        password: z.string().min(6).default('test123'),
+        name: z.string().default('Test Franchise Owner'),
+        region: z.string().default('Test Region'),
+        commission_rate: z.number().default(30),
+      }))
+      .mutation(async ({ input }) => {
+        return await db.createTestAffiliateAccount(input);
+      }),
   }),
 
   // Admin dashboard analytics

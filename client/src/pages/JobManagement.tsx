@@ -1,4 +1,5 @@
 import { useAuth } from "@/_core/hooks/useAuth";
+import ClassicLoader from "@/components/ui/ClassicLoader";
 import { useAgentContext } from "@/hooks/useAgentContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -45,7 +46,7 @@ export default function JobManagement() {
   if (authLoading || isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <ClassicLoader />
       </div>
     );
   }
@@ -125,75 +126,61 @@ export default function JobManagement() {
           Voltar ao Dashboard
         </Button>
 
-        {/* Hero Header with Gradient */}
-        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-orange-600 via-red-600 to-pink-600 p-8 text-white shadow-2xl">
-          <div className="absolute inset-0 bg-grid-white/[0.05] bg-[size:20px_20px]" />
+        {/* Hero Header */}
+        <div className="relative overflow-hidden rounded-lg bg-slate-900 p-8 text-white shadow-lg border border-slate-800">
           <div className="relative">
-            <h1 className="text-4xl font-bold flex items-center gap-3 mb-2">
+            <h1 className="text-4xl font-semibold flex items-center gap-3 mb-2">
               <Briefcase className="h-10 w-10" />
               Gerenciamento de Vagas
             </h1>
-            <p className="text-orange-100 text-lg">
+            <p className="text-slate-300 text-lg">
               Monitorar e gerenciar todas as vagas publicadas pelas empresas
             </p>
           </div>
         </div>
 
-        {/* Summary Cards - Vibrant Gradients */}
-        <div className="grid gap-6 md:grid-cols-4">
-          <Card className="bg-gradient-to-br from-orange-500 to-orange-600 text-white border-0 shadow-lg hover:shadow-xl transition-shadow">
+        {/* Summary Cards */}
+        <div className="grid gap-6 md:grid-cols-3">
+          <Card className="border-emerald-200 bg-emerald-50/50 shadow-md hover:shadow-lg transition-shadow">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-orange-100">Total de Vagas</CardTitle>
-              <Briefcase className="h-5 w-5 text-orange-200" />
+              <CardTitle className="text-sm font-medium text-emerald-700">Vagas Abertas</CardTitle>
+              <CheckCircle className="h-5 w-5 text-emerald-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold mb-1">{jobs?.length || 0}</div>
-              <p className="text-xs text-orange-100">
-                Vagas cadastradas
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-gradient-to-br from-green-500 to-green-600 text-white border-0 shadow-lg hover:shadow-xl transition-shadow">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-green-100">Vagas Abertas</CardTitle>
-              <CheckCircle className="h-5 w-5 text-green-200" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold mb-1">
+              <div className="text-3xl font-semibold mb-1 text-emerald-900">
                 {jobs?.filter((j: any) => j.status === 'open').length || 0}
               </div>
-              <p className="text-xs text-green-100">
+              <p className="text-xs text-emerald-600">
                 Atualmente disponíveis
               </p>
             </CardContent>
           </Card>
 
-          <Card className="bg-gradient-to-br from-gray-500 to-gray-600 text-white border-0 shadow-lg hover:shadow-xl transition-shadow">
+          <Card className="border-slate-200 bg-slate-50/50 shadow-md hover:shadow-lg transition-shadow">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-gray-100">Rascunhos</CardTitle>
-              <Clock className="h-5 w-5 text-gray-200" />
+              <CardTitle className="text-sm font-medium text-slate-700">Rascunhos</CardTitle>
+              <Clock className="h-5 w-5 text-slate-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold mb-1">
+              <div className="text-3xl font-semibold mb-1 text-slate-900">
                 {jobs?.filter((j: any) => j.status === 'draft').length || 0}
               </div>
-              <p className="text-xs text-gray-100">
+              <p className="text-xs text-slate-600">
                 Aguardando publicação
               </p>
             </CardContent>
           </Card>
 
-          <Card className="bg-gradient-to-br from-blue-500 to-blue-600 text-white border-0 shadow-lg hover:shadow-xl transition-shadow">
+          <Card className="border-blue-200 bg-blue-50/50 shadow-md hover:shadow-lg transition-shadow">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-blue-100">Preenchidas</CardTitle>
-              <CheckCircle className="h-5 w-5 text-blue-200" />
+              <CardTitle className="text-sm font-medium text-blue-700">Preenchidas</CardTitle>
+              <CheckCircle className="h-5 w-5 text-blue-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold mb-1">
+              <div className="text-3xl font-semibold mb-1 text-blue-900">
                 {jobs?.filter((j: any) => j.status === 'filled').length || 0}
               </div>
-              <p className="text-xs text-blue-100">
+              <p className="text-xs text-blue-600">
                 Vagas concluídas
               </p>
             </CardContent>

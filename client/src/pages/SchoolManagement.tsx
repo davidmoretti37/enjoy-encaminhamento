@@ -1,4 +1,5 @@
 import { useAuth } from "@/_core/hooks/useAuth";
+import ClassicLoader from "@/components/ui/ClassicLoader";
 import { useAgentContext } from "@/hooks/useAgentContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -91,7 +92,7 @@ export default function SchoolManagement() {
   if (authLoading || isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <ClassicLoader />
       </div>
     );
   }
@@ -192,23 +193,22 @@ export default function SchoolManagement() {
           Voltar ao Dashboard
         </Button>
 
-        {/* Hero Header with Gradient */}
-        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-700 p-8 text-white shadow-2xl">
-          <div className="absolute inset-0 bg-grid-white/[0.05] bg-[size:20px_20px]" />
-          <div className="relative flex items-center justify-between">
+        {/* Hero Header - Modern Clean Design */}
+        <div className="relative overflow-hidden rounded-lg bg-slate-900 p-8 text-white shadow-lg border border-slate-800">
+          <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-4xl font-bold flex items-center gap-3 mb-2">
-                <Building2 className="h-10 w-10" />
+              <h1 className="text-3xl font-semibold flex items-center gap-3 mb-2">
+                <Building2 className="h-8 w-8" />
                 Gerenciamento de Escolas
               </h1>
-              <p className="text-blue-100 text-lg">
+              <p className="text-slate-300 text-base">
                 Aprovar, editar e gerenciar todas as escolas da plataforma
               </p>
             </div>
             <Button
               onClick={() => setShowInviteDialog(true)}
               size="lg"
-              className="bg-white text-blue-700 hover:bg-blue-50 shadow-lg hover:shadow-xl transition-all"
+              className="bg-white text-slate-900 hover:bg-slate-100 shadow-md hover:shadow-lg transition-all"
             >
               <UserPlus className="h-5 w-5 mr-2" />
               Convidar Escola
@@ -216,47 +216,47 @@ export default function SchoolManagement() {
           </div>
         </div>
 
-        {/* Summary Cards - Vibrant Gradients */}
+        {/* Summary Cards - Modern Clean Design */}
         <div className="grid gap-6 md:grid-cols-3">
-          <Card className="bg-gradient-to-br from-blue-500 to-blue-600 text-white border-0 shadow-lg hover:shadow-xl transition-shadow">
+          <Card className="border-slate-200 shadow-md hover:shadow-lg transition-shadow">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-blue-100">Total de Escolas</CardTitle>
-              <Building2 className="h-5 w-5 text-blue-200" />
+              <CardTitle className="text-sm font-medium text-slate-600">Total de Escolas</CardTitle>
+              <Building2 className="h-5 w-5 text-slate-400" />
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold mb-1">{schools?.length || 0}</div>
-              <p className="text-xs text-blue-100">
+              <div className="text-3xl font-semibold text-slate-900 mb-1">{schools?.length || 0}</div>
+              <p className="text-xs text-slate-500">
                 Escolas cadastradas
               </p>
             </CardContent>
           </Card>
 
-          <Card className="bg-gradient-to-br from-green-500 to-green-600 text-white border-0 shadow-lg hover:shadow-xl transition-shadow">
+          <Card className="border-emerald-200 bg-emerald-50/50 shadow-md hover:shadow-lg transition-shadow">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-green-100">Escolas Ativas</CardTitle>
-              <CheckCircle className="h-5 w-5 text-green-200" />
+              <CardTitle className="text-sm font-medium text-emerald-700">Escolas Ativas</CardTitle>
+              <CheckCircle className="h-5 w-5 text-emerald-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold mb-1">
+              <div className="text-3xl font-semibold text-emerald-900 mb-1">
                 {schools?.filter(s => s.status === 'active').length || 0}
               </div>
-              <p className="text-xs text-green-100">
+              <p className="text-xs text-emerald-600">
                 Aprovadas e operando
               </p>
             </CardContent>
           </Card>
 
-          <Card className="bg-gradient-to-br from-yellow-500 to-orange-500 text-white border-0 shadow-lg hover:shadow-xl transition-shadow">
+          <Card className="border-blue-200 bg-blue-50/50 shadow-md hover:shadow-lg transition-shadow">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-yellow-100">Aguardando Aprovação</CardTitle>
-              <Clock className="h-5 w-5 text-yellow-200" />
+              <CardTitle className="text-sm font-medium text-blue-700">Cidades Atendidas</CardTitle>
+              <Building2 className="h-5 w-5 text-blue-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold mb-1">
-                {schools?.filter(s => s.status === 'pending').length || 0}
+              <div className="text-3xl font-semibold text-blue-900 mb-1">
+                {new Set(schools?.map(s => s.city).filter(Boolean)).size || 0}
               </div>
-              <p className="text-xs text-yellow-100">
-                Pendentes de análise
+              <p className="text-xs text-blue-600">
+                Cidades diferentes
               </p>
             </CardContent>
           </Card>
@@ -354,6 +354,7 @@ export default function SchoolManagement() {
                     <TableHead>Nome</TableHead>
                     <TableHead>Franquia</TableHead>
                     <TableHead>Cidade</TableHead>
+                    <TableHead>CNPJ</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Cadastro</TableHead>
                     <TableHead className="text-right">Ações</TableHead>
@@ -374,51 +375,22 @@ export default function SchoolManagement() {
                         {school.franchises?.name || 'N/A'}
                       </TableCell>
                       <TableCell>{school.city || 'N/A'}</TableCell>
+                      <TableCell>
+                        <span className="font-mono text-sm">{school.cnpj || '-'}</span>
+                      </TableCell>
                       <TableCell>{getStatusBadge(school.status)}</TableCell>
                       <TableCell>
                         {new Date(school.created_at).toLocaleDateString('pt-BR')}
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
-                          {school.status === 'pending' && (
-                            <Button
-                              size="sm"
-                              variant="default"
-                              onClick={() => handleApprove(school.id)}
-                              disabled={updateStatusMutation.isLoading}
-                            >
-                              <CheckCircle className="h-4 w-4 mr-1" />
-                              Aprovar
-                            </Button>
-                          )}
-                          {school.status === 'active' && (
-                            <Button
-                              size="sm"
-                              variant="destructive"
-                              onClick={() => handleSuspend(school.id)}
-                              disabled={updateStatusMutation.isLoading}
-                            >
-                              <Ban className="h-4 w-4 mr-1" />
-                              Suspender
-                            </Button>
-                          )}
-                          {school.status === 'suspended' && (
-                            <Button
-                              size="sm"
-                              variant="default"
-                              onClick={() => handleApprove(school.id)}
-                              disabled={updateStatusMutation.isLoading}
-                            >
-                              <CheckCircle className="h-4 w-4 mr-1" />
-                              Reativar
-                            </Button>
-                          )}
                           <Button
                             size="sm"
-                            variant="outline"
+                            variant="ghost"
                             onClick={() => setSelectedSchool(school.id)}
                           >
-                            <Eye className="h-4 w-4" />
+                            <Eye className="h-4 w-4 mr-1" />
+                            Ver Detalhes
                           </Button>
                         </div>
                       </TableCell>
@@ -491,7 +463,7 @@ export default function SchoolManagement() {
                   >
                     {createInvitationMutation.isLoading ? (
                       <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        <ClassicLoader />
                         Criando...
                       </>
                     ) : (
@@ -535,6 +507,120 @@ export default function SchoolManagement() {
                 </DialogFooter>
               </>
             )}
+          </DialogContent>
+        </Dialog>
+
+        {/* School Details Dialog */}
+        <Dialog open={!!selectedSchool} onOpenChange={() => setSelectedSchool(null)}>
+          <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Building2 className="h-5 w-5" />
+                Detalhes da Escola
+              </DialogTitle>
+              <DialogDescription>
+                Informações completas da escola cadastrada
+              </DialogDescription>
+            </DialogHeader>
+
+            {selectedSchool && (() => {
+              const school = schools?.find(s => s.id === selectedSchool);
+              if (!school) return <div>Escola não encontrada</div>;
+
+              return (
+                <div className="space-y-6 py-4">
+                  {/* Basic Information */}
+                  <div className="space-y-4">
+                    <h3 className="text-lg font-semibold border-b pb-2">Informações Básicas</h3>
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <div>
+                        <Label className="text-muted-foreground">Nome da Escola</Label>
+                        <p className="font-medium">{school.school_name || '-'}</p>
+                      </div>
+                      <div>
+                        <Label className="text-muted-foreground">Nome Fantasia</Label>
+                        <p className="font-medium">{school.trade_name || '-'}</p>
+                      </div>
+                      <div>
+                        <Label className="text-muted-foreground">Razão Social</Label>
+                        <p className="font-medium">{school.legal_name || '-'}</p>
+                      </div>
+                      <div>
+                        <Label className="text-muted-foreground">CNPJ</Label>
+                        <p className="font-medium font-mono">{school.cnpj || '-'}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Contact Information */}
+                  <div className="space-y-4">
+                    <h3 className="text-lg font-semibold border-b pb-2">Contato</h3>
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <div>
+                        <Label className="text-muted-foreground">Email</Label>
+                        <p className="font-medium">{school.email || '-'}</p>
+                      </div>
+                      <div>
+                        <Label className="text-muted-foreground">Telefone</Label>
+                        <p className="font-medium">{school.phone || '-'}</p>
+                      </div>
+                      <div className="md:col-span-2">
+                        <Label className="text-muted-foreground">Website</Label>
+                        <p className="font-medium">{school.website || '-'}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Address Information */}
+                  <div className="space-y-4">
+                    <h3 className="text-lg font-semibold border-b pb-2">Endereço</h3>
+                    <div className="grid gap-4">
+                      <div>
+                        <Label className="text-muted-foreground">Endereço Completo</Label>
+                        <p className="font-medium">{school.address || '-'}</p>
+                      </div>
+                      <div className="grid gap-4 md:grid-cols-3">
+                        <div>
+                          <Label className="text-muted-foreground">Cidade</Label>
+                          <p className="font-medium">{school.city || '-'}</p>
+                        </div>
+                        <div>
+                          <Label className="text-muted-foreground">Estado</Label>
+                          <p className="font-medium">{school.state || '-'}</p>
+                        </div>
+                        <div>
+                          <Label className="text-muted-foreground">CEP</Label>
+                          <p className="font-medium">{school.postal_code || '-'}</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Administrative Information */}
+                  <div className="space-y-4">
+                    <h3 className="text-lg font-semibold border-b pb-2">Informações Administrativas</h3>
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <div>
+                        <Label className="text-muted-foreground">Franquia/Afiliado</Label>
+                        <p className="font-medium">{school.franchises?.name || 'N/A'}</p>
+                      </div>
+                      <div>
+                        <Label className="text-muted-foreground">Status</Label>
+                        <div className="mt-1">{getStatusBadge(school.status)}</div>
+                      </div>
+                      <div>
+                        <Label className="text-muted-foreground">Data de Cadastro</Label>
+                        <p className="font-medium">{new Date(school.created_at).toLocaleDateString('pt-BR')}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
+            <DialogFooter>
+              <Button onClick={() => setSelectedSchool(null)}>Fechar</Button>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
       </div>

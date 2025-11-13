@@ -13,11 +13,14 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { signIn, signUp, signInWithOAuth } from '@/lib/auth-helpers';
+import { useAuth } from '@/_core/hooks/useAuth';
 import { Briefcase, Loader2 } from 'lucide-react';
+import ClassicLoader from "@/components/ui/ClassicLoader";
 import { toast } from 'sonner';
 
 export default function Login() {
   const [, setLocation] = useLocation();
+  const { refresh } = useAuth();
   const [loading, setLoading] = useState(false);
 
   // Login form state
@@ -36,8 +39,25 @@ export default function Login() {
 
     try {
       await signIn(loginEmail, loginPassword);
+
+      // Refresh user to get role information
+      const result = await refresh();
+      const user = result.data;
+
       toast.success('Login bem-sucedido!');
-      setLocation('/dashboard');
+
+      // Role-based dashboard redirect
+      if (user?.role === 'affiliate') {
+        setLocation('/affiliate/dashboard');
+      } else if (user?.role === 'super_admin' || user?.role === 'admin') {
+        setLocation('/admin/dashboard');
+      } else if (user?.role === 'school') {
+        setLocation('/school/dashboard');
+      } else if (user?.role === 'company') {
+        setLocation('/company/dashboard');
+      } else {
+        setLocation('/');
+      }
     } catch (error: any) {
       toast.error(error.message || 'Erro ao fazer login');
     } finally {
@@ -55,7 +75,23 @@ export default function Login() {
         role: signupRole,
       });
       toast.success('Conta criada com sucesso! Verifique seu email.');
-      setLocation('/dashboard');
+
+      // Refresh user to get role information
+      const result = await refresh();
+      const user = result.data;
+
+      // Role-based dashboard redirect
+      if (user?.role === 'affiliate') {
+        setLocation('/affiliate/dashboard');
+      } else if (user?.role === 'super_admin' || user?.role === 'admin') {
+        setLocation('/admin/dashboard');
+      } else if (user?.role === 'school') {
+        setLocation('/school/dashboard');
+      } else if (user?.role === 'company') {
+        setLocation('/company/dashboard');
+      } else {
+        setLocation('/');
+      }
     } catch (error: any) {
       toast.error(error.message || 'Erro ao criar conta');
     } finally {
@@ -75,11 +111,11 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/5 via-background to-background p-4">
+    <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
       <div className="w-full max-w-md">
         <div className="flex items-center justify-center mb-8">
-          <Briefcase className="h-12 w-12 text-primary mr-3" />
-          <h1 className="text-3xl font-bold">Recrutamento</h1>
+          <Briefcase className="h-12 w-12 text-slate-900 mr-3" />
+          <h1 className="text-3xl font-bold text-slate-900">Recrutamento</h1>
         </div>
 
         <Card>
@@ -126,7 +162,7 @@ export default function Login() {
                   <Button type="submit" className="w-full" disabled={loading}>
                     {loading ? (
                       <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        <ClassicLoader />
                         Entrando...
                       </>
                     ) : (
@@ -232,7 +268,7 @@ export default function Login() {
                   <Button type="submit" className="w-full" disabled={loading}>
                     {loading ? (
                       <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        <ClassicLoader />
                         Criando conta...
                       </>
                     ) : (

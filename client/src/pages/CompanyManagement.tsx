@@ -1,4 +1,5 @@
 import { useAuth } from "@/_core/hooks/useAuth";
+import ClassicLoader from "@/components/ui/ClassicLoader";
 import { useAgentContext } from "@/hooks/useAgentContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -44,7 +45,7 @@ export default function CompanyManagement() {
   if (authLoading || isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <ClassicLoader />
       </div>
     );
   }
@@ -114,75 +115,61 @@ export default function CompanyManagement() {
           Voltar ao Dashboard
         </Button>
 
-        {/* Hero Header with Gradient */}
-        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-purple-600 via-violet-600 to-indigo-600 p-8 text-white shadow-2xl">
-          <div className="absolute inset-0 bg-grid-white/[0.05] bg-[size:20px_20px]" />
+        {/* Hero Header */}
+        <div className="relative overflow-hidden rounded-lg bg-slate-900 p-8 text-white shadow-lg border border-slate-800">
           <div className="relative">
-            <h1 className="text-4xl font-bold flex items-center gap-3 mb-2">
+            <h1 className="text-4xl font-semibold flex items-center gap-3 mb-2">
               <Building className="h-10 w-10" />
               Gerenciamento de Empresas
             </h1>
-            <p className="text-purple-100 text-lg">
+            <p className="text-slate-300 text-lg">
               Aprovar, gerenciar e monitorar empresas que buscam candidatos
             </p>
           </div>
         </div>
 
-        {/* Summary Cards - Vibrant Gradients */}
-        <div className="grid gap-6 md:grid-cols-4">
-          <Card className="bg-gradient-to-br from-purple-500 to-purple-600 text-white border-0 shadow-lg hover:shadow-xl transition-shadow">
+        {/* Summary Cards */}
+        <div className="grid gap-6 md:grid-cols-3">
+          <Card className="border-emerald-200 bg-emerald-50/50 shadow-md hover:shadow-lg transition-shadow">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-purple-100">Total de Empresas</CardTitle>
-              <Building className="h-5 w-5 text-purple-200" />
+              <CardTitle className="text-sm font-medium text-emerald-700">Empresas Ativas</CardTitle>
+              <CheckCircle className="h-5 w-5 text-emerald-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold mb-1">{companies?.length || 0}</div>
-              <p className="text-xs text-purple-100">
-                Empresas cadastradas
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-gradient-to-br from-green-500 to-green-600 text-white border-0 shadow-lg hover:shadow-xl transition-shadow">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-green-100">Empresas Ativas</CardTitle>
-              <CheckCircle className="h-5 w-5 text-green-200" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold mb-1">
+              <div className="text-3xl font-semibold mb-1 text-emerald-900">
                 {companies?.filter((c: any) => c.status === 'active').length || 0}
               </div>
-              <p className="text-xs text-green-100">
+              <p className="text-xs text-emerald-600">
                 Aprovadas e operando
               </p>
             </CardContent>
           </Card>
 
-          <Card className="bg-gradient-to-br from-yellow-500 to-orange-500 text-white border-0 shadow-lg hover:shadow-xl transition-shadow">
+          <Card className="border-amber-200 bg-amber-50/50 shadow-md hover:shadow-lg transition-shadow">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-yellow-100">Aguardando Aprovação</CardTitle>
-              <XCircle className="h-5 w-5 text-yellow-200" />
+              <CardTitle className="text-sm font-medium text-amber-700">Aguardando Aprovação</CardTitle>
+              <XCircle className="h-5 w-5 text-amber-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold mb-1">
+              <div className="text-3xl font-semibold mb-1 text-amber-900">
                 {companies?.filter((c: any) => c.status === 'pending').length || 0}
               </div>
-              <p className="text-xs text-yellow-100">
+              <p className="text-xs text-amber-600">
                 Pendentes de análise
               </p>
             </CardContent>
           </Card>
 
-          <Card className="bg-gradient-to-br from-red-500 to-red-600 text-white border-0 shadow-lg hover:shadow-xl transition-shadow">
+          <Card className="border-red-200 bg-red-50/50 shadow-md hover:shadow-lg transition-shadow">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-red-100">Suspensas</CardTitle>
-              <Ban className="h-5 w-5 text-red-200" />
+              <CardTitle className="text-sm font-medium text-red-700">Suspensas</CardTitle>
+              <Ban className="h-5 w-5 text-red-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold mb-1">
+              <div className="text-3xl font-semibold mb-1 text-red-900">
                 {companies?.filter((c: any) => c.status === 'suspended').length || 0}
               </div>
-              <p className="text-xs text-red-100">
+              <p className="text-xs text-red-600">
                 Empresas suspensas
               </p>
             </CardContent>

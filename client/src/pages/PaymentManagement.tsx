@@ -1,4 +1,5 @@
 import { useAuth } from "@/_core/hooks/useAuth";
+import ClassicLoader from "@/components/ui/ClassicLoader";
 import { useAgentContext } from "@/hooks/useAgentContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -44,7 +45,7 @@ export default function PaymentManagement() {
   if (authLoading || isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <ClassicLoader />
       </div>
     );
   }
@@ -134,66 +135,54 @@ export default function PaymentManagement() {
         </Button>
 
         {/* Hero Header */}
-        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-emerald-600 via-green-600 to-teal-600 p-8 text-white shadow-2xl">
-          <div className="absolute inset-0 bg-grid-white/[0.05] bg-[size:20px_20px]" />
+        <div className="relative overflow-hidden rounded-lg bg-slate-900 p-8 text-white shadow-lg border border-slate-800">
           <div className="relative">
-            <h1 className="text-4xl font-bold flex items-center gap-3 mb-2">
+            <h1 className="text-4xl font-semibold flex items-center gap-3 mb-2">
               <DollarSign className="h-10 w-10" />
               Gerenciamento de Pagamentos
             </h1>
-            <p className="text-emerald-100 text-lg">
+            <p className="text-slate-300 text-lg">
               Monitorar e gerenciar todos os pagamentos da plataforma
             </p>
           </div>
         </div>
 
         {/* Summary Cards */}
-        <div className="grid gap-6 md:grid-cols-4">
-          <Card className="bg-gradient-to-br from-emerald-500 to-emerald-600 text-white border-0 shadow-lg hover:shadow-xl transition-shadow">
+        <div className="grid gap-6 md:grid-cols-3">
+          <Card className="border-emerald-200 bg-emerald-50/50 shadow-md hover:shadow-lg transition-shadow">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-emerald-100">Total de Pagamentos</CardTitle>
-              <DollarSign className="h-5 w-5 text-emerald-200" />
+              <CardTitle className="text-sm font-medium text-emerald-700">Receita Recebida</CardTitle>
+              <CheckCircle className="h-5 w-5 text-emerald-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold mb-1">{payments?.length || 0}</div>
-              <p className="text-xs text-emerald-100">Pagamentos registrados</p>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-gradient-to-br from-green-500 to-green-600 text-white border-0 shadow-lg hover:shadow-xl transition-shadow">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-green-100">Receita Recebida</CardTitle>
-              <CheckCircle className="h-5 w-5 text-green-200" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold mb-1">{formatCurrency(totalRevenue)}</div>
-              <p className="text-xs text-green-100">
+              <div className="text-3xl font-semibold mb-1 text-emerald-900">{formatCurrency(totalRevenue)}</div>
+              <p className="text-xs text-emerald-600">
                 {payments?.filter((p: any) => p.status === 'paid').length || 0} pagamentos
               </p>
             </CardContent>
           </Card>
 
-          <Card className="bg-gradient-to-br from-yellow-500 to-yellow-600 text-white border-0 shadow-lg hover:shadow-xl transition-shadow">
+          <Card className="border-amber-200 bg-amber-50/50 shadow-md hover:shadow-lg transition-shadow">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-yellow-100">Receita Pendente</CardTitle>
-              <Clock className="h-5 w-5 text-yellow-200" />
+              <CardTitle className="text-sm font-medium text-amber-700">Receita Pendente</CardTitle>
+              <Clock className="h-5 w-5 text-amber-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold mb-1">{formatCurrency(pendingRevenue)}</div>
-              <p className="text-xs text-yellow-100">
+              <div className="text-3xl font-semibold mb-1 text-amber-900">{formatCurrency(pendingRevenue)}</div>
+              <p className="text-xs text-amber-600">
                 {payments?.filter((p: any) => p.status === 'pending').length || 0} pagamentos
               </p>
             </CardContent>
           </Card>
 
-          <Card className="bg-gradient-to-br from-red-500 to-red-600 text-white border-0 shadow-lg hover:shadow-xl transition-shadow">
+          <Card className="border-red-200 bg-red-50/50 shadow-md hover:shadow-lg transition-shadow">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-red-100">Pagamentos Atrasados</CardTitle>
-              <AlertCircle className="h-5 w-5 text-red-200" />
+              <CardTitle className="text-sm font-medium text-red-700">Pagamentos Atrasados</CardTitle>
+              <AlertCircle className="h-5 w-5 text-red-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold mb-1">{formatCurrency(overdueRevenue)}</div>
-              <p className="text-xs text-red-100">
+              <div className="text-3xl font-semibold mb-1 text-red-900">{formatCurrency(overdueRevenue)}</div>
+              <p className="text-xs text-red-600">
                 {payments?.filter((p: any) => p.status === 'overdue').length || 0} pagamentos
               </p>
             </CardContent>

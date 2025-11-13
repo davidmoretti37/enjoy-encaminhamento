@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import ClassicLoader from "@/components/ui/ClassicLoader";
 import { useRoute, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,60 +15,54 @@ export default function SchoolRegistration() {
   const [, setLocation] = useLocation();
   const token = params?.token;
 
-  const [step, setStep] = useState<'validating' | 'signup' | 'school-form' | 'success' | 'error'>('validating');
+  const [step, setStep] = useState<'validating' | 'password-form' | 'success' | 'error'>('validating');
   const [errorMessage, setErrorMessage] = useState("");
 
-  // Signup form
-  const [email, setEmail] = useState("");
+  // Password
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
 
-  // School form
-  const [schoolName, setSchoolName] = useState("");
-  const [tradeName, setTradeName] = useState("");
-  const [legalName, setLegalName] = useState("");
-  const [cnpj, setCnpj] = useState("");
-  const [phone, setPhone] = useState("");
-  const [schoolEmail, setSchoolEmail] = useState("");
-  const [address, setAddress] = useState("");
-  const [city, setCity] = useState("");
-  const [state, setState] = useState("");
-  const [postalCode, setPostalCode] = useState("");
-  const [website, setWebsite] = useState("");
-
   // tRPC queries
-  const { data: invitation, isLoading: validating } = trpc.invitation.validate.useQuery(
+  const { data: invitation, isLoading: validating, error: validationError } = trpc.invitation.validate.useQuery(
     { token: token || "" },
     {
       enabled: !!token,
-      onSuccess: (data) => {
-        if (data.isValid) {
-          setEmail(data.email);
-          setSchoolEmail(data.email);
-          setStep('signup');
-        } else {
-          setErrorMessage(data.reason || "Convite inválido");
-          setStep('error');
-        }
-      },
-      onError: () => {
-        setErrorMessage("Convite não encontrado");
-        setStep('error');
-      }
+      retry: false,
+      refetchOnWindowFocus: false,
     }
   );
 
-  const acceptInvitationMutation = trpc.invitation.accept.useMutation({
+  // Handle validation result
+  useEffect(() => {
+    if (validating) return;
+
+    if (validationError) {
+      setErrorMessage("Convite não encontrado");
+      setStep('error');
+      return;
+    }
+
+    if (invitation) {
+      if (invitation.isValid) {
+        setStep('password-form');
+      } else {
+        setErrorMessage(invitation.reason || "Convite inválido");
+        setStep('error');
+      }
+    }
+  }, [invitation, validating, validationError]);
+
+  const acceptInvitationMutation = trpc.invitation.acceptWithPassword.useMutation({
     onSuccess: () => {
       setStep('success');
-      toast.success("Escola cadastrada com sucesso!");
+      toast.success("Conta criada com sucesso!");
     },
     onError: (error) => {
-      toast.error(`Erro ao cadastrar escola: ${error.message}`);
+      toast.error(`Erro ao criar conta: ${error.message}`);
     }
   });
 
-  const handleSignup = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (password !== confirmPassword) {
@@ -80,46 +75,20 @@ export default function SchoolRegistration() {
       return;
     }
 
-    try {
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-      });
-
-      if (error) throw error;
-
-      if (data.user) {
-        // Wait a moment for user to be fully created
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        setStep('school-form');
-      }
-    } catch (error: any) {
-      toast.error(error.message || "Erro ao criar conta");
-    }
-  };
-
-  const handleSchoolSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (!schoolName || !cnpj || !schoolEmail) {
-      toast.error("Preencha todos os campos obrigatórios");
+    if (!invitation) {
+      toast.error("Convite inválido");
       return;
     }
 
+    // The school data is stored in the invitation notes field or we just use placeholder data
+    // since the affiliate already filled everything
     await acceptInvitationMutation.mutateAsync({
       token: token!,
+      password,
       schoolData: {
-        school_name: schoolName,
-        trade_name: tradeName || undefined,
-        legal_name: legalName || undefined,
-        cnpj,
-        email: schoolEmail,
-        phone: phone || undefined,
-        address: address || undefined,
-        city: city || undefined,
-        state: state || undefined,
-        postal_code: postalCode || undefined,
-        website: website || undefined,
+        school_name: invitation.affiliates?.name || "Escola",
+        cnpj: "00000000000000", // Placeholder - already stored in invitation
+        email: invitation.email,
       }
     });
   };
@@ -149,7 +118,7 @@ export default function SchoolRegistration() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
         <div className="text-center">
-          <Loader2 className="h-12 w-12 animate-spin text-primary mx-auto mb-4" />
+          <ClassicLoader />
           <p className="text-muted-foreground">Validando convite...</p>
         </div>
       </div>
@@ -182,16 +151,15 @@ export default function SchoolRegistration() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <CheckCircle className="h-5 w-5 text-green-500" />
-              Cadastro Concluído!
+              Conta Criada com Sucesso!
             </CardTitle>
             <CardDescription>
-              Sua escola foi cadastrada com sucesso
+              Sua conta foi criada e está pronta para usar
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-muted-foreground">
-              Aguarde a aprovação do administrador para começar a usar a plataforma.
-              Você receberá um email quando sua escola for aprovada.
+              Você já pode fazer login e começar a usar a plataforma.
             </p>
             <Button className="w-full" onClick={() => setLocation("/login")}>
               Ir para Login
@@ -202,30 +170,36 @@ export default function SchoolRegistration() {
     );
   }
 
-  if (step === 'signup') {
+  if (step === 'password-form') {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
         <Card className="max-w-md w-full">
           <CardHeader>
-            <CardTitle>Criar Conta</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <Building2 className="h-5 w-5" />
+              Criar Conta de Escola
+            </CardTitle>
             <CardDescription>
-              Você foi convidado para cadastrar {invitation?.franchises?.name}
+              Você foi convidado por {invitation?.affiliates?.name}
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <form onSubmit={handleSignup} className="space-y-4">
+            <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="email">Email</Label>
                 <Input
                   id="email"
                   type="email"
-                  value={email}
+                  value={invitation?.email || ""}
                   disabled
                   className="bg-muted"
                 />
+                <p className="text-xs text-muted-foreground">
+                  Este será seu email de login
+                </p>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="password">Senha</Label>
+                <Label htmlFor="password">Senha *</Label>
                 <Input
                   id="password"
                   type="password"
@@ -237,7 +211,7 @@ export default function SchoolRegistration() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="confirmPassword">Confirmar Senha</Label>
+                <Label htmlFor="confirmPassword">Confirmar Senha *</Label>
                 <Input
                   id="confirmPassword"
                   type="password"
@@ -247,8 +221,27 @@ export default function SchoolRegistration() {
                   placeholder="Digite a senha novamente"
                 />
               </div>
-              <Button type="submit" className="w-full">
-                Criar Conta e Continuar
+
+              <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+                <p className="text-sm text-blue-800">
+                  Os dados da escola já foram preenchidos pelo franqueado.
+                  Você só precisa criar uma senha para acessar sua conta.
+                </p>
+              </div>
+
+              <Button
+                type="submit"
+                className="w-full"
+                disabled={acceptInvitationMutation.isLoading}
+              >
+                {acceptInvitationMutation.isLoading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Criando conta...
+                  </>
+                ) : (
+                  "Criar Conta"
+                )}
               </Button>
             </form>
           </CardContent>
@@ -257,7 +250,8 @@ export default function SchoolRegistration() {
     );
   }
 
-  if (step === 'school-form') {
+  // Remove old school-form step
+  if (step === 'school-form-old') {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4 py-8">
         <div className="max-w-2xl mx-auto">
@@ -411,7 +405,7 @@ export default function SchoolRegistration() {
                   >
                     {acceptInvitationMutation.isLoading ? (
                       <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        <ClassicLoader />
                         Cadastrando...
                       </>
                     ) : (

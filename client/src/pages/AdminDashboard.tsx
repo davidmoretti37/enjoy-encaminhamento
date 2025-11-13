@@ -9,7 +9,6 @@ import {
   FileText,
   Building2,
   TrendingUp,
-  Loader2,
   ArrowUpRight,
   GraduationCap,
   ShieldCheck,
@@ -20,6 +19,7 @@ import {
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import DashboardLayout from "@/components/DashboardLayout";
+import ClassicLoader from "@/components/ui/ClassicLoader";
 
 export default function AdminDashboard() {
   const { user, loading: authLoading } = useAuth();
@@ -34,7 +34,9 @@ export default function AdminDashboard() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
         <div className="text-center">
-          <Loader2 className="h-12 w-12 animate-spin text-primary mx-auto mb-4" />
+          <div className="flex justify-center mb-4">
+            <ClassicLoader />
+          </div>
           <p className="text-muted-foreground">Carregando dashboard...</p>
         </div>
       </div>
@@ -65,11 +67,10 @@ export default function AdminDashboard() {
   return (
     <DashboardLayout>
       <div className="space-y-8">
-        {/* Hero Header with Gradient */}
-        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-blue-600 via-indigo-600 to-purple-600 p-8 text-white shadow-2xl">
-          <div className="absolute inset-0 bg-grid-white/[0.05] bg-[size:20px_20px]" />
+        {/* Hero Header */}
+        <div className="relative overflow-hidden rounded-lg bg-slate-900 p-8 text-white shadow-lg border border-slate-800">
           <div className="relative">
-            <h1 className="text-4xl font-bold flex items-center gap-3">
+            <h1 className="text-4xl font-semibold flex items-center gap-3">
               <GraduationCap className="h-10 w-10" />
               Dashboard Administrativo
             </h1>
@@ -78,20 +79,20 @@ export default function AdminDashboard() {
 
         {/* Stats Overview */}
         <div>
-          <h2 className="text-2xl font-bold mb-4">Visão Geral da Plataforma</h2>
+          <h2 className="text-2xl font-semibold mb-4">Visão Geral da Plataforma</h2>
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-            <Card className="bg-gradient-to-br from-blue-500 to-blue-600 text-white border-0 shadow-lg hover:shadow-xl transition-shadow">
+            <Card className="border-slate-200 shadow-md hover:shadow-lg transition-shadow">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium text-blue-100">Empresas</CardTitle>
-                <Building2 className="h-5 w-5 text-blue-200" />
+                <CardTitle className="text-sm font-medium text-slate-600">Empresas</CardTitle>
+                <Building2 className="h-5 w-5 text-slate-400" />
               </CardHeader>
               <CardContent>
                 {adminStatsLoading ? (
-                  <Loader2 className="h-8 w-8 animate-spin" />
+                  <ClassicLoader />
                 ) : (
                   <>
-                    <div className="text-3xl font-bold mb-1">{adminStats?.totalCompanies || 0}</div>
-                    <p className="text-xs text-blue-100">
+                    <div className="text-3xl font-semibold mb-1 text-slate-900">{adminStats?.totalCompanies || 0}</div>
+                    <p className="text-xs text-slate-500">
                       {adminStats?.activeCompanies || 0} ativas • {adminStats?.pendingCompanies || 0} pendentes
                     </p>
                   </>
@@ -99,18 +100,18 @@ export default function AdminDashboard() {
               </CardContent>
             </Card>
 
-            <Card className="bg-gradient-to-br from-green-500 to-green-600 text-white border-0 shadow-lg hover:shadow-xl transition-shadow">
+            <Card className="border-emerald-200 bg-emerald-50/50 shadow-md hover:shadow-lg transition-shadow">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium text-green-100">Candidatos</CardTitle>
-                <Users className="h-5 w-5 text-green-200" />
+                <CardTitle className="text-sm font-medium text-emerald-700">Candidatos</CardTitle>
+                <Users className="h-5 w-5 text-emerald-600" />
               </CardHeader>
               <CardContent>
                 {adminStatsLoading ? (
-                  <Loader2 className="h-8 w-8 animate-spin" />
+                  <ClassicLoader />
                 ) : (
                   <>
-                    <div className="text-3xl font-bold mb-1">{adminStats?.totalCandidates || 0}</div>
-                    <p className="text-xs text-green-100">
+                    <div className="text-3xl font-semibold mb-1 text-emerald-900">{adminStats?.totalCandidates || 0}</div>
+                    <p className="text-xs text-emerald-600">
                       {adminStats?.activeCandidates || 0} ativos • {adminStats?.employedCandidates || 0} empregados
                     </p>
                   </>
@@ -118,18 +119,18 @@ export default function AdminDashboard() {
               </CardContent>
             </Card>
 
-            <Card className="bg-gradient-to-br from-orange-500 to-orange-600 text-white border-0 shadow-lg hover:shadow-xl transition-shadow">
+            <Card className="border-blue-200 bg-blue-50/50 shadow-md hover:shadow-lg transition-shadow">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium text-orange-100">Vagas</CardTitle>
-                <Briefcase className="h-5 w-5 text-orange-200" />
+                <CardTitle className="text-sm font-medium text-blue-700">Vagas</CardTitle>
+                <Briefcase className="h-5 w-5 text-blue-600" />
               </CardHeader>
               <CardContent>
                 {adminStatsLoading ? (
-                  <Loader2 className="h-8 w-8 animate-spin" />
+                  <ClassicLoader />
                 ) : (
                   <>
-                    <div className="text-3xl font-bold mb-1">{adminStats?.totalJobs || 0}</div>
-                    <p className="text-xs text-orange-100">
+                    <div className="text-3xl font-semibold mb-1 text-blue-900">{adminStats?.totalJobs || 0}</div>
+                    <p className="text-xs text-blue-600">
                       {adminStats?.openJobs || 0} abertas • {adminStats?.filledJobs || 0} preenchidas
                     </p>
                   </>
@@ -137,18 +138,18 @@ export default function AdminDashboard() {
               </CardContent>
             </Card>
 
-            <Card className="bg-gradient-to-br from-purple-500 to-purple-600 text-white border-0 shadow-lg hover:shadow-xl transition-shadow">
+            <Card className="border-purple-200 bg-purple-50/50 shadow-md hover:shadow-lg transition-shadow">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium text-purple-100">Candidaturas</CardTitle>
-                <FileText className="h-5 w-5 text-purple-200" />
+                <CardTitle className="text-sm font-medium text-purple-700">Candidaturas</CardTitle>
+                <FileText className="h-5 w-5 text-purple-600" />
               </CardHeader>
               <CardContent>
                 {adminStatsLoading ? (
-                  <Loader2 className="h-8 w-8 animate-spin" />
+                  <ClassicLoader />
                 ) : (
                   <>
-                    <div className="text-3xl font-bold mb-1">{adminStats?.totalApplications || 0}</div>
-                    <p className="text-xs text-purple-100">
+                    <div className="text-3xl font-semibold mb-1 text-purple-900">{adminStats?.totalApplications || 0}</div>
+                    <p className="text-xs text-purple-600">
                       {adminStats?.pendingApplications || 0} pendentes • {adminStats?.selectedApplications || 0} selecionados
                     </p>
                   </>
@@ -171,7 +172,7 @@ export default function AdminDashboard() {
             <CardContent className="pt-6">
               {adminStatsLoading ? (
                 <div className="flex justify-center py-8">
-                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                  <ClassicLoader />
                 </div>
               ) : (
                 <div className="space-y-4">
@@ -218,7 +219,7 @@ export default function AdminDashboard() {
             <CardContent className="pt-6">
               {adminStatsLoading ? (
                 <div className="flex justify-center py-8">
-                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                  <ClassicLoader />
                 </div>
               ) : (
                 <div className="space-y-4">
@@ -267,7 +268,7 @@ export default function AdminDashboard() {
             <CardContent className="pt-6">
               {companiesLoading ? (
                 <div className="flex justify-center py-8">
-                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                  <ClassicLoader />
                 </div>
               ) : companies && companies.length > 0 ? (
                 <div className="space-y-3">
@@ -324,7 +325,7 @@ export default function AdminDashboard() {
             <CardContent className="pt-6">
               {candidatesLoading ? (
                 <div className="flex justify-center py-8">
-                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                  <ClassicLoader />
                 </div>
               ) : candidates && candidates.length > 0 ? (
                 <div className="space-y-3">

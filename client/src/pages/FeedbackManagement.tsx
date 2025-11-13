@@ -1,4 +1,5 @@
 import { useAuth } from "@/_core/hooks/useAuth";
+import ClassicLoader from "@/components/ui/ClassicLoader";
 import { useAgentContext } from "@/hooks/useAgentContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -45,7 +46,7 @@ export default function FeedbackManagement() {
   if (authLoading || isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <ClassicLoader />
       </div>
     );
   }
@@ -144,62 +145,50 @@ export default function FeedbackManagement() {
         </Button>
 
         {/* Hero Header */}
-        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-purple-600 via-violet-600 to-fuchsia-600 p-8 text-white shadow-2xl">
-          <div className="absolute inset-0 bg-grid-white/[0.05] bg-[size:20px_20px]" />
+        <div className="relative overflow-hidden rounded-lg bg-slate-900 p-8 text-white shadow-lg border border-slate-800">
           <div className="relative">
-            <h1 className="text-4xl font-bold flex items-center gap-3 mb-2">
+            <h1 className="text-4xl font-semibold flex items-center gap-3 mb-2">
               <MessageSquare className="h-10 w-10" />
               Gerenciamento de Feedback
             </h1>
-            <p className="text-purple-100 text-lg">
+            <p className="text-slate-300 text-lg">
               Monitorar avaliações de desempenho e feedback de candidatos
             </p>
           </div>
         </div>
 
         {/* Summary Cards */}
-        <div className="grid gap-6 md:grid-cols-4">
-          <Card className="bg-gradient-to-br from-purple-500 to-purple-600 text-white border-0 shadow-lg hover:shadow-xl transition-shadow">
+        <div className="grid gap-6 md:grid-cols-3">
+          <Card className="border-amber-200 bg-amber-50/50 shadow-md hover:shadow-lg transition-shadow">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-purple-100">Total de Feedbacks</CardTitle>
-              <MessageSquare className="h-5 w-5 text-purple-200" />
+              <CardTitle className="text-sm font-medium text-amber-700">Pendentes</CardTitle>
+              <Clock className="h-5 w-5 text-amber-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold mb-1">{totalFeedbacks}</div>
-              <p className="text-xs text-purple-100">Feedbacks registrados</p>
+              <div className="text-3xl font-semibold mb-1 text-amber-900">{pendingFeedbacks}</div>
+              <p className="text-xs text-amber-600">Aguardando submissão</p>
             </CardContent>
           </Card>
 
-          <Card className="bg-gradient-to-br from-yellow-500 to-yellow-600 text-white border-0 shadow-lg hover:shadow-xl transition-shadow">
+          <Card className="border-blue-200 bg-blue-50/50 shadow-md hover:shadow-lg transition-shadow">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-yellow-100">Pendentes</CardTitle>
-              <Clock className="h-5 w-5 text-yellow-200" />
+              <CardTitle className="text-sm font-medium text-blue-700">Submetidos</CardTitle>
+              <CheckCircle className="h-5 w-5 text-blue-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold mb-1">{pendingFeedbacks}</div>
-              <p className="text-xs text-yellow-100">Aguardando submissão</p>
+              <div className="text-3xl font-semibold mb-1 text-blue-900">{submittedFeedbacks}</div>
+              <p className="text-xs text-blue-600">Aguardando revisão</p>
             </CardContent>
           </Card>
 
-          <Card className="bg-gradient-to-br from-blue-500 to-blue-600 text-white border-0 shadow-lg hover:shadow-xl transition-shadow">
+          <Card className="border-red-200 bg-red-50/50 shadow-md hover:shadow-lg transition-shadow">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-blue-100">Submetidos</CardTitle>
-              <CheckCircle className="h-5 w-5 text-blue-200" />
+              <CardTitle className="text-sm font-medium text-red-700">Requerem Substituição</CardTitle>
+              <AlertTriangle className="h-5 w-5 text-red-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold mb-1">{submittedFeedbacks}</div>
-              <p className="text-xs text-blue-100">Aguardando revisão</p>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-gradient-to-br from-red-500 to-red-600 text-white border-0 shadow-lg hover:shadow-xl transition-shadow">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-red-100">Requerem Substituição</CardTitle>
-              <AlertTriangle className="h-5 w-5 text-red-200" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold mb-1">{requiresReplacement}</div>
-              <p className="text-xs text-red-100">Atenção necessária</p>
+              <div className="text-3xl font-semibold mb-1 text-red-900">{requiresReplacement}</div>
+              <p className="text-xs text-red-600">Atenção necessária</p>
             </CardContent>
           </Card>
         </div>

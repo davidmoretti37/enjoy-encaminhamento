@@ -66,68 +66,94 @@ export const agentRouter = router({
       messages: z.array(chatMessageSchema),
       userId: z.number().optional(),
     }))
-    .mutation(async ({ input }) => {
-      const agent = getAgentByContext(input.context);
-      if (!agent) {
-        throw new Error(`Agent not found for context: ${input.context}`);
-      }
+    .mutation(async ({ input, ctx }) => {
+      try {
+        const agent = getAgentByContext(input.context);
+        if (!agent) {
+          throw new Error(`Agent not found for context: ${input.context}`);
+        }
 
-      // Build messages with system prompt
-      const messages = [
-        {
-          role: 'system' as const,
-          content: agent.systemPrompt,
-        },
-        ...input.messages,
-      ];
+        // Use the authenticated user's ID
+        const userId = ctx.user?.id;
 
-      // Convert agent tools to LLM tool format
-      const tools = agent.tools.map(tool => ({
-        type: 'function' as const,
-        function: {
-          name: tool.name,
-          description: tool.description,
-          parameters: tool.parameters,
-        },
-      }));
+        // Build messages with system prompt
+        const messages = [
+          {
+            role: 'system' as const,
+            content: agent.systemPrompt,
+          },
+          ...input.messages,
+        ];
 
-      // Call LLM with tools
-      const response = await invokeLLM({
-        messages,
-        tools: tools.length > 0 ? tools : undefined,
-        tool_choice: tools.length > 0 ? 'auto' : undefined,
-      });
+        // Convert agent tools to LLM tool format
+        const tools = agent.tools.map(tool => ({
+          type: 'function' as const,
+          function: {
+            name: tool.name,
+            description: tool.description,
+            parameters: tool.parameters,
+          },
+        }));
 
-      const assistantMessage = response.choices[0].message;
+        // Call LLM with tools
+        const response = await invokeLLM({
+          messages,
+          tools: tools.length > 0 ? tools : undefined,
+          tool_choice: tools.length > 0 ? 'auto' : undefined,
+        });
+
+        const assistantMessage = response.choices[0].message;
 
       // If the assistant wants to call a tool
       if (assistantMessage.tool_calls && assistantMessage.tool_calls.length > 0) {
         const toolCall = assistantMessage.tool_calls[0];
         const toolName = toolCall.function.name;
-        const toolArgs = JSON.parse(toolCall.function.arguments);
+
+        // Log raw tool call for debugging
+        console.log('[Agent Router] Raw tool call:', JSON.stringify(toolCall, null, 2));
+
+        // Parse tool arguments with error handling
+        let toolArgs;
+        try {
+          toolArgs = JSON.parse(toolCall.function.arguments || '{}');
+        } catch (parseError) {
+          console.error('[Agent Router] Failed to parse tool arguments:', toolCall.function.arguments);
+          console.error('[Agent Router] Parse error:', parseError);
+          // Return a helpful error message to the user
+          return {
+            message: 'Desculpe, ocorreu um erro ao processar sua solicitação. Por favor, tente reformular sua pergunta.',
+            toolCalled: null,
+            toolResult: null,
+          };
+        }
 
         // Execute the tool
         const toolResult = await executeAgentTool(
           input.context,
           toolName,
           toolArgs,
-          input.userId
+          userId
         );
 
-        // Call LLM again with tool result
+        // Log tool execution for debugging
+        console.log('[Agent Router] Tool called:', toolName);
+        console.log('[Agent Router] Tool call ID:', toolCall.id);
+        console.log('[Agent Router] Assistant message:', JSON.stringify(assistantMessage, null, 2));
+        console.log('[Agent Router] Tool result preview:', JSON.stringify(toolResult).substring(0, 200) + '...');
+
+        // Instead of sending the assistant's tool_calls back to the LLM,
+        // we'll send the tool result as a user message summarizing what we found
+        const toolResultSummary = `Tool "${toolName}" returned: ${JSON.stringify(toolResult)}`;
+
         const followUpMessages = [
           ...messages,
           {
-            role: 'assistant' as const,
-            content: assistantMessage.content || '',
-            tool_calls: assistantMessage.tool_calls,
-          },
-          {
-            role: 'tool' as const,
-            content: JSON.stringify(toolResult),
-            tool_call_id: toolCall.id,
+            role: 'user' as const,
+            content: `[System: You requested to use the tool "${toolName}" with arguments ${JSON.stringify(toolArgs)}. Here is the result: ${JSON.stringify(toolResult)}]\n\nPlease provide a helpful response based on this information.`,
           },
         ];
+
+        console.log('[Agent Router] Follow-up with tool result as user message');
 
         const finalResponse = await invokeLLM({
           messages: followUpMessages,
@@ -140,11 +166,17 @@ export const agentRouter = router({
         };
       }
 
-      return {
-        message: assistantMessage.content || '',
-        toolCalled: null,
-        toolResult: null,
-      };
+        return {
+          message: assistantMessage.content || '',
+          toolCalled: null,
+          toolResult: null,
+        };
+      } catch (error) {
+        console.error('[Agent Router] Error in chat mutation:', error);
+        console.error('[Agent Router] Context:', input.context);
+        console.error('[Agent Router] Last message:', input.messages[input.messages.length - 1]?.content);
+        throw error;
+      }
     }),
 
   /**
@@ -176,7 +208,7 @@ async function executeAgentTool(
   context: AgentContext,
   toolName: string,
   args: any,
-  userId?: number
+  userId?: string
 ): Promise<any> {
   // Map tool names to actual functions
   const toolMap: Record<string, Function> = {

@@ -1,4 +1,5 @@
 import { useAuth } from "@/_core/hooks/useAuth";
+import ClassicLoader from "@/components/ui/ClassicLoader";
 import { useAgentContext } from "@/hooks/useAgentContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -45,7 +46,7 @@ export default function ContractManagement() {
   if (authLoading || isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <ClassicLoader />
       </div>
     );
   }
@@ -125,68 +126,56 @@ export default function ContractManagement() {
         </Button>
 
         {/* Hero Header */}
-        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-teal-600 via-cyan-600 to-blue-600 p-8 text-white shadow-2xl">
-          <div className="absolute inset-0 bg-grid-white/[0.05] bg-[size:20px_20px]" />
+        <div className="relative overflow-hidden rounded-lg bg-slate-900 p-8 text-white shadow-lg border border-slate-800">
           <div className="relative">
-            <h1 className="text-4xl font-bold flex items-center gap-3 mb-2">
+            <h1 className="text-4xl font-semibold flex items-center gap-3 mb-2">
               <FileText className="h-10 w-10" />
               Gerenciamento de Contratos
             </h1>
-            <p className="text-cyan-100 text-lg">
+            <p className="text-slate-300 text-lg">
               Monitorar e gerenciar todos os contratos da plataforma
             </p>
           </div>
         </div>
 
         {/* Summary Cards */}
-        <div className="grid gap-6 md:grid-cols-4">
-          <Card className="bg-gradient-to-br from-teal-500 to-teal-600 text-white border-0 shadow-lg hover:shadow-xl transition-shadow">
+        <div className="grid gap-6 md:grid-cols-3">
+          <Card className="border-emerald-200 bg-emerald-50/50 shadow-md hover:shadow-lg transition-shadow">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-teal-100">Total de Contratos</CardTitle>
-              <FileText className="h-5 w-5 text-teal-200" />
+              <CardTitle className="text-sm font-medium text-emerald-700">Contratos Ativos</CardTitle>
+              <CheckCircle className="h-5 w-5 text-emerald-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold mb-1">{contracts?.length || 0}</div>
-              <p className="text-xs text-teal-100">Contratos cadastrados</p>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-gradient-to-br from-green-500 to-green-600 text-white border-0 shadow-lg hover:shadow-xl transition-shadow">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-green-100">Contratos Ativos</CardTitle>
-              <CheckCircle className="h-5 w-5 text-green-200" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold mb-1">
+              <div className="text-3xl font-semibold mb-1 text-emerald-900">
                 {contracts?.filter((c: any) => c.status === 'active').length || 0}
               </div>
-              <p className="text-xs text-green-100">Contratos em andamento</p>
+              <p className="text-xs text-emerald-600">Contratos em andamento</p>
             </CardContent>
           </Card>
 
-          <Card className="bg-gradient-to-br from-yellow-500 to-yellow-600 text-white border-0 shadow-lg hover:shadow-xl transition-shadow">
+          <Card className="border-amber-200 bg-amber-50/50 shadow-md hover:shadow-lg transition-shadow">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-yellow-100">Pendentes</CardTitle>
-              <Clock className="h-5 w-5 text-yellow-200" />
+              <CardTitle className="text-sm font-medium text-amber-700">Pendentes</CardTitle>
+              <Clock className="h-5 w-5 text-amber-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold mb-1">
+              <div className="text-3xl font-semibold mb-1 text-amber-900">
                 {contracts?.filter((c: any) => c.status === 'pending-signature').length || 0}
               </div>
-              <p className="text-xs text-yellow-100">Aguardando assinatura</p>
+              <p className="text-xs text-amber-600">Aguardando assinatura</p>
             </CardContent>
           </Card>
 
-          <Card className="bg-gradient-to-br from-blue-500 to-blue-600 text-white border-0 shadow-lg hover:shadow-xl transition-shadow">
+          <Card className="border-blue-200 bg-blue-50/50 shadow-md hover:shadow-lg transition-shadow">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-blue-100">Concluídos</CardTitle>
-              <CheckCircle className="h-5 w-5 text-blue-200" />
+              <CardTitle className="text-sm font-medium text-blue-700">Concluídos</CardTitle>
+              <CheckCircle className="h-5 w-5 text-blue-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold mb-1">
+              <div className="text-3xl font-semibold mb-1 text-blue-900">
                 {contracts?.filter((c: any) => c.status === 'completed').length || 0}
               </div>
-              <p className="text-xs text-blue-100">Contratos finalizados</p>
+              <p className="text-xs text-blue-600">Contratos finalizados</p>
             </CardContent>
           </Card>
         </div>

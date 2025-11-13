@@ -39,27 +39,10 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
   const setContext = (newContext: AgentContext) => {
     if (context !== newContext) {
-      const oldContext = context;
       setContextState(newContext);
 
-      // Add a system message to inform the new agent about context switch
-      if (oldContext && messages.length > 0) {
-        const contextNames: Record<AgentContext, string> = {
-          escolas: 'Escolas',
-          empresas: 'Empresas',
-          vagas: 'Vagas',
-          candidatos: 'Candidatos',
-          candidaturas: 'Candidaturas',
-          contratos: 'Contratos',
-          pagamentos: 'Pagamentos',
-          feedbacks: 'Feedbacks',
-        };
-
-        setMessages(prev => [...prev, {
-          role: 'system',
-          content: `[Mudança de contexto: de ${contextNames[oldContext]} para ${contextNames[newContext]}. O usuário continua a conversa anterior, mas agora precisa de ajuda com ${contextNames[newContext]}.]`
-        }]);
-      }
+      // Context changed - no notification message needed
+      // The agent will naturally understand from the conversation context
     }
   };
 

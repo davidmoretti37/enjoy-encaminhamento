@@ -7,9 +7,14 @@ export function FloatingChatButton() {
   const [location] = useLocation();
 
   // Don't show button on dashboard or other non-management pages
-  const isManagementPage = location.startsWith('/admin/') &&
+  const isAdminManagementPage = location.startsWith('/admin/') &&
     !location.includes('/admin/dashboard') &&
     !location.includes('/admin/ai-matching');
+
+  const isAffiliateManagementPage = location.startsWith('/affiliate/') &&
+    !location.includes('/affiliate/dashboard');
+
+  const isManagementPage = isAdminManagementPage || isAffiliateManagementPage;
 
   // Don't show button if panel is open, no context is set, or not on management page
   if (isPanelOpen || !context || !isManagementPage) {

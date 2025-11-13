@@ -6,6 +6,27 @@
  */
 
 import { supabase, supabaseAdmin } from '../supabase';
+import * as db from '../db';
+
+// ============================================================================
+// HELPER FUNCTIONS
+// ============================================================================
+
+/**
+ * Get affiliate information for a user (if they are an affiliate)
+ * Returns null if user is not an affiliate or doesn't exist
+ */
+async function getAffiliateForUser(userId?: string): Promise<{ id: string; region: string } | null> {
+  if (!userId) return null;
+
+  try {
+    const affiliate = await db.getAffiliateByUserId(userId);
+    return affiliate ? { id: affiliate.id, region: affiliate.region } : null;
+  } catch (error) {
+    console.error('[Agent Tools] Error getting affiliate for user:', error);
+    return null;
+  }
+}
 
 // ============================================================================
 // DASHBOARD TOOLS
@@ -72,9 +93,17 @@ export async function getGrowthTrends(args: { metric: string; period: string }, 
 
 export async function searchSchools(
   args: { query?: string; status?: string; city?: string },
-  userId?: number
+  userId?: string
 ) {
+  // Check if user is an affiliate - if so, filter by affiliate_id
+  const affiliate = await getAffiliateForUser(userId);
+
   let query = supabaseAdmin.from('schools').select('*');
+
+  // If user is affiliate, only show their schools
+  if (affiliate) {
+    query = query.eq('affiliate_id', affiliate.id);
+  }
 
   if (args.status && args.status !== 'all') {
     query = query.eq('status', args.status);
@@ -150,9 +179,17 @@ export async function getSchoolStudents(args: { schoolId: string }, userId?: num
 
 export async function searchCompanies(
   args: { query?: string; status?: string; industry?: string },
-  userId?: number
+  userId?: string
 ) {
+  // Check if user is an affiliate - if so, filter by affiliate_id
+  const affiliate = await getAffiliateForUser(userId);
+
   let query = supabaseAdmin.from('companies').select('*');
+
+  // If user is affiliate, only show their companies
+  if (affiliate) {
+    query = query.eq('affiliate_id', affiliate.id);
+  }
 
   if (args.status && args.status !== 'all') {
     query = query.eq('status', args.status);
@@ -232,10 +269,12 @@ export async function suspendCompany(
 }
 
 export async function getCompanyJobs(args: { companyId: string }, userId?: number) {
-  const { data, error } = await supabaseAdmin
+  // Note: The database uses 'school_id' to link jobs to companies (schools table)
+  // This is because 'companies' and 'schools' represent the same entity in the current schema
+  const { data, error} = await supabaseAdmin
     .from('jobs')
     .select('*')
-    .eq('company_id', args.companyId)
+    .eq('school_id', args.companyId)
     .order('created_at', { ascending: false });
 
   if (error) {
