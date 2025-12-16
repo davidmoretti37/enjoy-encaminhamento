@@ -22,6 +22,9 @@ importers:
       '@aws-sdk/s3-request-presigner':
         specifier: ^3.693.0
         version: 3.907.0
+      '@gsap/react':
+        specifier: ^2.1.2
+        version: 2.1.2(gsap@3.14.2)(react@19.2.0)
       '@radix-ui/react-accordion':
         specifier: ^1.2.12
         version: 1.2.12(@types/react-dom@19.2.1(@types/react@19.2.2))(@types/react@19.2.2)(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
@@ -100,6 +103,9 @@ importers:
       '@radix-ui/react-tooltip':
         specifier: ^1.2.8
         version: 1.2.8(@types/react-dom@19.2.1(@types/react@19.2.2))(@types/react@19.2.2)(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
+      '@supabase/supabase-js':
+        specifier: ^2.81.0
+        version: 2.87.3
       '@tanstack/react-query':
         specifier: ^5.90.2
         version: 5.90.2(react@19.2.0)
@@ -145,6 +151,9 @@ importers:
       framer-motion:
         specifier: ^12.23.22
         version: 12.23.22(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
+      gsap:
+        specifier: ^3.13.0
+        version: 3.14.2
       input-otp:
         specifier: ^1.4.2
         version: 1.4.2(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
@@ -165,7 +174,7 @@ importers:
         version: 0.4.6(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
       openai:
         specifier: ^4.67.0
-        version: 4.104.0(zod@4.1.12)
+        version: 4.104.0(ws@8.18.3)(zod@4.1.12)
       react:
         specifier: ^19.1.1
         version: 19.2.0
@@ -1017,6 +1026,12 @@ packages:
 
   '@floating-ui/utils@0.2.10':
     resolution: {integrity: sha512-aGTxbpbg8/b5JfU1HXSrbH3wXZuLPJcNEcZQFMxLs3oSzgtVu6nFPkbbGGUvBcUjKV2YyB9Wxxabo+HEH9tcRQ==}
+
+  '@gsap/react@2.1.2':
+    resolution: {integrity: sha512-JqliybO1837UcgH2hVOM4VO+38APk3ECNrsuSM4MuXp+rbf+/2IG2K1YJiqfTcXQHH7XlA0m3ykniFYstfq0Iw==}
+    peerDependencies:
+      gsap: ^3.12.5
+      react: '>=17'
 
   '@iconify/types@2.0.0':
     resolution: {integrity: sha512-+wluvCrRhXrhyOmRDJ3q8mux9JkKy5SJ/v8ol2tu4FVjyYvtEzkc/3pK15ET6RKg4b4w4BmTk1+gsCUhf21Ykg==}
@@ -2012,6 +2027,30 @@ packages:
     resolution: {integrity: sha512-4aUIteuyxtBUhVdiQqcDhKFitwfd9hqoSDYY2KRXiWtgoWJ9Bmise+KfEPDiVHWeJepvF8xJO9/9+WDIciMFFw==}
     engines: {node: '>=18.0.0'}
 
+  '@supabase/auth-js@2.87.3':
+    resolution: {integrity: sha512-/JjrPXOLhd0fFzf7pd7K16P+nEW2HvVHijis5fLrdGF+jErxuFYCouyzpTOxXO/nfO+EMwYYnu2e55uOet4fog==}
+    engines: {node: '>=20.0.0'}
+
+  '@supabase/functions-js@2.87.3':
+    resolution: {integrity: sha512-nuDxFza9Pv8AXq8TAQscG2EE0+h7RKg0rgBIqFasSKN7Y1n5N1tkQYhUpW9bSMmLLy6hw9jHUE71iLF8gXhGUQ==}
+    engines: {node: '>=20.0.0'}
+
+  '@supabase/postgrest-js@2.87.3':
+    resolution: {integrity: sha512-5Z+yXOAUX5QPgGbKOAFNzG9Qu2BWufZ86edyDqfvZVm8IzqbbLh98kw4KJMqvJlKynfthBte3RCvbQ20MRk+Mg==}
+    engines: {node: '>=20.0.0'}
+
+  '@supabase/realtime-js@2.87.3':
+    resolution: {integrity: sha512-KwlE8hp8rxuKQtqyY2s3H1tgzHCtQ+6s0AedpX4PzHgDF63XPjCdDLWzs1/c/7Ut21FRPG7hHcgfGObzq+Npjw==}
+    engines: {node: '>=20.0.0'}
+
+  '@supabase/storage-js@2.87.3':
+    resolution: {integrity: sha512-cMHz9584GNrEl15+uWfNoIusw40QuZ0/F887qihiP2UkrRAW4gVcAZyUa3xUITKsLPQg0zr8fTf4CAw3ugLSNw==}
+    engines: {node: '>=20.0.0'}
+
+  '@supabase/supabase-js@2.87.3':
+    resolution: {integrity: sha512-MH6JmZx7nVxnzNuK4nAAOTIgqSQutd1OqfExmVGU7B8v+/II4gG2h33qskiHMWHPx934nMrckDUicHBrnXA0Cg==}
+    engines: {node: '>=20.0.0'}
+
   '@tailwindcss/node@4.1.14':
     resolution: {integrity: sha512-hpz+8vFk3Ic2xssIA3e01R6jkmsAhvkQdXlEbRTk6S10xDAtiQiM3FyvZVGsucefq764euO/b8WUW9ysLdThHw==}
 
@@ -2295,6 +2334,9 @@ packages:
   '@types/node@24.7.0':
     resolution: {integrity: sha512-IbKooQVqUBrlzWTi79E8Fw78l8k1RNtlDDNWsFZs7XonuQSJ8oNYfEeclhprUldXISRMLzBpILuKgPlIxm+/Yw==}
 
+  '@types/phoenix@1.6.7':
+    resolution: {integrity: sha512-oN9ive//QSBkf19rfDv45M7eZPi0eEXylht2OLEXicu5b4KoQ1OzXIw+xDSGWxSxe1JmepRR/ZH283vsu518/Q==}
+
   '@types/qs@6.14.0':
     resolution: {integrity: sha512-eOunJqu0K1923aExK6y8p6fsihYEn/BYuQ4g0CxAAgFc4b/ZLN4CrsRZ55srTdqoiLzU2B2evC+apEIxprEzkQ==}
 
@@ -2326,6 +2368,9 @@ packages:
 
   '@types/unist@3.0.3':
     resolution: {integrity: sha512-ko/gIFJRv177XgZsZcBwnqJN5x/Gien8qNOn0D5bQU/zAzVf9Zt3BlcUiLqhV9y4ARk0GbT3tnUiPNgnTXzc/Q==}
+
+  '@types/ws@8.18.1':
+    resolution: {integrity: sha512-ThVF6DCVhA8kUGy+aazFQ4kXQ7E1Ty7A3ypFOe0IcJV8O/M511G99AW24irKrW56Wt44yG9+ij8FaqoBGkuBXg==}
 
   '@ungap/structured-clone@1.3.0':
     resolution: {integrity: sha512-WmoN8qaIAo7WTYWbAZuG8PYEhn5fkz7dZrqTBZ7dtt//lL2Gwms1IcnQ5yHqjDfX8Ft5j4YzDM23f87zBfDe9g==}
@@ -3124,6 +3169,9 @@ packages:
   graceful-fs@4.2.11:
     resolution: {integrity: sha512-RbJ5/jmFcNNCcDV5o9eTnBLJ/HszWV0P73bc+Ff4nS/rJj+YaS6IGyiOL0VoBYX+l1Wrl3k63h/KrH+nhJ0XvQ==}
 
+  gsap@3.14.2:
+    resolution: {integrity: sha512-P8/mMxVLU7o4+55+1TCnQrPmgjPKnwkzkXOK1asnR9Jg2lna4tEY5qBJjMmAaOBDDZWtlRjBXjLa0w53G/uBLA==}
+
   hachure-fill@0.5.2:
     resolution: {integrity: sha512-3GKBOn+m2LX9iq+JC1064cSFprJY4jL1jCXTcpnfER5HYE2l/4EfWSGzkPa/ZDBmYI0ZOEj5VHV/eKnPGkHuOg==}
 
@@ -3190,6 +3238,10 @@ packages:
 
   humanize-ms@1.2.1:
     resolution: {integrity: sha512-Fl70vYtsAFb/C06PTS9dZBo7ihau+Tu/DNCk/OyHhea07S+aeMWpFFkUaXRa8fI+ScZbEI8dfSxwY7gxZ9SAVQ==}
+
+  iceberg-js@0.8.1:
+    resolution: {integrity: sha512-1dhVQZXhcHje7798IVM+xoo/1ZdVfzOMIc8/rgVSijRK38EDqOJoGula9N/8ZI5RD8QTxNQtK/Gozpr+qUqRRA==}
+    engines: {node: '>=20.0.0'}
 
   iconv-lite@0.4.24:
     resolution: {integrity: sha512-v3MXnZAcvnywkTUEZomIActle7RXXeedOR31wwl7VlyoXO4Qi9arvSenNQWne1TcRwhCL1HwLI21bEqdpj8/rA==}
@@ -4370,6 +4422,18 @@ packages:
     peerDependencies:
       react: '>=16.8.0'
 
+  ws@8.18.3:
+    resolution: {integrity: sha512-PEIGCY5tSlUt50cqyMXfCzX+oOPqN0vuGqWzbcJ2xvnkzkq46oOpz7dQaTDBdfICb4N14+GARUDw2XV2N4tvzg==}
+    engines: {node: '>=10.0.0'}
+    peerDependencies:
+      bufferutil: ^4.0.1
+      utf-8-validate: '>=5.0.2'
+    peerDependenciesMeta:
+      bufferutil:
+        optional: true
+      utf-8-validate:
+        optional: true
+
   yallist@3.1.1:
     resolution: {integrity: sha512-a4UGQaWPH59mOXUYnAG2ewncQS4i4F43Tv3JoAM+s2VDAmS9NsK8GpDMLrCHPksFT7h3K6TOoUNn2pb7RoXx4g==}
 
@@ -5265,6 +5329,11 @@ snapshots:
       react-dom: 19.2.0(react@19.2.0)
 
   '@floating-ui/utils@0.2.10': {}
+
+  '@gsap/react@2.1.2(gsap@3.14.2)(react@19.2.0)':
+    dependencies:
+      gsap: 3.14.2
+      react: 19.2.0
 
   '@iconify/types@2.0.0': {}
 
@@ -6401,6 +6470,44 @@ snapshots:
     dependencies:
       tslib: 2.8.1
 
+  '@supabase/auth-js@2.87.3':
+    dependencies:
+      tslib: 2.8.1
+
+  '@supabase/functions-js@2.87.3':
+    dependencies:
+      tslib: 2.8.1
+
+  '@supabase/postgrest-js@2.87.3':
+    dependencies:
+      tslib: 2.8.1
+
+  '@supabase/realtime-js@2.87.3':
+    dependencies:
+      '@types/phoenix': 1.6.7
+      '@types/ws': 8.18.1
+      tslib: 2.8.1
+      ws: 8.18.3
+    transitivePeerDependencies:
+      - bufferutil
+      - utf-8-validate
+
+  '@supabase/storage-js@2.87.3':
+    dependencies:
+      iceberg-js: 0.8.1
+      tslib: 2.8.1
+
+  '@supabase/supabase-js@2.87.3':
+    dependencies:
+      '@supabase/auth-js': 2.87.3
+      '@supabase/functions-js': 2.87.3
+      '@supabase/postgrest-js': 2.87.3
+      '@supabase/realtime-js': 2.87.3
+      '@supabase/storage-js': 2.87.3
+    transitivePeerDependencies:
+      - bufferutil
+      - utf-8-validate
+
   '@tailwindcss/node@4.1.14':
     dependencies:
       '@jridgewell/remapping': 2.3.5
@@ -6706,6 +6813,8 @@ snapshots:
     dependencies:
       undici-types: 7.14.0
 
+  '@types/phoenix@1.6.7': {}
+
   '@types/qs@6.14.0': {}
 
   '@types/range-parser@1.2.7': {}
@@ -6739,6 +6848,10 @@ snapshots:
   '@types/unist@2.0.11': {}
 
   '@types/unist@3.0.3': {}
+
+  '@types/ws@8.18.1':
+    dependencies:
+      '@types/node': 24.7.0
 
   '@ungap/structured-clone@1.3.0': {}
 
@@ -7534,6 +7647,8 @@ snapshots:
 
   graceful-fs@4.2.11: {}
 
+  gsap@3.14.2: {}
+
   hachure-fill@0.5.2: {}
 
   has-symbols@1.1.0: {}
@@ -7681,6 +7796,8 @@ snapshots:
   humanize-ms@1.2.1:
     dependencies:
       ms: 2.1.3
+
+  iceberg-js@0.8.1: {}
 
   iconv-lite@0.4.24:
     dependencies:
@@ -8332,7 +8449,7 @@ snapshots:
       regex: 6.0.1
       regex-recursion: 6.0.2
 
-  openai@4.104.0(zod@4.1.12):
+  openai@4.104.0(ws@8.18.3)(zod@4.1.12):
     dependencies:
       '@types/node': 18.19.130
       '@types/node-fetch': 2.6.13
@@ -8342,6 +8459,7 @@ snapshots:
       formdata-node: 4.4.1
       node-fetch: 2.7.0
     optionalDependencies:
+      ws: 8.18.3
       zod: 4.1.12
     transitivePeerDependencies:
       - encoding
@@ -9130,6 +9248,8 @@ snapshots:
       react: 19.2.0
       regexparam: 3.0.0
       use-sync-external-store: 1.6.0(react@19.2.0)
+
+  ws@8.18.3: {}
 
   yallist@3.1.1: {}
 
