@@ -1,0 +1,500 @@
+// @ts-nocheck
+// Batch router - candidate batch management and payment
+import { z } from "zod";
+import { router } from "../_core/trpc";
+import { TRPCError } from "@trpc/server";
+import { schoolProcedure, companyProcedure } from "./procedures";
+import * as db from "../db";
+import * as batchDb from "../db/batches";
+
+export const batchRouter = router({
+  // ============================================
+  // SCHOOL ENDPOINTS
+  // ============================================
+
+  /**
+   * Get top AI-matched candidates for a job
+   * Schools use this to review candidates before creating a batch
+   */
+  getTopCandidatesForJob: schoolProcedure
+    .input(z.object({
+      jobId: z.string().uuid(),
+      limit: z.number().int().min(5).max(50).optional().default(15),
+      minScore: z.number().min(0).max(100).optional().default(50),
+    }))
+    .query(async ({ ctx, input }) => {
+      // Verify school has access to this job
+      const job = await db.getJobById(input.jobId);
+      if (!job) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Job not found" });
+      }
+
+      // Get school for current user
+      const school = await db.getSchoolByUserId(ctx.user.id);
+      if (!school) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "School not found" });
+      }
+
+      // Verify school owns this job
+      if (job.school_id !== school.id && ctx.user.role !== "affiliate") {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Not authorized to access this job" });
+      }
+
+      // Get top matches
+      const matches = await batchDb.getTopMatchesForJob(
+        input.jobId,
+        input.limit,
+        input.minScore
+      );
+
+      return {
+        jobId: input.jobId,
+        matches,
+        count: matches.length,
+      };
+    }),
+
+  /**
+   * Create a draft batch
+   * Schools can create and save a batch without sending it
+   */
+  createDraftBatch: schoolProcedure
+    .input(z.object({
+      jobId: z.string().uuid(),
+      candidateIds: z.array(z.string().uuid()).min(5).max(15),
+      unlockFee: z.number().positive().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      // Get job and verify access
+      const job = await db.getJobById(input.jobId);
+      if (!job) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Job not found" });
+      }
+
+      const school = await db.getSchoolByUserId(ctx.user.id);
+      if (!school) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "School not found" });
+      }
+
+      if (job.school_id !== school.id && ctx.user.role !== "affiliate") {
+        throw new TRPCError({ code: "FORBIDDEN" });
+      }
+
+      // Create batch
+      const batchId = await batchDb.createBatch({
+        jobId: input.jobId,
+        schoolId: school.id,
+        companyId: job.company_id,
+        candidateIds: input.candidateIds,
+        unlockFee: input.unlockFee || 0,
+        status: "draft",
+      });
+
+      return { batchId, success: true };
+    }),
+
+  /**
+   * Send batch to company
+   * Creates payment requirement and updates batch status
+   */
+  sendBatchToCompany: schoolProcedure
+    .input(z.object({
+      batchId: z.string().uuid().optional(),
+      jobId: z.string().uuid().optional(),
+      candidateIds: z.array(z.string().uuid()).min(5).max(15).optional(),
+      unlockFee: z.number().positive(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const school = await db.getSchoolByUserId(ctx.user.id);
+      if (!school) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "School not found" });
+      }
+
+      let batchId = input.batchId;
+
+      // If no batchId provided, create a new batch
+      if (!batchId && input.jobId && input.candidateIds) {
+        const job = await db.getJobById(input.jobId);
+        if (!job) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Job not found" });
+        }
+
+        if (job.school_id !== school.id && ctx.user.role !== "affiliate") {
+          throw new TRPCError({ code: "FORBIDDEN" });
+        }
+
+        // Create batch first
+        batchId = await batchDb.createBatch({
+          jobId: input.jobId,
+          schoolId: school.id,
+          companyId: job.company_id,
+          candidateIds: input.candidateIds,
+          unlockFee: input.unlockFee,
+          status: "draft",
+        });
+      }
+
+      if (!batchId) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Must provide either batchId or (jobId + candidateIds)",
+        });
+      }
+
+      // Verify batch belongs to school
+      const batch = await batchDb.getBatchById(batchId);
+      if (!batch) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Batch not found" });
+      }
+
+      if (batch.school_id !== school.id && ctx.user.role !== "affiliate") {
+        throw new TRPCError({ code: "FORBIDDEN" });
+      }
+
+      // Send batch (creates payment and updates status)
+      const paymentId = await batchDb.sendBatchToCompany(batchId, input.unlockFee);
+
+      // Create notification for company
+      await db.createNotification({
+        user_id: batch.company.user_id,
+        title: "Novos candidatos disponíveis",
+        message: `${batch.batch_size} candidatos foram encontrados para a vaga "${batch.job.title}". Pague R$ ${input.unlockFee.toFixed(2)} para desbloquear.`,
+        type: "info",
+        related_to_type: "batch",
+        related_to_id: batchId,
+      });
+
+      return { success: true, paymentId, batchId };
+    }),
+
+  /**
+   * Schedule meeting for a batch
+   */
+  scheduleBatchMeeting: schoolProcedure
+    .input(z.object({
+      batchId: z.string().uuid(),
+      scheduledAt: z.string().datetime(),
+      meetingLink: z.string().url().optional(),
+      notes: z.string().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const school = await db.getSchoolByUserId(ctx.user.id);
+      if (!school) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "School not found" });
+      }
+
+      // Verify batch belongs to school
+      const batch = await batchDb.getBatchById(input.batchId);
+      if (!batch || (batch.school_id !== school.id && ctx.user.role !== "affiliate")) {
+        throw new TRPCError({ code: "FORBIDDEN" });
+      }
+
+      // Verify batch is unlocked
+      if (!batch.unlocked) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Cannot schedule meeting for locked batch",
+        });
+      }
+
+      await batchDb.scheduleBatchMeeting(
+        input.batchId,
+        input.scheduledAt,
+        input.meetingLink,
+        input.notes
+      );
+
+      // Notify company
+      await db.createNotification({
+        user_id: batch.company.user_id,
+        title: "Reunião agendada",
+        message: `Reunião agendada para revisar candidatos da vaga "${batch.job.title}"`,
+        type: "info",
+        related_to_type: "batch",
+        related_to_id: input.batchId,
+      });
+
+      return { success: true };
+    }),
+
+  /**
+   * Get all batches for school
+   */
+  getSchoolBatches: schoolProcedure
+    .input(z.object({
+      status: z.enum(["draft", "sent", "unlocked", "meeting_scheduled", "completed", "cancelled"]).optional(),
+    }).optional())
+    .query(async ({ ctx, input }) => {
+      const school = await db.getSchoolByUserId(ctx.user.id);
+      if (!school) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "School not found" });
+      }
+
+      const batches = await batchDb.getBatchesBySchoolId(school.id, input?.status);
+      return batches;
+    }),
+
+  /**
+   * Get batch statistics for school
+   */
+  getSchoolBatchStats: schoolProcedure
+    .query(async ({ ctx }) => {
+      const school = await db.getSchoolByUserId(ctx.user.id);
+      if (!school) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "School not found" });
+      }
+
+      const stats = await batchDb.getSchoolBatchStats(school.id);
+      return stats;
+    }),
+
+  /**
+   * Cancel a batch
+   */
+  cancelBatch: schoolProcedure
+    .input(z.object({
+      batchId: z.string().uuid(),
+      reason: z.string().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const school = await db.getSchoolByUserId(ctx.user.id);
+      if (!school) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "School not found" });
+      }
+
+      const batch = await batchDb.getBatchById(input.batchId);
+      if (!batch || (batch.school_id !== school.id && ctx.user.role !== "affiliate")) {
+        throw new TRPCError({ code: "FORBIDDEN" });
+      }
+
+      await batchDb.cancelBatch(input.batchId, input.reason);
+      return { success: true };
+    }),
+
+  // ============================================
+  // COMPANY ENDPOINTS
+  // ============================================
+
+  /**
+   * Get locked batches for company
+   * Shows batches awaiting payment with minimal details (no candidate IDs)
+   */
+  getLockedBatches: companyProcedure
+    .query(async ({ ctx }) => {
+      const company = await db.getCompanyByUserId(ctx.user.id);
+      if (!company) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Company not found" });
+      }
+
+      const batches = await batchDb.getLockedBatchesForCompany(company.id);
+      return batches;
+    }),
+
+  /**
+   * Get unlocked batches for company
+   * Shows batches with full candidate details
+   */
+  getUnlockedBatches: companyProcedure
+    .query(async ({ ctx }) => {
+      const company = await db.getCompanyByUserId(ctx.user.id);
+      if (!company) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Company not found" });
+      }
+
+      const batches = await batchDb.getUnlockedBatchesForCompany(company.id);
+      return batches;
+    }),
+
+  /**
+   * Get specific batch details
+   * If locked, only shows count; if unlocked, shows full details
+   */
+  getBatchDetails: companyProcedure
+    .input(z.object({ batchId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      const company = await db.getCompanyByUserId(ctx.user.id);
+      if (!company) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Company not found" });
+      }
+
+      const batch = await batchDb.getBatchById(input.batchId);
+      if (!batch || batch.company_id !== company.id) {
+        throw new TRPCError({ code: "FORBIDDEN" });
+      }
+
+      // If locked, hide candidate details
+      if (!batch.unlocked) {
+        return {
+          ...batch,
+          candidate_count: batch.batch_size,
+          candidate_ids: [],
+          candidates: [],
+        };
+      }
+
+      // If unlocked, return full details
+      const candidates = await db.getCandidatesByIds(batch.candidate_ids);
+      return {
+        ...batch,
+        candidates,
+      };
+    }),
+
+  /**
+   * Pay for batch to unlock candidate details
+   * This creates/updates the payment record
+   * The actual unlock happens via database trigger when payment is confirmed
+   */
+  payForBatch: companyProcedure
+    .input(z.object({
+      batchId: z.string().uuid(),
+      paymentMethod: z.enum(["pix", "boleto", "credit-card", "bank-transfer"]),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const company = await db.getCompanyByUserId(ctx.user.id);
+      if (!company) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Company not found" });
+      }
+
+      const batch = await batchDb.getBatchById(input.batchId);
+      if (!batch || batch.company_id !== company.id) {
+        throw new TRPCError({ code: "FORBIDDEN" });
+      }
+
+      if (batch.unlocked) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Batch already unlocked",
+        });
+      }
+
+      // In a real implementation, integrate with payment gateway here
+      // For now, we return the payment ID for manual confirmation
+      // The payment was already created when the batch was sent
+
+      return {
+        success: true,
+        paymentId: batch.payment_id,
+        amount: batch.unlock_fee,
+        method: input.paymentMethod,
+        message: "Use confirmPaymentMade to confirm payment after completion",
+      };
+    }),
+
+  /**
+   * Get contract templates for an unlocked batch
+   * Shows contract templates for all employee types in the batch
+   */
+  getBatchContracts: companyProcedure
+    .input(z.object({ batchId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      const company = await db.getCompanyByUserId(ctx.user.id);
+      if (!company) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Company not found" });
+      }
+
+      const batch = await batchDb.getBatchById(input.batchId);
+      if (!batch || batch.company_id !== company.id) {
+        throw new TRPCError({ code: "FORBIDDEN" });
+      }
+
+      if (!batch.unlocked) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Batch not unlocked. Pay to view contracts.",
+        });
+      }
+
+      // Get candidates in batch
+      const candidates = await db.getCandidatesByIds(batch.candidate_ids);
+
+      // Determine which employee types are in the batch
+      const employeeTypes = new Set<string>();
+      candidates.forEach((c) => {
+        if (c.available_for_internship) employeeTypes.add("estagio");
+        if (c.available_for_clt) employeeTypes.add("clt");
+        if (c.available_for_apprentice) employeeTypes.add("menor-aprendiz");
+      });
+
+      // Get contract templates for these employee types
+      const contracts = await batchDb.getSchoolContractsByTypes(
+        batch.school_id,
+        Array.from(employeeTypes)
+      );
+
+      return {
+        contracts,
+        employeeTypesInBatch: Array.from(employeeTypes),
+      };
+    }),
+
+  /**
+   * Select candidates for interview from a batch
+   * Company confirms which candidates they want to interview after reviewing
+   */
+  selectCandidatesForInterview: companyProcedure
+    .input(z.object({
+      batchId: z.string().uuid(),
+      candidateIds: z.array(z.string().uuid()).min(1),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const company = await db.getCompanyByUserId(ctx.user.id);
+      if (!company) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Company not found" });
+      }
+
+      const batch = await batchDb.getBatchById(input.batchId);
+      if (!batch || batch.company_id !== company.id) {
+        throw new TRPCError({ code: "FORBIDDEN" });
+      }
+
+      if (!batch.unlocked) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Cannot select candidates from locked batch",
+        });
+      }
+
+      // Verify all selected candidates are in the batch
+      const invalidIds = input.candidateIds.filter(
+        (id) => !batch.candidate_ids.includes(id)
+      );
+      if (invalidIds.length > 0) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Some candidate IDs are not in this batch",
+        });
+      }
+
+      await batchDb.selectCandidatesForInterview(input.batchId, input.candidateIds);
+
+      // Notify school
+      const school = await db.getSchoolById(batch.school_id);
+      if (school) {
+        await db.createNotification({
+          user_id: school.user_id,
+          title: "Empresa selecionou candidatos",
+          message: `${input.candidateIds.length} candidatos foram selecionados para entrevistas da vaga "${batch.job.title}"`,
+          type: "success",
+          related_to_type: "batch",
+          related_to_id: input.batchId,
+        });
+      }
+
+      return { success: true, selectedCount: input.candidateIds.length };
+    }),
+
+  /**
+   * Get batch statistics for company
+   */
+  getCompanyBatchStats: companyProcedure
+    .query(async ({ ctx }) => {
+      const company = await db.getCompanyByUserId(ctx.user.id);
+      if (!company) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Company not found" });
+      }
+
+      const stats = await batchDb.getCompanyBatchStats(company.id);
+      return stats;
+    }),
+});

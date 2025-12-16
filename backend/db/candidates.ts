@@ -1,0 +1,391 @@
+// @ts-nocheck
+// Candidate database operations
+import { supabase, supabaseAdmin } from "../supabase";
+import type { Candidate, InsertCandidate } from "./types";
+
+export async function createCandidate(candidate: InsertCandidate): Promise<string> {
+  // Use admin client to bypass RLS during candidate creation (e.g., during onboarding)
+  const { data, error } = await supabaseAdmin
+    .from("candidates")
+    .insert(candidate)
+    .select("id")
+    .single();
+
+  if (error) throw error;
+  return data.id;
+}
+
+export async function getCandidateByUserId(userId: string): Promise<Candidate | undefined> {
+  const { data, error } = await supabaseAdmin
+    .from("candidates")
+    .select("*")
+    .eq("user_id", userId)
+    .single();
+
+  if (error && error.code !== "PGRST116") return undefined;
+  return data || undefined;
+}
+
+export async function getCandidateById(id: string): Promise<Candidate | undefined> {
+  // Use admin client to bypass RLS (needed during onboarding flow)
+  const { data, error } = await supabaseAdmin
+    .from("candidates")
+    .select("*")
+    .eq("id", id)
+    .single();
+
+  if (error && error.code !== "PGRST116") return undefined;
+  return data || undefined;
+}
+
+export async function getCandidatesByIds(ids: string[]): Promise<Candidate[]> {
+  if (!ids || ids.length === 0) return [];
+
+  const { data, error } = await supabaseAdmin
+    .from("candidates")
+    .select("*")
+    .in("id", ids);
+
+  if (error) {
+    console.error("[Database] Failed to get candidates by IDs:", error);
+    return [];
+  }
+
+  return data || [];
+}
+
+export async function getAllCandidates(): Promise<Candidate[]> {
+  const { data, error } = await supabase
+    .from("candidates")
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  if (error) return [];
+  return data || [];
+}
+
+export async function updateCandidate(id: string, data: Partial<InsertCandidate>): Promise<void> {
+  // Use admin client to bypass RLS (needed during onboarding flow)
+  const { error } = await supabaseAdmin.from("candidates").update(data).eq("id", id);
+
+  if (error) throw error;
+}
+
+export async function searchCandidates(filters: {
+  educationLevel?: string;
+  city?: string;
+  availableForInternship?: boolean;
+  availableForCLT?: boolean;
+  status?: string;
+}): Promise<Candidate[]> {
+  let query = supabase.from("candidates").select("*");
+
+  if (filters.educationLevel) {
+    query = query.eq("education_level", filters.educationLevel);
+  }
+  if (filters.city) {
+    query = query.eq("city", filters.city);
+  }
+  if (filters.availableForInternship !== undefined) {
+    query = query.eq("available_for_internship", filters.availableForInternship);
+  }
+  if (filters.availableForCLT !== undefined) {
+    query = query.eq("available_for_clt", filters.availableForCLT);
+  }
+  if (filters.status) {
+    query = query.eq("status", filters.status);
+  }
+
+  const { data, error } = await query.order("created_at", { ascending: false });
+
+  if (error) return [];
+  return data || [];
+}
+
+// ============================================
+// MATCHING-RELATED FUNCTIONS
+// ============================================
+
+/**
+ * Get all active candidates for a franchise
+ * Used by: Background matching service
+ */
+export async function getAllActiveCandidates(franchiseId: string): Promise<Candidate[]> {
+  const { data, error } = await supabaseAdmin
+    .from("candidates")
+    .select("*")
+    .eq("franchise_id", franchiseId)
+    .eq("status", "active")
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    console.error("[Database] Failed to get active candidates:", error);
+    return [];
+  }
+
+  return data || [];
+}
+
+/**
+ * Get all active candidates for a school
+ * Used by: Background matching service for school-based job matching
+ */
+export async function getAllActiveCandidatesBySchool(schoolId: string): Promise<Candidate[]> {
+  const { data, error } = await supabaseAdmin
+    .from("candidates")
+    .select("*")
+    .eq("school_id", schoolId)
+    .eq("status", "active")
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    console.error("[Database] Failed to get active candidates by school:", error);
+    return [];
+  }
+
+  return data || [];
+}
+
+/**
+ * Get candidate contracts (for matching history)
+ * Used by: BackgroundMatchingService context
+ */
+export async function getCandidateContracts(candidateId: string): Promise<any[]> {
+  const { data, error } = await supabaseAdmin
+    .from("contracts")
+    .select("*")
+    .eq("candidate_id", candidateId)
+    .order("created_at", { ascending: false });
+
+  if (error) return [];
+  return data || [];
+}
+
+/**
+ * Get candidate feedback (for matching history)
+ * Used by: BackgroundMatchingService context
+ */
+export async function getCandidateFeedback(candidateId: string): Promise<any[]> {
+  const { data, error } = await supabaseAdmin
+    .from("feedback")
+    .select("*")
+    .eq("candidate_id", candidateId)
+    .order("created_at", { ascending: false});
+
+  if (error) return [];
+  return data || [];
+}
+
+/**
+ * Get candidate interviews (for matching history)
+ * Used by: BackgroundMatchingService context
+ */
+export async function getCandidateInterviews(candidateId: string): Promise<any[]> {
+  const { data, error } = await supabaseAdmin
+    .from("scheduled_meetings")
+    .select("*")
+    .eq("candidate_id", candidateId)
+    .order("scheduled_at", { ascending: false });
+
+  if (error) return [];
+  return data || [];
+}
+
+/**
+ * Get candidate applications (for matching history)
+ * Used by: BackgroundMatchingService context
+ */
+export async function getCandidateApplications(candidateId: string): Promise<any[]> {
+  const { data, error } = await supabaseAdmin
+    .from("applications")
+    .select("*")
+    .eq("candidate_id", candidateId)
+    .order("created_at", { ascending: false });
+
+  if (error) return [];
+  return data || [];
+}
+
+/**
+ * Get candidate by CPF
+ */
+export async function getCandidateByCpf(cpf: string): Promise<Candidate | null> {
+  const { data, error } = await supabaseAdmin
+    .from("candidates")
+    .select("*")
+    .eq("cpf", cpf.replace(/\D/g, ''))
+    .single();
+
+  if (error) return null;
+  return data;
+}
+
+/**
+ * Get candidate by email
+ */
+export async function getCandidateByEmail(email: string): Promise<Candidate | null> {
+  const { data, error } = await supabaseAdmin
+    .from("candidates")
+    .select("*")
+    .eq("email", email.toLowerCase().trim())
+    .single();
+
+  if (error) return null;
+  return data;
+}
+
+/**
+ * Bulk create candidates from Excel/CSV import
+ * @param candidates Array of candidate data to insert
+ * @param schoolId The school ID that imported these candidates
+ * @returns Object with created candidate IDs and any errors
+ */
+export async function bulkCreateCandidates(
+  candidates: Array<{
+    full_name: string;
+    cpf: string;
+    email: string;
+    phone?: string;
+    date_of_birth?: string;
+    address?: string;
+    city?: string;
+    state?: string;
+    zip_code?: string;
+    education_level?: 'fundamental' | 'medio' | 'superior' | 'pos-graduacao' | 'mestrado' | 'doutorado';
+    currently_studying?: boolean;
+    institution?: string;
+    course?: string;
+    skills?: string[];
+    languages?: string[];
+    has_work_experience?: boolean;
+    profile_summary?: string;
+    available_for_internship?: boolean;
+    available_for_clt?: boolean;
+    available_for_apprentice?: boolean;
+    preferred_work_type?: 'presencial' | 'remoto' | 'hibrido';
+  }>,
+  schoolId: string
+): Promise<{ created: string[]; errors: { email: string; message: string }[] }> {
+  const created: string[] = [];
+  const errors: { email: string; message: string }[] = [];
+
+  for (const candidate of candidates) {
+    try {
+      // Normalize CPF (remove non-digits)
+      const normalizedCpf = candidate.cpf.replace(/\D/g, '');
+
+      // Check if candidate with this CPF already exists
+      const existingByCpf = await getCandidateByCpf(normalizedCpf);
+      if (existingByCpf) {
+        errors.push({
+          email: candidate.email,
+          message: `Candidato com CPF ${candidate.cpf} já existe`,
+        });
+        continue;
+      }
+
+      // Check if candidate with this email already exists
+      const existingByEmail = await getCandidateByEmail(candidate.email);
+      if (existingByEmail) {
+        errors.push({
+          email: candidate.email,
+          message: `Candidato com email ${candidate.email} já existe`,
+        });
+        continue;
+      }
+
+      // Create auth user for the candidate
+      const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
+        email: candidate.email,
+        email_confirm: true,
+        user_metadata: {
+          role: 'candidate',
+          name: candidate.full_name,
+        },
+      });
+
+      if (authError || !authData.user) {
+        errors.push({
+          email: candidate.email,
+          message: authError?.message || 'Erro ao criar conta de usuário',
+        });
+        continue;
+      }
+
+      // Create user record
+      const { error: userError } = await supabaseAdmin.from("users").insert({
+        id: authData.user.id,
+        email: candidate.email,
+        name: candidate.full_name,
+        role: "candidate",
+        school_id: schoolId,
+      });
+
+      if (userError) {
+        // Rollback auth user
+        await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
+        errors.push({
+          email: candidate.email,
+          message: userError.message,
+        });
+        continue;
+      }
+
+      // Prepare candidate data
+      const candidateData: any = {
+        user_id: authData.user.id,
+        full_name: candidate.full_name,
+        cpf: normalizedCpf,
+        email: candidate.email.toLowerCase().trim(),
+        school_id: schoolId,
+        status: 'active',
+      };
+
+      // Add optional fields if provided
+      if (candidate.phone) candidateData.phone = candidate.phone;
+      if (candidate.date_of_birth) candidateData.date_of_birth = candidate.date_of_birth;
+      if (candidate.address) candidateData.address = candidate.address;
+      if (candidate.city) candidateData.city = candidate.city;
+      if (candidate.state) candidateData.state = candidate.state.length === 2 ? candidate.state.toUpperCase() : candidate.state;
+      if (candidate.zip_code) candidateData.zip_code = candidate.zip_code;
+      if (candidate.education_level) candidateData.education_level = candidate.education_level;
+      if (candidate.currently_studying !== undefined) candidateData.currently_studying = candidate.currently_studying;
+      if (candidate.institution) candidateData.institution = candidate.institution;
+      if (candidate.course) candidateData.course = candidate.course;
+      if (candidate.skills) candidateData.skills = candidate.skills;
+      if (candidate.languages) candidateData.languages = candidate.languages;
+      if (candidate.has_work_experience !== undefined) candidateData.has_work_experience = candidate.has_work_experience;
+      if (candidate.profile_summary) candidateData.profile_summary = candidate.profile_summary;
+      if (candidate.available_for_internship !== undefined) candidateData.available_for_internship = candidate.available_for_internship;
+      if (candidate.available_for_clt !== undefined) candidateData.available_for_clt = candidate.available_for_clt;
+      if (candidate.available_for_apprentice !== undefined) candidateData.available_for_apprentice = candidate.available_for_apprentice;
+      if (candidate.preferred_work_type) candidateData.preferred_work_type = candidate.preferred_work_type;
+
+      // Insert the candidate
+      const { data, error } = await supabaseAdmin
+        .from("candidates")
+        .insert(candidateData)
+        .select("id")
+        .single();
+
+      if (error) {
+        // Rollback user records
+        await supabaseAdmin.from("users").delete().eq("id", authData.user.id);
+        await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
+        errors.push({
+          email: candidate.email,
+          message: error.message,
+        });
+      } else if (data) {
+        created.push(data.id);
+      }
+    } catch (err: any) {
+      errors.push({
+        email: candidate.email,
+        message: err.message || 'Erro desconhecido',
+      });
+    }
+  }
+
+  return { created, errors };
+}

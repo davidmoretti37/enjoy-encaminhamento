@@ -5,6 +5,13 @@ export default defineConfig({
   root: path.resolve(import.meta.dirname),
   test: {
     environment: "node",
-    include: ["server/**/*.test.ts", "server/**/*.spec.ts"],
+    include: ["backend/**/*.test.ts", "backend/**/*.spec.ts"],
+    setupFiles: ["./backend/__tests__/setup.ts"],
+    coverage: {
+      provider: "v8",
+      reporter: ["text", "html"],
+      include: ["backend/**/*.ts"],
+      exclude: ["backend/**/*.test.ts", "backend/__tests__/**"],
+    },
   },
 });

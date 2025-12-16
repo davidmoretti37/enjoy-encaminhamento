@@ -1,0 +1,215 @@
+/* Pill Navigation Container */
+.pill-nav-container {
+  position: fixed;
+  top: 1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 99;
+  transition: top 0.2s ease;
+}
+
+/* When school filter header is present (affiliate users) */
+.pill-nav-container.with-school-header {
+  top: 3.5rem;
+}
+
+/* Desktop Navigation - Single Pill Shape */
+.pill-nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: white;
+  border-radius: 9999px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+}
+
+/* Oval Button Style */
+.pill-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  height: 36px;
+  padding: 0 14px;
+  background: #f1f5f9; /* slate-100 */
+  border: none;
+  border-radius: 9999px;
+  color: #64748b; /* slate-500 */
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-decoration: none;
+}
+
+.pill-btn:hover {
+  background: #e2e8f0; /* slate-200 */
+  color: #1e293b; /* slate-800 */
+  transform: scale(1.08);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.pill-btn.is-active {
+  background: #1e293b; /* slate-800 */
+  color: white;
+}
+
+.pill-btn.is-active:hover {
+  background: #334155; /* slate-700 */
+  transform: scale(1.08);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+/* Profile Button */
+.pill-btn.profile-btn {
+  padding: 0 4px;
+  background: transparent;
+}
+
+.pill-btn.profile-btn:hover {
+  background: #f1f5f9;
+  transform: scale(1.08);
+}
+
+.pill-btn.profile-btn.is-active {
+  background: #1e293b; /* slate-800 */
+}
+
+.pill-btn.profile-btn.is-active:hover {
+  background: #334155; /* slate-700 */
+}
+
+/* Separator */
+.pill-separator {
+  width: 1px;
+  height: 24px;
+  background: #e2e8f0; /* slate-200 */
+  margin: 0 4px;
+}
+
+/* Desktop/Mobile visibility */
+.desktop-only {
+  display: flex !important;
+}
+
+.mobile-only {
+  display: none !important;
+}
+
+@media (max-width: 768px) {
+  .pill-nav-container {
+    left: 0;
+    right: 0;
+    transform: none;
+    padding: 0 1rem;
+  }
+
+  .desktop-only {
+    display: none !important;
+  }
+
+  .mobile-only {
+    display: flex !important;
+  }
+}
+
+/* Mobile Navigation */
+.pill-nav-mobile {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px;
+  background: white;
+  border-radius: 9999px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+}
+
+.pill-btn-mobile {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 36px;
+  background: #f1f5f9;
+  border: none;
+  border-radius: 9999px;
+  color: #64748b;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-decoration: none;
+}
+
+.pill-btn-mobile:hover {
+  background: #e2e8f0;
+  color: #1e293b;
+}
+
+/* Hamburger Button */
+.hamburger-btn {
+  flex-direction: column;
+  gap: 5px;
+}
+
+.hamburger-line {
+  width: 18px;
+  height: 2px;
+  background: #64748b;
+  border-radius: 1px;
+  transition: all 0.2s ease;
+  transform-origin: center;
+}
+
+/* Mobile Menu Popover */
+.mobile-menu-popover {
+  position: fixed;
+  top: 5rem;
+  left: 1rem;
+  right: 1rem;
+  background: white;
+  border-radius: 20px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+  z-index: 998;
+  opacity: 0;
+  visibility: hidden;
+}
+
+.mobile-menu-list {
+  list-style: none;
+  margin: 0;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.mobile-menu-link {
+  display: flex;
+  align-items: center;
+  padding: 12px 16px;
+  color: #64748b;
+  text-decoration: none;
+  font-size: 15px;
+  font-weight: 500;
+  border-radius: 12px;
+  transition: all 0.2s ease;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.mobile-menu-link:hover {
+  background: #f1f5f9;
+  color: #1e293b;
+}
+
+.mobile-menu-link.is-active {
+  background: #1e293b;
+  color: white;
+}
+
+.mobile-menu-link.text-destructive {
+  color: #dc2626;
+}
+
+.mobile-menu-link.text-destructive:hover {
+  background: #fef2f2;
+}
