@@ -1,0 +1,14 @@
+{
+  "buildCommand": "pnpm run build",
+  "outputDirectory": "dist/public",
+  "framework": "vite",
+  "functions": {
+    "api/**/*.ts": {
+      "runtime": "nodejs20.x"
+    }
+  },
+  "rewrites": [
+    { "source": "/trpc/:path*", "destination": "/api/trpc" },
+    { "source": "/((?!api/).*)", "destination": "/" }
+  ]
+}
