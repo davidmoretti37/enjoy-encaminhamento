@@ -7,6 +7,7 @@
  */
 
 import { ENV } from "./env";
+import type { Request, Response, NextFunction } from "express";
 
 export type LogLevel = "debug" | "info" | "warn" | "error";
 
@@ -149,24 +150,13 @@ export function createScopedLogger(scope: string) {
  */
 export function errorHandler(
   err: Error,
-  _req: express.Request,
-  res: express.Response,
-  _next: express.NextFunction
+  _req: Request,
+  res: Response,
+  _next: NextFunction
 ): void {
   captureError(err, { path: _req.path, method: _req.method });
 
   res.status(500).json({
     error: ENV.isProduction ? "Internal server error" : err.message,
   });
-}
-
-// Type declaration for Express
-declare global {
-  namespace express {
-    interface Request {}
-    interface Response {
-      status(code: number): this;
-      json(body: unknown): this;
-    }
-  }
 }

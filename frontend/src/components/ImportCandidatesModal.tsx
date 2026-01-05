@@ -1,7 +1,8 @@
 /**
- * Import Candidates Modal
+ * Import Candidates Modal - Dynamic Excel Preview
  *
- * Allows schools and affiliates to import candidates from Excel/CSV files
+ * Flow: Upload → AI identifies columns → Preview ALL Excel data → Import
+ * Shows the ACTUAL Excel columns, not fixed schema
  */
 
 import { useState, useRef, useEffect } from "react";
@@ -24,24 +25,17 @@ import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import {
   Upload,
-  FileSpreadsheet,
   CheckCircle,
   XCircle,
-  AlertTriangle,
   Trash2,
   Loader2,
   Users,
+  Sparkles,
+  User,
+  Mail,
+  CreditCard,
 } from "lucide-react";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import {
-  parseCandidateExcelFile,
-  getCandidateValidationSummary,
-  type ParsedCandidate,
-} from "@/lib/candidateExcelParser";
+import { extractFullExcelData } from "@/lib/candidateExcelParser";
 import { useAuth } from "@/_core/hooks/useAuth";
 
 interface ImportCandidatesModalProps {
@@ -50,7 +44,13 @@ interface ImportCandidatesModalProps {
   onSuccess?: () => void;
 }
 
-type ImportStep = "select-school" | "upload" | "preview" | "importing" | "complete";
+type ImportStep = "select-school" | "upload" | "analyzing" | "preview" | "importing" | "complete";
+
+interface IdentifiedColumns {
+  nameColumn: string | null;
+  cpfColumn: string | null;
+  emailColumn: string | null;
+}
 
 export default function ImportCandidatesModal({
   open,
@@ -61,12 +61,26 @@ export default function ImportCandidatesModal({
   const isSchoolUser = user?.role === 'school';
   const isAffiliateUser = user?.role === 'affiliate';
 
-  // For school users, skip school selection
   const initialStep = isSchoolUser ? "upload" : "select-school";
 
   const [step, setStep] = useState<ImportStep>(initialStep);
   const [selectedSchoolId, setSelectedSchoolId] = useState<string>("");
-  const [candidates, setCandidates] = useState<ParsedCandidate[]>([]);
+
+  // Raw Excel data
+  const [excelHeaders, setExcelHeaders] = useState<string[]>([]);
+  const [excelRows, setExcelRows] = useState<Record<string, string>[]>([]);
+  const [headerRowIndex, setHeaderRowIndex] = useState<number>(0);
+
+  // AI-identified columns
+  const [identifiedColumns, setIdentifiedColumns] = useState<IdentifiedColumns>({
+    nameColumn: null,
+    cpfColumn: null,
+    emailColumn: null,
+  });
+
+  // Candidate source (internal = from school, external = from outside)
+  const [candidateSource, setCandidateSource] = useState<'internal' | 'external'>('internal');
+
   const [importResult, setImportResult] = useState<{
     success: number;
     failed: number;
@@ -75,7 +89,7 @@ export default function ImportCandidatesModal({
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Reset step when modal opens based on user type
+  // Reset step when modal opens
   useEffect(() => {
     if (open) {
       setStep(isSchoolUser ? "upload" : "select-school");
@@ -87,7 +101,7 @@ export default function ImportCandidatesModal({
     enabled: isAffiliateUser,
   });
 
-  // Bulk import mutation for schools
+  // Bulk import mutations
   const schoolImportMutation = trpc.school.bulkImportCandidates.useMutation({
     onSuccess: (data) => {
       setImportResult({
@@ -106,7 +120,6 @@ export default function ImportCandidatesModal({
     },
   });
 
-  // Bulk import mutation for affiliates
   const affiliateImportMutation = trpc.affiliate.bulkImportCandidates.useMutation({
     onSuccess: (data) => {
       setImportResult({
@@ -125,35 +138,71 @@ export default function ImportCandidatesModal({
     },
   });
 
+  // AI analyze mutations
+  const schoolAnalyzeMutation = trpc.school.analyzeExcel.useMutation();
+  const affiliateAnalyzeMutation = trpc.affiliate.analyzeExcel.useMutation();
+
+  // Check if a row has a valid name (only requirement for import now)
+  const hasValidName = (row: Record<string, string>) => {
+    const name = identifiedColumns.nameColumn ? row[identifiedColumns.nameColumn]?.trim() : null;
+    return name && name.length > 0;
+  };
+
   const processFile = async (file: File) => {
-    // Validate file type
-    const validTypes = [
-      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      "application/vnd.ms-excel",
-      "text/csv",
-    ];
     const validExtensions = [".xlsx", ".xls", ".csv"];
     const hasValidExtension = validExtensions.some((ext) =>
       file.name.toLowerCase().endsWith(ext)
     );
 
-    if (!validTypes.includes(file.type) && !hasValidExtension) {
+    if (!hasValidExtension) {
       toast.error("Por favor, selecione um arquivo Excel (.xlsx, .xls) ou CSV");
       return;
     }
 
     try {
-      const parsed = await parseCandidateExcelFile(file);
-      if (parsed.length === 0) {
-        toast.error("O arquivo não contém dados válidos");
+      setStep("analyzing");
+
+      // Extract all data from Excel (with smart header detection)
+      const { headers, rows, headerRowIndex: detectedRow } = await extractFullExcelData(file);
+
+      if (rows.length === 0) {
+        toast.error("O arquivo está vazio");
+        setStep("upload");
         return;
       }
-      setCandidates(parsed);
+
+      setExcelHeaders(headers);
+      setExcelRows(rows);
+      setHeaderRowIndex(detectedRow);
+
+      // Send sample rows to AI for column identification
+      const sampleRows = rows.slice(0, 5);
+      const analyzeMutation = isSchoolUser ? schoolAnalyzeMutation : affiliateAnalyzeMutation;
+
+      const result = await analyzeMutation.mutateAsync({
+        headers,
+        sampleRows,
+      });
+
+      setIdentifiedColumns(result);
+
+      // Only name column is required now
+      if (result.nameColumn) {
+        const extras = [result.cpfColumn && 'CPF', result.emailColumn && 'Email'].filter(Boolean);
+        if (extras.length > 0) {
+          toast.success(`IA identificou Nome, ${extras.join(' e ')}`);
+        } else {
+          toast.success(`IA identificou coluna de Nome`);
+        }
+      } else {
+        toast.error("IA não conseguiu identificar a coluna de Nome");
+      }
+
       setStep("preview");
     } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Erro ao processar arquivo"
-      );
+      console.error("Error processing file:", error);
+      toast.error("Erro ao processar arquivo");
+      setStep("upload");
     }
   };
 
@@ -185,48 +234,39 @@ export default function ImportCandidatesModal({
     await processFile(file);
   };
 
-  const handleRemoveRow = (rowNumber: number) => {
-    setCandidates((prev) => prev.filter((c) => c._rowNumber !== rowNumber));
+  const handleRemoveRow = (index: number) => {
+    setExcelRows((prev) => prev.filter((_, i) => i !== index));
   };
 
   const handleImport = () => {
-    const validCandidates = candidates.filter((c) => c._isValid);
-    if (validCandidates.length === 0) {
-      toast.error("Nenhum candidato válido para importar");
+    // Only filter by name - CPF/Email are now optional
+    const rowsWithName = excelRows.filter(hasValidName);
+    if (rowsWithName.length === 0) {
+      toast.error("Nenhum candidato com nome para importar");
+      return;
+    }
+
+    if (!identifiedColumns.nameColumn) {
+      toast.error("Coluna de nome não identificada");
       return;
     }
 
     setStep("importing");
 
-    // Prepare data for import (remove validation fields)
-    const candidatesToImport = validCandidates.map((c) => ({
-      full_name: c.full_name,
-      cpf: c.cpf,
-      email: c.email,
-      phone: c.phone || undefined,
-      date_of_birth: c.date_of_birth || undefined,
-      address: c.address || undefined,
-      city: c.city || undefined,
-      state: c.state || undefined,
-      zip_code: c.zip_code || undefined,
-      education_level: c.education_level || undefined,
-      currently_studying: c.currently_studying || undefined,
-      institution: c.institution || undefined,
-      course: c.course || undefined,
-      skills: c.skills || undefined,
-      languages: c.languages || undefined,
-      has_work_experience: c.has_work_experience || undefined,
-      profile_summary: c.profile_summary || undefined,
-      available_for_internship: c.available_for_internship || undefined,
-      available_for_clt: c.available_for_clt || undefined,
-      available_for_apprentice: c.available_for_apprentice || undefined,
-      preferred_work_type: c.preferred_work_type || undefined,
+    // Prepare candidates - only name is required, cpf/email are optional
+    const candidatesToImport = rowsWithName.map((row) => ({
+      full_name: row[identifiedColumns.nameColumn!].trim(),
+      cpf: identifiedColumns.cpfColumn
+        ? row[identifiedColumns.cpfColumn]?.replace(/\D/g, '') || undefined
+        : undefined,
+      email: identifiedColumns.emailColumn
+        ? row[identifiedColumns.emailColumn]?.trim().toLowerCase() || undefined
+        : undefined,
+      source: candidateSource,
     }));
 
     if (isSchoolUser) {
-      schoolImportMutation.mutate({
-        candidates: candidatesToImport,
-      });
+      schoolImportMutation.mutate({ candidates: candidatesToImport });
     } else {
       affiliateImportMutation.mutate({
         schoolId: selectedSchoolId,
@@ -238,7 +278,11 @@ export default function ImportCandidatesModal({
   const handleClose = () => {
     setStep(isSchoolUser ? "upload" : "select-school");
     setSelectedSchoolId("");
-    setCandidates([]);
+    setExcelHeaders([]);
+    setExcelRows([]);
+    setHeaderRowIndex(0);
+    setIdentifiedColumns({ nameColumn: null, cpfColumn: null, emailColumn: null });
+    setCandidateSource('internal');
     setImportResult(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
@@ -246,55 +290,11 @@ export default function ImportCandidatesModal({
     onClose();
   };
 
-  const validation = getCandidateValidationSummary(candidates);
+  // Count rows with valid names (the only requirement now)
+  const importableCount = excelRows.filter(hasValidName).length;
 
-  // Helper to render cell with warning tooltip
-  const renderCellWithWarning = (value: string | undefined, fieldName: string, warnings: string[]) => {
-    const relevantWarning = warnings.find(w => w.toLowerCase().includes(fieldName.toLowerCase()));
-
-    if (!value && relevantWarning) {
-      return (
-        <div className="flex items-center gap-1">
-          <span className="text-gray-400">-</span>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <AlertTriangle className="h-3.5 w-3.5 text-amber-500 cursor-help" />
-            </TooltipTrigger>
-            <TooltipContent side="top">
-              {relevantWarning}
-            </TooltipContent>
-          </Tooltip>
-        </div>
-      );
-    }
-
-    if (value && relevantWarning) {
-      return (
-        <div className="flex items-center gap-1">
-          <span className="truncate max-w-[120px]">{value}</span>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <AlertTriangle className="h-3.5 w-3.5 text-amber-500 cursor-help flex-shrink-0" />
-            </TooltipTrigger>
-            <TooltipContent side="top">
-              {relevantWarning}
-            </TooltipContent>
-          </Tooltip>
-        </div>
-      );
-    }
-
-    return <span className="truncate max-w-[120px]">{value || "-"}</span>;
-  };
-
-  const educationLabels: Record<string, string> = {
-    'fundamental': 'Fundamental',
-    'medio': 'Médio',
-    'superior': 'Superior',
-    'pos-graduacao': 'Pós-graduação',
-    'mestrado': 'Mestrado',
-    'doutorado': 'Doutorado',
-  };
+  // Check if name column is identified (only required column now)
+  const canImport = identifiedColumns.nameColumn !== null && importableCount > 0;
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
@@ -313,10 +313,7 @@ export default function ImportCandidatesModal({
               <p className="text-sm text-gray-600">
                 Selecione a escola para qual os candidatos serão importados:
               </p>
-              <Select
-                value={selectedSchoolId}
-                onValueChange={setSelectedSchoolId}
-              >
+              <Select value={selectedSchoolId} onValueChange={setSelectedSchoolId}>
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder="Selecione uma escola" />
                 </SelectTrigger>
@@ -335,8 +332,7 @@ export default function ImportCandidatesModal({
           {step === "upload" && (
             <div className="space-y-4 max-w-2xl mx-auto">
               <p className="text-sm text-gray-600">
-                Selecione um arquivo Excel (.xlsx, .xls) ou CSV com os dados dos
-                candidatos.
+                Selecione um arquivo Excel (.xlsx, .xls) ou CSV com os dados dos candidatos.
               </p>
 
               <div
@@ -363,7 +359,7 @@ export default function ImportCandidatesModal({
                 >
                   <Upload className={`h-10 w-10 ${isDragging ? "text-blue-500" : "text-gray-400"}`} />
                   <span className={`text-sm ${isDragging ? "text-blue-600" : "text-gray-600"}`}>
-                    {isDragging ? "Solte o arquivo aqui" : "Clique para selecionar ou arraste o arquivo aqui"}
+                    {isDragging ? "Solte o arquivo aqui" : "Clique para selecionar ou arraste o arquivo"}
                   </span>
                   <span className="text-xs text-gray-400">
                     Formatos aceitos: .xlsx, .xls, .csv
@@ -371,172 +367,178 @@ export default function ImportCandidatesModal({
                 </label>
               </div>
 
-              <div className="bg-blue-50 rounded-lg p-4 text-sm">
-                <p className="font-medium text-blue-900 mb-2">
-                  Colunas reconhecidas:
-                </p>
-                <div className="grid grid-cols-3 gap-1 text-blue-800 text-xs">
-                  <span>• Nome / Nome Completo</span>
-                  <span>• CPF</span>
-                  <span>• Email / E-mail</span>
-                  <span>• Telefone / Celular</span>
-                  <span>• Data de Nascimento</span>
-                  <span>• Endereço</span>
-                  <span>• Cidade</span>
-                  <span>• Estado / UF</span>
-                  <span>• CEP</span>
-                  <span>• Escolaridade</span>
-                  <span>• Instituição / Escola</span>
-                  <span>• Curso</span>
-                  <span>• Habilidades / Skills</span>
-                  <span>• Idiomas</span>
-                  <span>• Disponível para Estágio</span>
-                  <span>• Disponível para CLT</span>
-                  <span>• Jovem Aprendiz</span>
+              <div className="bg-blue-50 rounded-lg p-4 text-sm flex items-start gap-3">
+                <Sparkles className="h-5 w-5 text-blue-600 mt-0.5 flex-shrink-0" />
+                <div>
+                  <p className="font-medium text-blue-900">
+                    Importação flexível
+                  </p>
+                  <p className="text-blue-700 text-xs mt-1">
+                    Seu arquivo pode ter qualquer formato. A IA identifica automaticamente
+                    as colunas de Nome, CPF e Email. Todas as outras colunas serão preservadas.
+                  </p>
                 </div>
               </div>
             </div>
           )}
 
-          {/* Step 2: Preview */}
+          {/* Step 2: AI Analyzing */}
+          {step === "analyzing" && (
+            <div className="flex flex-col items-center justify-center py-16">
+              <div className="relative">
+                <Loader2 className="h-12 w-12 text-blue-500 animate-spin" />
+                <Sparkles className="h-5 w-5 text-yellow-500 absolute -top-1 -right-1" />
+              </div>
+              <p className="text-lg font-medium mt-6">IA analisando planilha...</p>
+              <p className="text-sm text-gray-500 mt-2">
+                Identificando colunas de Nome, CPF e Email
+              </p>
+            </div>
+          )}
+
+          {/* Step 3: Preview - Dynamic Columns */}
           {step === "preview" && (
             <div className="space-y-4">
-              {/* Summary */}
-              <div className="flex items-center gap-6 p-3 bg-gray-50 rounded-lg">
-                <div className="flex items-center gap-2">
-                  <CheckCircle className="h-4 w-4 text-green-600" />
-                  <span className="text-sm">
-                    <strong>{validation.valid}</strong> prontos para importar
+              {/* AI Identification Summary */}
+              <div className="p-3 bg-gray-50 rounded-lg space-y-3">
+                <div className="flex items-center gap-2 text-sm flex-wrap">
+                  <Sparkles className="h-4 w-4 text-blue-500" />
+                  <span className="font-medium">IA identificou:</span>
+                  {headerRowIndex > 0 && (
+                    <span className="px-2 py-0.5 bg-gray-200 text-gray-600 rounded text-xs">
+                      Cabeçalhos na linha {headerRowIndex + 1}
+                    </span>
+                  )}
+                  {identifiedColumns.nameColumn && (
+                    <span className="flex items-center gap-1 px-2 py-0.5 bg-green-100 text-green-700 rounded text-xs">
+                      <User className="h-3 w-3" />
+                      Nome = "{identifiedColumns.nameColumn}"
+                    </span>
+                  )}
+                  {identifiedColumns.cpfColumn && (
+                    <span className="flex items-center gap-1 px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs">
+                      <CreditCard className="h-3 w-3" />
+                      CPF = "{identifiedColumns.cpfColumn}"
+                    </span>
+                  )}
+                  {identifiedColumns.emailColumn && (
+                    <span className="flex items-center gap-1 px-2 py-0.5 bg-purple-100 text-purple-700 rounded text-xs">
+                      <Mail className="h-3 w-3" />
+                      Email = "{identifiedColumns.emailColumn}"
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-4 text-sm">
+                  <div className="flex items-center gap-1">
+                    <Users className="h-4 w-4 text-gray-600" />
+                    <span><strong>{importableCount}</strong> candidatos para importar</span>
+                  </div>
+                  <span className="text-gray-500 ml-auto">
+                    Total: {excelRows.length} linhas | {excelHeaders.length} colunas
                   </span>
                 </div>
-                {validation.withWarnings > 0 && (
-                  <div className="flex items-center gap-2">
-                    <AlertTriangle className="h-4 w-4 text-amber-500" />
-                    <span className="text-sm">
-                      <strong>{validation.withWarnings}</strong> com avisos (serão importados)
-                    </span>
-                  </div>
-                )}
-                {validation.invalid > 0 && (
-                  <div className="flex items-center gap-2">
-                    <XCircle className="h-4 w-4 text-red-600" />
-                    <span className="text-sm">
-                      <strong>{validation.invalid}</strong> com erros (não serão importados)
-                    </span>
-                  </div>
-                )}
-                <span className="text-sm text-gray-500 ml-auto">
-                  Total: {validation.total} candidatos
-                </span>
+
+                {/* Source selector */}
+                <div className="flex items-center gap-3 pt-2 border-t">
+                  <span className="text-sm font-medium text-gray-700">Origem:</span>
+                  <Select value={candidateSource} onValueChange={(v) => setCandidateSource(v as 'internal' | 'external')}>
+                    <SelectTrigger className="w-[200px] h-8">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="internal">Interno (da escola)</SelectItem>
+                      <SelectItem value="external">Externo</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
 
-              {/* Full Table */}
-              <div className="border rounded-lg overflow-auto" style={{ maxHeight: 'calc(90vh - 220px)' }}>
-                <table className="w-full text-sm">
+              {/* Warning if name column not identified */}
+              {!identifiedColumns.nameColumn && (
+                <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm">
+                  <XCircle className="h-4 w-4 text-amber-600 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <p className="font-medium text-amber-800">
+                      Coluna de nome não identificada
+                    </p>
+                    <p className="text-amber-700 text-xs mt-1">
+                      A IA não conseguiu identificar qual coluna contém os nomes dos candidatos.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Dynamic Preview Table - Horizontal Scroll */}
+              <div className="border rounded-lg overflow-x-auto" style={{ maxHeight: 'calc(90vh - 350px)' }}>
+                <table className="min-w-max text-sm">
                   <thead className="bg-gray-50 sticky top-0 z-10">
                     <tr>
-                      <th className="px-2 py-2 text-left font-medium text-gray-700 whitespace-nowrap">#</th>
-                      <th className="px-2 py-2 text-left font-medium text-gray-700 whitespace-nowrap">Status</th>
-                      <th className="px-2 py-2 text-left font-medium text-gray-700 whitespace-nowrap">Nome</th>
-                      <th className="px-2 py-2 text-left font-medium text-gray-700 whitespace-nowrap">CPF</th>
-                      <th className="px-2 py-2 text-left font-medium text-gray-700 whitespace-nowrap">Email</th>
-                      <th className="px-2 py-2 text-left font-medium text-gray-700 whitespace-nowrap">Telefone</th>
-                      <th className="px-2 py-2 text-left font-medium text-gray-700 whitespace-nowrap">Cidade</th>
-                      <th className="px-2 py-2 text-left font-medium text-gray-700 whitespace-nowrap">Estado</th>
-                      <th className="px-2 py-2 text-left font-medium text-gray-700 whitespace-nowrap">Escolaridade</th>
-                      <th className="px-2 py-2 text-left font-medium text-gray-700 whitespace-nowrap">Instituição</th>
-                      <th className="px-2 py-2 text-left font-medium text-gray-700 whitespace-nowrap">Curso</th>
-                      <th className="px-2 py-2 text-left font-medium text-gray-700 whitespace-nowrap">Ações</th>
+                      <th className="px-2 py-2 text-left font-medium text-gray-700 sticky left-0 bg-gray-50 z-20 border-r">
+                        #
+                      </th>
+                      {/* ALL columns from Excel */}
+                      {excelHeaders.map((header) => (
+                        <th
+                          key={header}
+                          className={`px-3 py-2 text-left font-medium whitespace-nowrap ${
+                            header === identifiedColumns.nameColumn
+                              ? "bg-green-50 text-green-800"
+                              : header === identifiedColumns.cpfColumn
+                              ? "bg-blue-50 text-blue-800"
+                              : header === identifiedColumns.emailColumn
+                              ? "bg-purple-50 text-purple-800"
+                              : "text-gray-700"
+                          }`}
+                        >
+                          <div className="flex items-center gap-1">
+                            {header === identifiedColumns.nameColumn && (
+                              <User className="h-3.5 w-3.5" />
+                            )}
+                            {header === identifiedColumns.cpfColumn && (
+                              <CreditCard className="h-3.5 w-3.5" />
+                            )}
+                            {header === identifiedColumns.emailColumn && (
+                              <Mail className="h-3.5 w-3.5" />
+                            )}
+                            {header}
+                          </div>
+                        </th>
+                      ))}
+                      <th className="px-2 py-2 text-left font-medium text-gray-700 sticky right-0 bg-gray-50 z-20 border-l">
+                        Ações
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
-                    {candidates.map((candidate) => (
-                      <tr
-                        key={candidate._rowNumber}
-                        className={
-                          !candidate._isValid
-                            ? "bg-red-50 hover:bg-red-100"
-                            : candidate._warnings.length > 0
-                            ? "bg-amber-50/50 hover:bg-amber-50"
-                            : "hover:bg-gray-50"
-                        }
-                      >
-                        <td className="px-2 py-2 text-gray-500">
-                          {candidate._rowNumber}
+                    {excelRows.map((row, index) => (
+                      <tr key={index} className="hover:bg-gray-50">
+                        <td className="px-2 py-2 text-gray-500 sticky left-0 bg-white z-10 border-r">
+                          {index + 2}
                         </td>
-                        <td className="px-2 py-2">
-                          {!candidate._isValid ? (
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <div className="flex items-center gap-1 cursor-help">
-                                  <XCircle className="h-4 w-4 text-red-600" />
-                                </div>
-                              </TooltipTrigger>
-                              <TooltipContent side="top" className="max-w-[300px]">
-                                <p className="font-medium mb-1">Erros:</p>
-                                <ul className="space-y-0.5">
-                                  {candidate._errors.map((error, i) => (
-                                    <li key={i} className="text-red-200">• {error}</li>
-                                  ))}
-                                </ul>
-                              </TooltipContent>
-                            </Tooltip>
-                          ) : candidate._warnings.length > 0 ? (
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <div className="flex items-center gap-1 cursor-help">
-                                  <AlertTriangle className="h-4 w-4 text-amber-500" />
-                                </div>
-                              </TooltipTrigger>
-                              <TooltipContent side="top" className="max-w-[300px]">
-                                <p className="font-medium mb-1">Avisos:</p>
-                                <ul className="space-y-0.5">
-                                  {candidate._warnings.map((warning, i) => (
-                                    <li key={i}>• {warning}</li>
-                                  ))}
-                                </ul>
-                              </TooltipContent>
-                            </Tooltip>
-                          ) : (
-                            <CheckCircle className="h-4 w-4 text-green-600" />
-                          )}
-                        </td>
-                        <td className="px-2 py-2 font-medium">
-                          {candidate.full_name || <span className="text-red-500">-</span>}
-                        </td>
-                        <td className="px-2 py-2 text-gray-600">
-                          {candidate.cpf ? formatCPF(candidate.cpf) : <span className="text-red-500">-</span>}
-                        </td>
-                        <td className="px-2 py-2">
-                          {candidate.email || <span className="text-red-500">-</span>}
-                        </td>
-                        <td className="px-2 py-2 text-gray-600">
-                          {renderCellWithWarning(candidate.phone, 'telefone', candidate._warnings)}
-                        </td>
-                        <td className="px-2 py-2 text-gray-600">
-                          {renderCellWithWarning(candidate.city, 'cidade', candidate._warnings)}
-                        </td>
-                        <td className="px-2 py-2 text-gray-600">
-                          {candidate.state || "-"}
-                        </td>
-                        <td className="px-2 py-2 text-gray-600">
-                          {renderCellWithWarning(
-                            candidate.education_level ? educationLabels[candidate.education_level] : undefined,
-                            'escolaridade',
-                            candidate._warnings
-                          )}
-                        </td>
-                        <td className="px-2 py-2 text-gray-600">
-                          <span className="truncate max-w-[120px] block">{candidate.institution || "-"}</span>
-                        </td>
-                        <td className="px-2 py-2 text-gray-600">
-                          <span className="truncate max-w-[120px] block">{candidate.course || "-"}</span>
-                        </td>
-                        <td className="px-2 py-2">
+                        {/* ALL data from row */}
+                        {excelHeaders.map((header) => (
+                          <td
+                            key={header}
+                            className={`px-3 py-2 whitespace-nowrap max-w-[200px] truncate ${
+                              header === identifiedColumns.nameColumn
+                                ? "bg-green-50/50 font-medium"
+                                : header === identifiedColumns.cpfColumn
+                                ? "bg-blue-50/50"
+                                : header === identifiedColumns.emailColumn
+                                ? "bg-purple-50/50"
+                                : ""
+                            }`}
+                            title={row[header] || ''}
+                          >
+                            {row[header] || <span className="text-gray-300">-</span>}
+                          </td>
+                        ))}
+                        <td className="px-2 py-2 sticky right-0 bg-white z-10 border-l">
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => handleRemoveRow(candidate._rowNumber)}
+                            onClick={() => handleRemoveRow(index)}
                             className="h-7 w-7 p-0 text-gray-400 hover:text-red-600"
                           >
                             <Trash2 className="h-4 w-4" />
@@ -548,23 +550,13 @@ export default function ImportCandidatesModal({
                 </table>
               </div>
 
-              {validation.invalid > 0 && (
-                <div className="flex items-start gap-2 p-3 bg-red-50 rounded-lg text-sm">
-                  <XCircle className="h-4 w-4 text-red-600 mt-0.5 flex-shrink-0" />
-                  <div>
-                    <p className="font-medium text-red-800">
-                      {validation.invalid} candidato(s) não serão importados
-                    </p>
-                    <p className="text-red-700 text-xs mt-1">
-                      Candidatos sem nome, CPF ou email válido não podem ser importados.
-                    </p>
-                  </div>
-                </div>
-              )}
+              <p className="text-xs text-gray-500 text-center">
+                Arraste horizontalmente para ver todas as {excelHeaders.length} colunas
+              </p>
             </div>
           )}
 
-          {/* Step 3: Importing */}
+          {/* Step 4: Importing */}
           {step === "importing" && (
             <div className="flex flex-col items-center justify-center py-12">
               <Loader2 className="h-10 w-10 text-primary animate-spin mb-4" />
@@ -575,7 +567,7 @@ export default function ImportCandidatesModal({
             </div>
           )}
 
-          {/* Step 4: Complete */}
+          {/* Step 5: Complete */}
           {step === "complete" && importResult && (
             <div className="space-y-4 max-w-md mx-auto">
               <div className="flex flex-col items-center py-8">
@@ -585,41 +577,31 @@ export default function ImportCandidatesModal({
                   <XCircle className="h-12 w-12 text-red-600 mb-4" />
                 )}
                 <h3 className="text-lg font-semibold">
-                  {importResult.success > 0
-                    ? "Importação Concluída!"
-                    : "Falha na Importação"}
+                  {importResult.success > 0 ? "Importação Concluída!" : "Falha na Importação"}
                 </h3>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="bg-green-50 rounded-lg p-4 text-center">
-                  <p className="text-2xl font-bold text-green-700">
-                    {importResult.success}
-                  </p>
-                  <p className="text-sm text-green-600">
-                    Candidatos importados com sucesso
-                  </p>
+                  <p className="text-2xl font-bold text-green-700">{importResult.success}</p>
+                  <p className="text-sm text-green-600">Importados com sucesso</p>
                 </div>
                 <div className="bg-red-50 rounded-lg p-4 text-center">
-                  <p className="text-2xl font-bold text-red-700">
-                    {importResult.failed}
-                  </p>
-                  <p className="text-sm text-red-600">Candidatos com erro</p>
+                  <p className="text-2xl font-bold text-red-700">{importResult.failed}</p>
+                  <p className="text-sm text-red-600">Com erro</p>
                 </div>
               </div>
 
               {importResult.errors.length > 0 && (
                 <div className="bg-gray-50 rounded-lg p-4">
-                  <p className="font-medium text-gray-700 mb-2">
-                    Erros encontrados:
-                  </p>
-                  <ul className="text-sm text-gray-600 space-y-1">
-                    {importResult.errors.slice(0, 5).map((error, i) => (
+                  <p className="font-medium text-gray-700 mb-2">Erros encontrados:</p>
+                  <ul className="text-sm text-gray-600 space-y-1 max-h-40 overflow-auto">
+                    {importResult.errors.slice(0, 10).map((error, i) => (
                       <li key={i}>• {error}</li>
                     ))}
-                    {importResult.errors.length > 5 && (
+                    {importResult.errors.length > 10 && (
                       <li className="text-gray-400">
-                        ... e mais {importResult.errors.length - 5} erros
+                        ... e mais {importResult.errors.length - 10} erros
                       </li>
                     )}
                   </ul>
@@ -635,10 +617,7 @@ export default function ImportCandidatesModal({
               <Button variant="outline" onClick={handleClose}>
                 Cancelar
               </Button>
-              <Button
-                onClick={() => setStep("upload")}
-                disabled={!selectedSchoolId}
-              >
+              <Button onClick={() => setStep("upload")} disabled={!selectedSchoolId}>
                 Continuar
               </Button>
             </>
@@ -666,25 +645,16 @@ export default function ImportCandidatesModal({
               </Button>
               <Button
                 onClick={handleImport}
-                disabled={validation.valid === 0}
+                disabled={!canImport}
               >
-                Importar {validation.valid} candidato(s)
+                Importar {importableCount} candidato(s)
               </Button>
             </>
           )}
 
-          {step === "complete" && (
-            <Button onClick={handleClose}>Fechar</Button>
-          )}
+          {step === "complete" && <Button onClick={handleClose}>Fechar</Button>}
         </DialogFooter>
       </DialogContent>
     </Dialog>
   );
-}
-
-// Helper to format CPF
-function formatCPF(cpf: string): string {
-  const digits = cpf.replace(/\D/g, '');
-  if (digits.length !== 11) return cpf;
-  return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9)}`;
 }

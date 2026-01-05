@@ -8,6 +8,7 @@ import { adminProcedure } from "./procedures";
 import { sendEmail } from "./email";
 import * as db from "../db";
 import { ENV } from "../_core/env";
+import { parseExcelWithAI, suggestColumnMappings as suggestColumnMappingsAI, identifyBasicColumns } from "../services/ai/columnMapper";
 
 export const affiliateRouter = router({
   // Get all affiliates (super admin only)
@@ -355,14 +356,48 @@ export const affiliateRouter = router({
       };
     }),
 
+  // AI-powered column mapping suggestions for Excel import (legacy)
+  suggestColumnMappings: protectedProcedure
+    .input(z.object({
+      headers: z.array(z.string()),
+      sampleRows: z.array(z.record(z.string())),
+    }))
+    .mutation(async ({ input }) => {
+      const result = await suggestColumnMappingsAI(input.headers, input.sampleRows);
+      return result;
+    }),
+
+  // AI parses entire Excel and returns candidates directly (new simplified flow)
+  parseExcelWithAI: protectedProcedure
+    .input(z.object({
+      headers: z.array(z.string()),
+      rows: z.array(z.record(z.string())),
+    }))
+    .mutation(async ({ input }) => {
+      const result = await parseExcelWithAI(input.headers, input.rows);
+      return result;
+    }),
+
+  // NEW: AI identifies only basic columns (name, cpf, email) - for dynamic preview
+  analyzeExcel: protectedProcedure
+    .input(z.object({
+      headers: z.array(z.string()),
+      sampleRows: z.array(z.record(z.string())),
+    }))
+    .mutation(async ({ input }) => {
+      const result = await identifyBasicColumns(input.headers, input.sampleRows);
+      return result;
+    }),
+
   // Bulk import candidates from Excel/CSV (affiliate)
   bulkImportCandidates: protectedProcedure
     .input(z.object({
       schoolId: z.string().uuid(),
       candidates: z.array(z.object({
         full_name: z.string().min(1),
-        cpf: z.string().min(11).max(14),
-        email: z.string().email(),
+        cpf: z.string().min(11).max(14).optional(),
+        email: z.string().email().optional(),
+        source: z.enum(['internal', 'external']).optional().default('internal'),
         phone: z.string().optional(),
         date_of_birth: z.string().optional(),
         address: z.string().optional(),
@@ -381,6 +416,15 @@ export const affiliateRouter = router({
         available_for_clt: z.boolean().optional(),
         available_for_apprentice: z.boolean().optional(),
         preferred_work_type: z.enum(['presencial', 'remoto', 'hibrido']).optional(),
+        // DISC profile
+        disc_dominante: z.number().min(0).max(100).optional(),
+        disc_influente: z.number().min(0).max(100).optional(),
+        disc_estavel: z.number().min(0).max(100).optional(),
+        disc_conforme: z.number().min(0).max(100).optional(),
+        // PDP data
+        pdp_competencies: z.array(z.string()).optional(),
+        pdp_intrapersonal: z.record(z.string()).optional(),
+        pdp_interpersonal: z.record(z.string()).optional(),
       })),
     }))
     .mutation(async ({ ctx, input }) => {

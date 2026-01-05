@@ -52,7 +52,7 @@ export default function HeroSection({
           animate={{ opacity: 1 }}
           transition={{ delay: 0.3 }}
         >
-          Como podemos ajudar voce hoje?
+          Como podemos ajudar você hoje?
         </motion.p>
 
         {/* Persona cards */}
@@ -61,8 +61,8 @@ export default function HeroSection({
             type="company"
             icon={Building2}
             title="Sou uma Empresa"
-            subtitle="Encontre os melhores talentos com inteligencia artificial. Nossa plataforma analisa seu perfil e apresenta candidatos ideais."
-            ctaText="Conhecer Solucoes"
+            subtitle="Encontre os melhores talentos com inteligência artificial. Nossa plataforma analisa seu perfil e apresenta candidatos ideais."
+            ctaText="Conhecer Soluções"
             selected={selectedPersona === "company"}
             onClick={() => onPersonaSelect("company")}
           />

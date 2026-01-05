@@ -24,18 +24,18 @@ import SignatureCanvas from "react-signature-canvas";
 
 const EMPLOYMENT_TYPES = [
   { value: "clt", label: "CLT" },
-  { value: "estagio", label: "Estagio" },
+  { value: "estagio", label: "Estágio" },
   { value: "jovem_aprendiz", label: "Jovem Aprendiz" },
   { value: "pj", label: "PJ" },
-  { value: "temporario", label: "Temporario" },
+  { value: "temporario", label: "Temporário" },
 ];
 
 const URGENCY_OPTIONS = [
   { value: "imediata", label: "Imediata" },
-  { value: "7_dias", label: "Em ate 7 dias" },
-  { value: "15_dias", label: "Em ate 15 dias" },
-  { value: "30_dias", label: "Em ate 30 dias" },
-  { value: "sem_urgencia", label: "Sem urgencia" },
+  { value: "7_dias", label: "Em até 7 dias" },
+  { value: "15_dias", label: "Em até 15 dias" },
+  { value: "30_dias", label: "Em até 30 dias" },
+  { value: "sem_urgencia", label: "Sem urgência" },
 ];
 
 const GENDER_OPTIONS = [
@@ -45,15 +45,12 @@ const GENDER_OPTIONS = [
 ];
 
 const EDUCATION_LEVELS = [
-  { value: "sem_ensino", label: "Sem Escolaridade" },
-  { value: "fundamental_incompleto", label: "Fundamental Incompleto" },
-  { value: "fundamental_completo", label: "Fundamental Completo" },
-  { value: "medio_incompleto", label: "Medio Incompleto" },
-  { value: "medio_completo", label: "Medio Completo" },
-  { value: "tecnico", label: "Tecnico" },
+  { value: "medio_incompleto", label: "Médio Incompleto" },
+  { value: "medio_completo", label: "Médio Completo" },
+  { value: "tecnico", label: "Técnico" },
   { value: "superior_incompleto", label: "Superior Incompleto" },
   { value: "superior_completo", label: "Superior Completo" },
-  { value: "pos_graduacao", label: "Pos-Graduacao" },
+  { value: "pos_graduacao", label: "Pós-Graduação" },
   { value: "mestrado", label: "Mestrado" },
   { value: "doutorado", label: "Doutorado" },
 ];
@@ -67,14 +64,14 @@ const TIME_OPTIONS = [
 
 const BENEFITS_OPTIONS = [
   "Vale Transporte",
-  "Vale Refeicao",
-  "Vale Alimentacao",
-  "Plano de Saude",
-  "Plano Odontologico",
+  "Vale Refeição",
+  "Vale Alimentação",
+  "Plano de Saúde",
+  "Plano Odontológico",
   "Seguro de Vida",
   "Gympass",
   "PLR",
-  "Auxilio Creche",
+  "Auxílio Creche",
   "Home Office",
 ];
 
@@ -87,20 +84,20 @@ const BRAZILIAN_STATES = [
 const INTRO_FEATURES = [
   {
     step: "Passo 1",
-    title: "Tecnologia de IA Avancada",
-    content: "Utilizamos inteligencia artificial de ponta para encontrar os melhores candidatos para sua empresa, analisando milhares de perfis em segundos.",
+    title: "Tecnologia de IA Avançada",
+    content: "Utilizamos inteligência artificial de ponta para encontrar os melhores candidatos para sua empresa, analisando milhares de perfis em segundos.",
     image: "https://images.unsplash.com/photo-1639322537228-f710d846310a?w=800&q=80",
   },
   {
     step: "Passo 2",
     title: "Equipe de Especialistas",
-    content: "Nossa equipe de recrutadores experientes faz uma triagem pessoal de cada candidato, garantindo qualidade e adequacao ao seu perfil.",
+    content: "Nossa equipe de recrutadores experientes faz uma triagem pessoal de cada candidato, garantindo qualidade e adequação ao seu perfil.",
     image: "https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=800&q=80",
   },
   {
     step: "Passo 3",
-    title: "Preco Justo e Acessivel",
-    content: "Oferecemos servicos de recrutamento de alta qualidade por um preco justo, sem taxas ocultas ou surpresas.",
+    title: "Preço Justo e Acessível",
+    content: "Oferecemos serviços de recrutamento de alta qualidade por um preço justo, sem taxas ocultas ou surpresas.",
     image: "https://images.unsplash.com/photo-1554224155-6726b3ff858f?w=800&q=80",
   },
 ];
@@ -289,7 +286,7 @@ export default function CompanyOnboarding() {
 
   const validateStep1 = () => {
     if (!formData.cnpj || !formData.legalName) {
-      toast.error("CNPJ e Razao Social sao obrigatorios");
+      toast.error("CNPJ e Razão Social são obrigatórios");
       return false;
     }
     // Check if at least one phone number is filled
@@ -307,7 +304,7 @@ export default function CompanyOnboarding() {
     // Check if a primary email is selected
     const hasPrimary = formData.emails.some(e => e.isPrimary && e.email.trim() !== "");
     if (!hasPrimary) {
-      toast.error("Selecione um email principal para comunicacoes");
+      toast.error("Selecione um email principal para comunicações");
       return false;
     }
     return true;
@@ -317,7 +314,7 @@ export default function CompanyOnboarding() {
     if (!formData.jobTitle || !formData.compensation || !formData.mainActivities ||
         !formData.requiredSkills || formData.educationLevels.length === 0 ||
         !formData.workScheduleStart || !formData.workScheduleEnd) {
-      toast.error("Preencha todos os campos obrigatorios da vaga");
+      toast.error("Preencha todos os campos obrigatórios da vaga");
       return false;
     }
     return true;
@@ -338,7 +335,7 @@ export default function CompanyOnboarding() {
       return false;
     }
     if (signerCpf.replace(/\D/g, "").length !== 11) {
-      toast.error("Por favor, informe um CPF valido");
+      toast.error("Por favor, informe um CPF válido");
       return false;
     }
     if (!acceptedTerms) {
@@ -440,7 +437,7 @@ export default function CompanyOnboarding() {
         <Card className="max-w-md">
           <CardHeader>
             <CardTitle>Acesso Negado</CardTitle>
-            <CardDescription>Esta pagina e exclusiva para empresas.</CardDescription>
+            <CardDescription>Esta página é exclusiva para empresas.</CardDescription>
           </CardHeader>
         </Card>
       </div>
@@ -464,10 +461,10 @@ export default function CompanyOnboarding() {
           <Card className="shadow-xl border-2 border-primary/20">
             <CardContent className="p-8">
               <div className="text-center space-y-4">
-                <h3 className="text-2xl font-bold">Pronto para comecar?</h3>
+                <h3 className="text-2xl font-bold">Pronto para começar?</h3>
                 <p className="text-muted-foreground">
-                  Preencha o formulario a seguir com os dados da sua empresa e da vaga que deseja preencher.
-                  Em poucos minutos, nossa equipe comecara a trabalhar para encontrar o candidato ideal para voce.
+                  Preencha o formulário a seguir com os dados da sua empresa e da vaga que deseja preencher.
+                  Em poucos minutos, nossa equipe começará a trabalhar para encontrar o candidato ideal para você.
                 </p>
                 <Button
                   size="lg"
@@ -554,7 +551,7 @@ export default function CompanyOnboarding() {
               {/* Section Header */}
               <div className="text-center mb-8">
                 <h2 className="text-2xl font-bold text-gray-900">Dados da Empresa</h2>
-                <p className="text-gray-500 mt-1">Informacoes basicas sobre sua empresa</p>
+                <p className="text-gray-500 mt-1">Informações básicas sobre sua empresa</p>
               </div>
 
               <Card className="shadow-xl border-0 bg-white/80 backdrop-blur">
@@ -582,10 +579,10 @@ export default function CompanyOnboarding() {
                 </div>
 
                 <div className="grid gap-2">
-                  <Label htmlFor="legalName">Razao Social *</Label>
+                  <Label htmlFor="legalName">Razão Social *</Label>
                   <Input
                     id="legalName"
-                    placeholder="Razao social completa"
+                    placeholder="Razão social completa"
                     value={formData.legalName}
                     onChange={(e) => setFormData({ ...formData, legalName: e.target.value })}
                     required
@@ -593,10 +590,10 @@ export default function CompanyOnboarding() {
                 </div>
 
                 <div className="grid gap-2">
-                  <Label htmlFor="contactPerson">Responsavel</Label>
+                  <Label htmlFor="contactPerson">Responsável</Label>
                   <Input
                     id="contactPerson"
-                    placeholder="Nome do responsavel"
+                    placeholder="Nome do responsável"
                     value={formData.contactPerson}
                     onChange={(e) => setFormData({ ...formData, contactPerson: e.target.value })}
                   />
@@ -622,7 +619,7 @@ export default function CompanyOnboarding() {
                       <div key={index} className="flex gap-3 items-start">
                         <div className="flex-1">
                           <Input
-                            placeholder="Titulo (ex: Diretor, Recepcao, Comercial)"
+                            placeholder="Título (ex: Diretor, Recepção, Comercial)"
                             value={phone.label}
                             onChange={(e) => updatePhoneNumber(index, "label", e.target.value)}
                           />
@@ -649,7 +646,7 @@ export default function CompanyOnboarding() {
                     ))}
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    Adicione telefones com titulos para facilitar o contato (ex: "Diretor", "RH", "Comercial")
+                    Adicione telefones com títulos para facilitar o contato (ex: "Diretor", "RH", "Comercial")
                   </p>
                 </div>
 
@@ -711,7 +708,7 @@ export default function CompanyOnboarding() {
                     ))}
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    Marque "Principal" no email que deve receber as comunicacoes da plataforma
+                    Marque "Principal" no email que deve receber as comunicações da plataforma
                   </p>
                 </div>
 
@@ -726,7 +723,7 @@ export default function CompanyOnboarding() {
                 </div>
 
                 <div className="grid gap-2">
-                  <Label htmlFor="employeeCount">Quantidade de Funcionarios</Label>
+                  <Label htmlFor="employeeCount">Quantidade de Funcionários</Label>
                   <Input
                     id="employeeCount"
                     placeholder="Ex: 50"
@@ -746,10 +743,10 @@ export default function CompanyOnboarding() {
                     />
                   </div>
                   <div className="col-span-2 grid gap-2">
-                    <Label htmlFor="address">Endereco e Numero</Label>
+                    <Label htmlFor="address">Endereço e Número</Label>
                     <Input
                       id="address"
-                      placeholder="Rua, numero"
+                      placeholder="Rua, número"
                       value={formData.address}
                       onChange={(e) => setFormData({ ...formData, address: e.target.value })}
                     />
@@ -822,7 +819,7 @@ export default function CompanyOnboarding() {
               {/* Section Header */}
               <div className="text-center mb-8">
                 <h2 className="text-2xl font-bold text-gray-900">Dados da Vaga</h2>
-                <p className="text-gray-500 mt-1">Informacoes sobre a vaga que deseja preencher</p>
+                <p className="text-gray-500 mt-1">Informações sobre a vaga que deseja preencher</p>
               </div>
 
               <Card className="shadow-xl border-0 bg-white/80 backdrop-blur">
@@ -863,10 +860,10 @@ export default function CompanyOnboarding() {
                 </div>
 
                 <div className="grid gap-2">
-                  <Label htmlFor="requiredSkills">Competencias Requeridas *</Label>
+                  <Label htmlFor="requiredSkills">Competências Requeridas *</Label>
                   <Textarea
                     id="requiredSkills"
-                    placeholder="Liste as competencias e habilidades necessarias..."
+                    placeholder="Liste as competências e habilidades necessárias..."
                     value={formData.requiredSkills}
                     onChange={(e) => setFormData({ ...formData, requiredSkills: e.target.value })}
                     rows={3}
@@ -894,7 +891,7 @@ export default function CompanyOnboarding() {
                     </Select>
                   </div>
                   <div className="grid gap-2">
-                    <Label htmlFor="urgency">Urgencia</Label>
+                    <Label htmlFor="urgency">Urgência</Label>
                     <Select
                       value={formData.urgency}
                       onValueChange={(v) => setFormData({ ...formData, urgency: v })}
@@ -912,7 +909,7 @@ export default function CompanyOnboarding() {
                     </Select>
                   </div>
                   <div className="grid gap-2">
-                    <Label>Faixa Etaria</Label>
+                    <Label>Faixa Etária</Label>
                     <div className="flex items-center gap-2">
                       <Select
                         value={String(formData.minAge)}
@@ -968,7 +965,7 @@ export default function CompanyOnboarding() {
                 </div>
 
                 <div className="space-y-3">
-                  <Label>Beneficios</Label>
+                  <Label>Benefícios</Label>
                   <div className="grid grid-cols-2 gap-2">
                     {BENEFITS_OPTIONS.map((benefit) => (
                       <div key={benefit} className="flex items-center space-x-2">
@@ -987,14 +984,14 @@ export default function CompanyOnboarding() {
 
                 <div className="grid grid-cols-3 gap-6">
                   <div className="grid gap-2">
-                    <Label>Horario de Trabalho *</Label>
+                    <Label>Horário de Trabalho *</Label>
                     <div className="flex items-center gap-3">
                       <Select
                         value={formData.workScheduleStart}
                         onValueChange={(v) => setFormData({ ...formData, workScheduleStart: v })}
                       >
                         <SelectTrigger className="w-[100px]">
-                          <SelectValue placeholder="Inicio" />
+                          <SelectValue placeholder="Início" />
                         </SelectTrigger>
                         <SelectContent className="max-h-48">
                           {TIME_OPTIONS.map((time) => (
@@ -1054,10 +1051,10 @@ export default function CompanyOnboarding() {
                 </div>
 
                 <div className="grid gap-2">
-                  <Label htmlFor="notes">Observacoes Gerais</Label>
+                  <Label htmlFor="notes">Observações Gerais</Label>
                   <Textarea
                     id="notes"
-                    placeholder="Informacoes adicionais sobre a vaga..."
+                    placeholder="Informações adicionais sobre a vaga..."
                     value={formData.notes}
                     onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
                     rows={4}
@@ -1097,9 +1094,9 @@ export default function CompanyOnboarding() {
                 ) : !schoolContract?.contract_type ? (
                   <div className="text-center py-8 bg-green-50 border border-green-200 rounded-lg">
                     <CheckCircle className="h-12 w-12 text-green-500 mx-auto mb-3" />
-                    <p className="text-green-800 font-medium">Nenhum contrato necessario</p>
+                    <p className="text-green-800 font-medium">Nenhum contrato necessário</p>
                     <p className="text-green-600 text-sm mt-1">
-                      A escola nao configurou um contrato obrigatorio.
+                      A escola não configurou um contrato obrigatório.
                     </p>
                   </div>
                 ) : (
@@ -1139,7 +1136,7 @@ export default function CompanyOnboarding() {
                         />
                       ) : (
                         <div className="text-center py-8 bg-yellow-50 border border-yellow-200 rounded-lg">
-                          <p className="text-yellow-800">Contrato nao disponivel</p>
+                          <p className="text-yellow-800">Contrato não disponível</p>
                         </div>
                       )}
                     </div>
@@ -1203,7 +1200,7 @@ export default function CompanyOnboarding() {
                         />
                         <label htmlFor="acceptTerms" className="text-sm text-gray-600 leading-relaxed">
                           Li e concordo com os termos do contrato apresentado acima.
-                          Declaro que as informacoes fornecidas sao verdadeiras.
+                          Declaro que as informações fornecidas são verdadeiras.
                         </label>
                       </div>
                     </div>

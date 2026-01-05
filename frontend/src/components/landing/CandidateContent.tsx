@@ -79,11 +79,11 @@ export default function CandidateContent() {
               <span className="text-sm font-medium">Simples e Gratuito</span>
             </div>
             <h2 className="text-3xl md:text-4xl font-bold text-slate-900 mb-4">
-              Como Funciona <span className="text-gradient">Para Voce</span>
+              Como Funciona <span className="text-gradient">Para Você</span>
             </h2>
             <p className="text-lg text-slate-600 max-w-2xl mx-auto">
               Cadastre-se gratuitamente e deixe nossa tecnologia trabalhar por
-              voce
+              você
             </p>
           </motion.div>
 
@@ -94,7 +94,7 @@ export default function CandidateContent() {
                 icon: UserPlus,
                 title: "Cadastre seu Perfil",
                 description:
-                  "Complete suas informacoes, habilidades e experiencias",
+                  "Complete suas informações, habilidades e experiências",
               },
               {
                 step: "2",
@@ -115,7 +115,7 @@ export default function CandidateContent() {
                 icon: Trophy,
                 title: "Conquiste o Emprego",
                 description:
-                  "Acompanhe o processo ate a contratacao",
+                  "Acompanhe o processo até a contratação",
               },
             ].map((item, index) => (
               <motion.div
@@ -194,7 +194,7 @@ export default function CandidateContent() {
                     {
                       icon: Shield,
                       title: "Dados Protegidos",
-                      description: "Suas informacoes em seguranca",
+                      description: "Suas informações em segurança",
                     },
                   ].map((item, index) => (
                     <div
@@ -221,7 +221,7 @@ export default function CandidateContent() {
 
             <motion.div variants={itemVariants} className="order-1 lg:order-2">
               <h2 className="text-3xl md:text-4xl font-bold text-slate-900 mb-6">
-                Sua Carreira <span className="text-gradient">Comeca Aqui</span>
+                Sua Carreira <span className="text-gradient">Começa Aqui</span>
               </h2>
               <p className="text-lg text-slate-600 mb-8">
                 Cadastre-se gratuitamente e tenha acesso a oportunidades
@@ -231,9 +231,9 @@ export default function CandidateContent() {
               <div className="space-y-4">
                 {[
                   "Acesso a vagas exclusivas de empresas parceiras",
-                  "Matching automatico com seu perfil",
+                  "Matching automático com seu perfil",
                   "Acompanhamento em tempo real das candidaturas",
-                  "Feedback sobre suas aplicacoes",
+                  "Feedback sobre suas aplicações",
                   "100% gratuito para candidatos",
                   "Suporte durante todo o processo",
                 ].map((benefit, index) => (
@@ -264,8 +264,8 @@ export default function CandidateContent() {
                 Comece sua jornada profissional hoje
               </h2>
               <p className="text-white/90 text-lg mb-8 max-w-2xl mx-auto">
-                Milhares de candidatos ja encontraram oportunidades incriveis.
-                Voce pode ser o proximo!
+                Milhares de candidatos já encontraram oportunidades incríveis.
+                Você pode ser o próximo!
               </p>
               <Link href="/login?tab=signup&role=candidate">
                 <Button

@@ -2,6 +2,7 @@
 // Job database operations
 import { supabase, supabaseAdmin } from "../supabase";
 import type { Job, InsertJob } from "./types";
+import { generateJobSummary } from "../services/ai/summarizer";
 
 export async function createJob(job: InsertJob): Promise<string> {
   const { data, error } = await supabase
@@ -173,6 +174,33 @@ export async function createJobForOnboarding(
     .single();
 
   if (error) throw error;
+
+  // Generate job summary in background (fire and forget)
+  generateJobSummary({
+    title: data.title,
+    description: data.description,
+    contractType: data.contract_type,
+    workType: data.work_type,
+    city: data.location?.split(',')[0]?.trim(),
+    state: data.location?.split(',')[1]?.trim(),
+    requirements: data.requirements,
+    benefits: data.benefits?.join(', '),
+    salary: data.salary ? `R$ ${data.salary}` : undefined,
+  }).then(async (summary) => {
+    if (summary) {
+      await supabaseAdmin
+        .from("jobs")
+        .update({
+          summary,
+          summary_generated_at: new Date().toISOString(),
+        })
+        .eq("id", job.id);
+      console.log(`Generated summary for job ${job.id}`);
+    }
+  }).catch((err) => {
+    console.error('Failed to generate job summary:', err);
+  });
+
   return job.id;
 }
 
@@ -260,131 +288,3 @@ export async function createJobFromCompanyForm(
   });
 }
 
-// ============================================
-// JOB MATCHING FUNCTIONS
-// ============================================
-
-/**
- * Get matching progress for a job
- * Used by: getMatchingProgress endpoint
- */
-export async function getMatchingProgress(jobId: string): Promise<any | null> {
-  const { data, error } = await supabase
-    .from("job_matching_progress")
-    .select("*")
-    .eq("job_id", jobId)
-    .single();
-
-  if (error && error.code !== "PGRST116") {
-    console.error("[Database] Failed to get matching progress:", error);
-    return null;
-  }
-
-  return data;
-}
-
-/**
- * Get all matches for a job (sorted by score)
- * Used by: getMatchesForJob endpoint, chat queries
- */
-export async function getJobMatchesByJobId(jobId: string): Promise<any[]> {
-  const { data, error } = await supabase
-    .from("job_matches")
-    .select("*")
-    .eq("job_id", jobId)
-    .order("composite_score", { ascending: false });
-
-  if (error) {
-    console.error("[Database] Failed to get job matches:", error);
-    return [];
-  }
-
-  return data || [];
-}
-
-/**
- * Store match results for a job (batch upsert)
- * Used by: BackgroundMatchingService
- */
-export async function storeMatchResults(jobId: string, matches: any[]): Promise<void> {
-  if (matches.length === 0) return;
-
-  // Get job's franchise_id
-  const { data: job, error: jobError } = await supabaseAdmin
-    .from("jobs")
-    .select("franchise_id")
-    .eq("id", jobId)
-    .single();
-
-  if (jobError || !job?.franchise_id) {
-    console.error("[Database] Failed to get job franchise_id:", jobError);
-    throw new Error("Could not determine franchise_id for job");
-  }
-
-  // Prepare records for insertion
-  const matchRecords = matches.map((match) => ({
-    job_id: jobId,
-    candidate_id: match.candidateId,
-    franchise_id: job.franchise_id,
-    composite_score: match.compositeScore,
-    confidence_score: match.confidenceScore,
-    success_probability: match.successProbability || null,
-    match_factors: match.factors || {},
-    semantic_factors: match.semanticScore
-      ? {
-          semanticScore: match.semanticScore,
-          reasoning: match.semanticReasoning,
-          missingSkills: match.missingSkills || [],
-          transferableSkills: match.transferableSkills || [],
-        }
-      : null,
-    recommendation: match.recommendation,
-    match_reasoning: match.semanticReasoning || match.reasoning || null,
-  }));
-
-  // Batch upsert (insert or update if exists)
-  const { error } = await supabaseAdmin.from("job_matches").upsert(matchRecords, {
-    onConflict: "job_id,candidate_id",
-  });
-
-  if (error) {
-    console.error("[Database] Failed to store match results:", error);
-    throw error;
-  }
-
-  console.log(`[Database] Stored ${matchRecords.length} match results for job ${jobId}`);
-}
-
-/**
- * Update matching progress
- * Used by: BackgroundMatchingService
- */
-export async function updateMatchingProgress(progress: {
-  jobId: string;
-  status: "pending" | "running" | "completed" | "failed";
-  totalCandidates: number;
-  processedCandidates: number;
-  matchesFound: number;
-  startedAt?: Date;
-  completedAt?: Date;
-  errorMessage?: string;
-}): Promise<void> {
-  const { error } = await supabaseAdmin.from("job_matching_progress").upsert(
-    {
-      job_id: progress.jobId,
-      status: progress.status,
-      total_candidates: progress.totalCandidates,
-      processed_candidates: progress.processedCandidates,
-      matches_found: progress.matchesFound,
-      started_at: progress.startedAt ? progress.startedAt.toISOString() : null,
-      completed_at: progress.completedAt ? progress.completedAt.toISOString() : null,
-      error_message: progress.errorMessage || null,
-    },
-    { onConflict: "job_id" }
-  );
-
-  if (error) {
-    console.error("[Database] Failed to update matching progress:", error);
-    throw error;
-  }
-}

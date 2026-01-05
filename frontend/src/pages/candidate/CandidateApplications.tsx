@@ -26,16 +26,16 @@ import { ptBR } from "date-fns/locale";
 // Application status configuration
 const STATUS_CONFIG: Record<string, { label: string; color: string; icon: any; step: number }> = {
   'applied': { label: 'Candidatura Enviada', color: 'bg-blue-100 text-blue-800', icon: FileText, step: 1 },
-  'screening': { label: 'Pre-selecionado', color: 'bg-yellow-100 text-yellow-800', icon: Clock, step: 2 },
+  'screening': { label: 'Pré-selecionado', color: 'bg-yellow-100 text-yellow-800', icon: Clock, step: 2 },
   'interview-scheduled': { label: 'Entrevista Agendada', color: 'bg-purple-100 text-purple-800', icon: Calendar, step: 3 },
   'interviewed': { label: 'Entrevista Realizada', color: 'bg-indigo-100 text-indigo-800', icon: CheckCircle, step: 3 },
   'selected': { label: 'Contratado', color: 'bg-green-100 text-green-800', icon: PartyPopper, step: 4 },
-  'rejected': { label: 'Nao Selecionado', color: 'bg-red-100 text-red-800', icon: XCircle, step: 4 },
+  'rejected': { label: 'Não Selecionado', color: 'bg-red-100 text-red-800', icon: XCircle, step: 4 },
 };
 
 const TIMELINE_STEPS = [
   { step: 1, label: 'Candidatura' },
-  { step: 2, label: 'Pre-selecao' },
+  { step: 2, label: 'Pré-seleção' },
   { step: 3, label: 'Entrevista' },
   { step: 4, label: 'Resultado' },
 ];
@@ -93,7 +93,7 @@ export default function CandidateApplications() {
         <Card className="max-w-md">
           <CardHeader>
             <CardTitle>Acesso Negado</CardTitle>
-            <CardDescription>Esta pagina e exclusiva para candidatos.</CardDescription>
+            <CardDescription>Esta página é exclusiva para candidatos.</CardDescription>
           </CardHeader>
         </Card>
       </div>
@@ -392,10 +392,10 @@ export default function CandidateApplications() {
                       <div className="bg-green-50 p-4 rounded-lg border border-green-200">
                         <div className="flex items-center gap-2 text-green-900">
                           <PartyPopper className="h-5 w-5" />
-                          <span className="font-medium">Parabens! Voce foi contratado!</span>
+                          <span className="font-medium">Parabéns! Você foi contratado!</span>
                         </div>
                         <p className="text-sm text-green-700 mt-2">
-                          Em breve voce recebera mais informacoes sobre os proximos passos.
+                          Em breve você receberá mais informações sobre os próximos passos.
                         </p>
                       </div>
                     )}
@@ -404,7 +404,7 @@ export default function CandidateApplications() {
                     {selectedApplication.status === 'rejected' && (
                       <div className="bg-slate-50 p-4 rounded-lg">
                         <p className="text-sm text-muted-foreground">
-                          Infelizmente voce nao foi selecionado para esta vaga.
+                          Infelizmente você não foi selecionado para esta vaga.
                           Continue se candidatando a outras oportunidades!
                         </p>
                       </div>

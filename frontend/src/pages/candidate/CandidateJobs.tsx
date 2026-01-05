@@ -144,7 +144,7 @@ export default function CandidateJobs() {
         <Card className="max-w-md">
           <CardHeader>
             <CardTitle>Acesso Negado</CardTitle>
-            <CardDescription>Esta pagina e exclusiva para candidatos.</CardDescription>
+            <CardDescription>Esta página é exclusiva para candidatos.</CardDescription>
           </CardHeader>
         </Card>
       </div>
@@ -336,7 +336,7 @@ export default function CandidateJobs() {
                   {/* Description */}
                   {selectedJob.description && (
                     <div>
-                      <h4 className="font-semibold mb-2">Descricao</h4>
+                      <h4 className="font-semibold mb-2">Descrição</h4>
                       <p className="text-sm text-muted-foreground whitespace-pre-wrap">
                         {selectedJob.description}
                       </p>
@@ -368,7 +368,7 @@ export default function CandidateJobs() {
                   {/* Benefits */}
                   {selectedJob.benefits && selectedJob.benefits.length > 0 && (
                     <div>
-                      <h4 className="font-semibold mb-2">Beneficios</h4>
+                      <h4 className="font-semibold mb-2">Benefícios</h4>
                       <ul className="text-sm text-muted-foreground space-y-1">
                         {selectedJob.benefits.map((benefit: string, i: number) => (
                           <li key={i} className="flex items-center gap-2">
@@ -407,7 +407,7 @@ export default function CandidateJobs() {
                 <DialogHeader>
                   <DialogTitle>Confirmar Candidatura</DialogTitle>
                   <DialogDescription>
-                    Voce esta se candidatando para: <strong>{selectedJob.title}</strong>
+                    Você está se candidatando para: <strong>{selectedJob.title}</strong>
                   </DialogDescription>
                 </DialogHeader>
 
@@ -417,7 +417,7 @@ export default function CandidateJobs() {
                       Mensagem (opcional)
                     </label>
                     <Textarea
-                      placeholder="Escreva uma breve apresentacao ou mensagem para o recrutador..."
+                      placeholder="Escreva uma breve apresentação ou mensagem para o recrutador..."
                       value={applicationMessage}
                       onChange={(e) => setApplicationMessage(e.target.value)}
                       rows={4}
@@ -426,8 +426,8 @@ export default function CandidateJobs() {
 
                   <div className="bg-slate-50 p-4 rounded-lg">
                     <p className="text-sm text-muted-foreground">
-                      Ao confirmar, seu perfil sera enviado para analise.
-                      Voce podera acompanhar o status em "Minhas Candidaturas".
+                      Ao confirmar, seu perfil será enviado para análise.
+                      Você poderá acompanhar o status em "Minhas Candidaturas".
                     </p>
                   </div>
                 </div>

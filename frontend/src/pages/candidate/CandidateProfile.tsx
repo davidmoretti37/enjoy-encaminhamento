@@ -27,16 +27,17 @@ import {
   Trash2,
   X,
   Upload,
-  Camera
+  Camera,
+  LogOut
 } from "lucide-react";
 import { toast } from "sonner";
 
 // Education levels matching database enum values
 const EDUCATION_LEVELS = [
   { value: 'fundamental', label: 'Fundamental' },
-  { value: 'medio', label: 'Medio' },
+  { value: 'medio', label: 'Médio' },
   { value: 'superior', label: 'Superior' },
-  { value: 'pos-graduacao', label: 'Pos-Graduacao' },
+  { value: 'pos-graduacao', label: 'Pós-Graduação' },
   { value: 'mestrado', label: 'Mestrado' },
   { value: 'doutorado', label: 'Doutorado' },
 ];
@@ -48,7 +49,7 @@ const BRAZILIAN_STATES = [
 ];
 
 export default function CandidateProfile() {
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, logout } = useAuth();
 
   // Form state
   const [formData, setFormData] = useState({
@@ -308,7 +309,7 @@ export default function CandidateProfile() {
         <Card className="max-w-md">
           <CardHeader>
             <CardTitle>Acesso Negado</CardTitle>
-            <CardDescription>Esta pagina e exclusiva para candidatos.</CardDescription>
+            <CardDescription>Esta página é exclusiva para candidatos.</CardDescription>
           </CardHeader>
         </Card>
       </div>
@@ -461,13 +462,13 @@ export default function CandidateProfile() {
           <CardHeader>
             <CardTitle className="text-lg flex items-center gap-2">
               <GraduationCap className="h-5 w-5" />
-              Formacao
+              Formação
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Nivel de Escolaridade</Label>
+                <Label>Nível de Escolaridade</Label>
                 <Select
                   value={formData.education_level}
                   onValueChange={(v) => handleInputChange('education_level', v)}
@@ -485,7 +486,7 @@ export default function CandidateProfile() {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="institution">Instituicao</Label>
+                <Label htmlFor="institution">Instituição</Label>
                 <Input
                   id="institution"
                   value={formData.institution}
@@ -562,7 +563,7 @@ export default function CandidateProfile() {
                 <Input
                   value={newLanguage}
                   onChange={(e) => setNewLanguage(e.target.value)}
-                  placeholder="Digite um idioma (ex: Ingles - Intermediario)"
+                  placeholder="Digite um idioma (ex: Inglês - Intermediário)"
                   onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addLanguage())}
                 />
                 <Button onClick={addLanguage} variant="outline">
@@ -591,7 +592,7 @@ export default function CandidateProfile() {
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="text-lg flex items-center gap-2">
               <Briefcase className="h-5 w-5" />
-              Experiencia Profissional
+              Experiência Profissional
             </CardTitle>
             <Button onClick={openAddExperience} variant="outline" size="sm">
               <Plus className="h-4 w-4 mr-2" />
@@ -601,7 +602,7 @@ export default function CandidateProfile() {
           <CardContent>
             {experiences.length === 0 ? (
               <p className="text-sm text-muted-foreground text-center py-6">
-                Nenhuma experiencia cadastrada
+                Nenhuma experiência cadastrada
               </p>
             ) : (
               <div className="space-y-4">
@@ -637,7 +638,7 @@ export default function CandidateProfile() {
         {/* Work Preferences Card */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg">Preferencias de Trabalho</CardTitle>
+            <CardTitle className="text-lg">Preferências de Trabalho</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
@@ -660,7 +661,7 @@ export default function CandidateProfile() {
                       onChange={(e) => handleInputChange('available_for_internship', e.target.checked)}
                       className="rounded"
                     />
-                    Estagio
+                    Estágio
                   </label>
                   <label className="flex items-center gap-2">
                     <input
@@ -685,7 +686,7 @@ export default function CandidateProfile() {
                   <SelectContent>
                     <SelectItem value="presencial">Presencial</SelectItem>
                     <SelectItem value="remoto">Remoto</SelectItem>
-                    <SelectItem value="hibrido">Hibrido</SelectItem>
+                    <SelectItem value="hibrido">Híbrido</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -693,19 +694,49 @@ export default function CandidateProfile() {
           </CardContent>
         </Card>
 
-        {/* Summary Card */}
+        {/* AI Generated Summary Card */}
+        {profile?.summary && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <FileText className="h-5 w-5" />
+                Resumo Profissional
+              </CardTitle>
+              <CardDescription>
+                Gerado automaticamente com base nas suas avaliações DISC e PDP
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="bg-slate-50 rounded-lg p-4 text-sm text-slate-700 whitespace-pre-wrap">
+                {profile.summary}
+              </div>
+              {profile.summary_generated_at && (
+                <p className="text-xs text-muted-foreground mt-2">
+                  Gerado em: {new Date(profile.summary_generated_at).toLocaleDateString('pt-BR')}
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* User Summary Card */}
         <Card>
           <CardHeader>
             <CardTitle className="text-lg flex items-center gap-2">
               <FileText className="h-5 w-5" />
-              Resumo Profissional
+              {profile?.summary ? 'Observações Adicionais' : 'Resumo Profissional'}
             </CardTitle>
+            {profile?.summary && (
+              <CardDescription>
+                Adicione informações extras que não foram capturadas nas avaliações
+              </CardDescription>
+            )}
           </CardHeader>
           <CardContent>
             <Textarea
               value={formData.profile_summary}
               onChange={(e) => handleInputChange('profile_summary', e.target.value)}
-              placeholder="Escreva um breve resumo sobre voce, suas experiencias e objetivos..."
+              placeholder="Escreva um breve resumo sobre você, suas experiências e objetivos..."
               rows={4}
             />
           </CardContent>
@@ -720,17 +751,37 @@ export default function CandidateProfile() {
                 Salvando...
               </>
             ) : (
-              'Salvar Alteracoes'
+              'Salvar Alterações'
             )}
           </Button>
         </div>
+
+        {/* Logout Card */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Sair da Conta</CardTitle>
+            <CardDescription>
+              Encerrar sua sessão neste dispositivo
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button
+              variant="destructive"
+              onClick={logout}
+              className="gap-2"
+            >
+              <LogOut className="h-4 w-4" />
+              Sair da conta
+            </Button>
+          </CardContent>
+        </Card>
 
         {/* Experience Dialog */}
         <Dialog open={showExperienceDialog} onOpenChange={setShowExperienceDialog}>
           <DialogContent>
             <DialogHeader>
               <DialogTitle>
-                {editingExperience !== null ? 'Editar Experiencia' : 'Adicionar Experiencia'}
+                {editingExperience !== null ? 'Editar Experiência' : 'Adicionar Experiência'}
               </DialogTitle>
             </DialogHeader>
             <div className="space-y-4 py-4">
@@ -752,7 +803,7 @@ export default function CandidateProfile() {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="exp_start">Data Inicio</Label>
+                  <Label htmlFor="exp_start">Data Início</Label>
                   <Input
                     id="exp_start"
                     type="month"
@@ -786,7 +837,7 @@ export default function CandidateProfile() {
                 <Label htmlFor="exp_current">Trabalho atual</Label>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="exp_desc">Descricao (opcional)</Label>
+                <Label htmlFor="exp_desc">Descrição (opcional)</Label>
                 <Textarea
                   id="exp_desc"
                   value={experienceForm.description}

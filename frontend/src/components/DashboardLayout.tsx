@@ -148,9 +148,6 @@ export default function DashboardLayout({
     icon: item.icon,
   }));
 
-  // Only show AI chat for affiliates and schools (not for companies or candidates)
-  const showAIChat = user?.role === 'affiliate' || user?.role === 'school';
-
   return (
     <div className="min-h-screen relative">
       {/* Background with corner gradients */}
@@ -173,7 +170,6 @@ export default function DashboardLayout({
         homeHref={homeHref}
         profileHref={profileHref}
         activeHref={location}
-        showAIChat={showAIChat}
         user={{
           name: user.name || undefined,
           email: user.email || undefined,

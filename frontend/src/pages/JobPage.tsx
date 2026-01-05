@@ -152,7 +152,7 @@ export default function JobPage() {
       case 'consider':
         return <Badge className="bg-yellow-500 text-black">Considerar</Badge>;
       case 'not_recommended':
-        return <Badge className="bg-red-500">Nao Recomendado</Badge>;
+        return <Badge className="bg-red-500">Não Recomendado</Badge>;
       default:
         return <Badge>{recommendation}</Badge>;
     }

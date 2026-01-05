@@ -219,58 +219,19 @@ export async function getApplicationsBySchoolId(schoolId: string) {
 }
 
 export async function getCompaniesBySchoolId(schoolId: string) {
-  // First get the school's affiliate_id
-  const { data: school, error: schoolError } = await supabaseAdmin
-    .from("schools")
-    .select("affiliate_id, city")
-    .eq("id", schoolId)
-    .single();
+  // Get companies that were imported/assigned to this specific school
+  const { data, error } = await supabaseAdmin
+    .from("companies")
+    .select("*")
+    .eq("school_id", schoolId)
+    .order("created_at", { ascending: false });
 
-  if (schoolError || !school) {
-    console.error("[Database] Failed to get school:", schoolError);
+  if (error) {
+    console.error("[Database] Failed to get companies by school_id:", error);
     return [];
   }
 
-  // Get companies that belong to the same affiliate as this school
-  let companiesViaAffiliate: any[] = [];
-  if (school.affiliate_id) {
-    const { data, error } = await supabaseAdmin
-      .from("companies")
-      .select("*")
-      .eq("affiliate_id", school.affiliate_id)
-      .order("created_at", { ascending: false });
-
-    if (error) {
-      console.error("[Database] Failed to get companies by affiliate_id:", error);
-    } else {
-      companiesViaAffiliate = data || [];
-    }
-  }
-
-  // Also get companies in the same city (as fallback)
-  let companiesViaCity: any[] = [];
-  if (school.city) {
-    const { data, error } = await supabaseAdmin
-      .from("companies")
-      .select("*")
-      .eq("city", school.city)
-      .order("created_at", { ascending: false });
-
-    if (!error) {
-      companiesViaCity = data || [];
-    }
-  }
-
-  // Merge and deduplicate
-  const allCompanies = [...companiesViaAffiliate, ...companiesViaCity];
-  const uniqueCompanies = allCompanies.reduce((acc, company) => {
-    if (!acc.find((c: any) => c.id === company.id)) {
-      acc.push(company);
-    }
-    return acc;
-  }, [] as any[]);
-
-  return uniqueCompanies;
+  return data || [];
 }
 
 export async function getJobsBySchoolId(schoolId: string) {

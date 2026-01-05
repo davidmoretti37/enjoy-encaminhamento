@@ -420,7 +420,7 @@ function parseRow(row: Record<string, unknown>, rowNumber: number): ParsedCompan
         const normalizedSize = stringValue.toLowerCase();
         company.company_size = SIZE_MAPPINGS[normalizedSize] || undefined;
       } else {
-        (company as Record<string, unknown>)[fieldName] = stringValue;
+        (company as unknown as Record<string, unknown>)[fieldName] = stringValue;
       }
     }
   }

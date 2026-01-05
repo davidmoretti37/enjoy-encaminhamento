@@ -1,12 +1,6 @@
 // @ts-nocheck
 /**
- * Job Router - Job management and basic matching
- *
- * Note: The findCandidates endpoint uses the legacy matching service.
- * For advanced matching with multi-factor analysis, use the agents router:
- *   - trpc.agents.matchCandidates - Enhanced matching with ensemble scoring
- *
- * @see ../routers/agents.ts for advanced agent capabilities
+ * Job Router - Job management
  */
 import { z } from "zod";
 import { router } from "../_core/trpc";
@@ -15,9 +9,8 @@ import { publicProcedure } from "../_core/trpc";
 import { adminProcedure, companyProcedure, candidateProcedure, schoolProcedure } from "./procedures";
 import * as db from "../db";
 import { supabaseAdmin } from "../supabase";
-import { matchCandidatesForJob, deleteMatchesForJob } from "../services/matching";
-import { onJobCreated, createJobCreatedContext } from "../events/jobCreated";
-import { getBackgroundMatchingService } from "../services/BackgroundMatchingService";
+import { generateJobSummary } from "../services/ai/summarizer";
+import { generateJobEmbedding, findMatchingCandidates } from "../services/matching";
 
 export const jobRouter = router({
   // Create job posting
@@ -46,24 +39,31 @@ export const jobRouter = router({
         ...input,
       });
 
-      // 🚀 AUTOMATIC MATCHING: Trigger background matching
-      try {
-        const job = await db.getJobById(jobId);
-        if (job && job.status === 'active') {
-          console.log(`[JobCreate] Triggering background matching for job ${jobId}...`);
-
-          // Create context for background matching
-          const matchingContext = createJobCreatedContext(db);
-
-          // Trigger background matching (non-blocking)
-          await onJobCreated(job, matchingContext);
-
-          console.log(`[JobCreate] Background matching initiated for job ${jobId}`);
+      // Generate AI summary in background (fire and forget)
+      generateJobSummary({
+        title: input.title,
+        description: input.description,
+        contractType: input.contractType,
+        workType: input.workType,
+        city: input.location?.split(',')[0]?.trim(),
+        state: input.location?.split(',')[1]?.trim(),
+        requirements: input.requiredSkills,
+        benefits: input.benefits,
+        salary: input.salary ? `R$ ${input.salary}` : undefined,
+        companyName: company.company_name,
+      }).then(async (summary) => {
+        if (summary) {
+          await db.updateJob(jobId, {
+            summary,
+            summary_generated_at: new Date().toISOString(),
+          });
+          console.log(`Generated summary for job ${jobId}`);
+          // Generate embedding from summary
+          await generateJobEmbedding(jobId);
         }
-      } catch (error) {
-        // Don't fail job creation if matching fails
-        console.error(`[JobCreate] Failed to trigger matching for job ${jobId}:`, error);
-      }
+      }).catch((err) => {
+        console.error('Failed to generate job summary:', err);
+      });
 
       return { jobId };
     }),
@@ -167,270 +167,6 @@ export const jobRouter = router({
       return { success: true };
     }),
 
-  // AI Matching: Find candidates for a job
-  findCandidates: adminProcedure
-    .input(z.object({
-      jobId: z.string().uuid(),
-      maxCandidates: z.number().min(1).max(100).default(50),
-    }))
-    .mutation(async ({ input }) => {
-      console.log(`[Matching] Starting candidate search for job ${input.jobId}`);
-
-      const results = await matchCandidatesForJob(input.jobId, {
-        maxCandidates: input.maxCandidates,
-        saveResults: true,
-      });
-
-      console.log(`[Matching] Found ${results.length} matches for job ${input.jobId}`);
-
-      return {
-        success: true,
-        matchCount: results.length,
-        matches: results.map(r => ({
-          candidateId: r.candidateId,
-          matchScore: r.matchScore,
-          confidenceScore: r.confidenceScore,
-          recommendation: r.recommendation,
-          strengths: r.strengths,
-          concerns: r.concerns,
-          matchExplanation: r.matchExplanation,
-        })),
-      };
-    }),
-
-  // Get existing matches for a job
-  getMatches: adminProcedure
-    .input(z.object({
-      jobId: z.string().uuid(),
-    }))
-    .query(async ({ input }) => {
-      const matches = await db.getJobMatchesByJobId(input.jobId);
-      return matches;
-    }),
-
-  // Delete all matches for a job (for re-matching)
-  deleteMatches: adminProcedure
-    .input(z.object({
-      jobId: z.string().uuid(),
-    }))
-    .mutation(async ({ input }) => {
-      await deleteMatchesForJob(input.jobId);
-      return { success: true };
-    }),
-
-  // 🆕 GET MATCHING PROGRESS (Real-time updates for "Vagas" page)
-  // Schools/affiliates can see matching progress as it happens
-  getMatchingProgress: publicProcedure
-    .input(z.object({
-      jobId: z.string().uuid(),
-    }))
-    .query(async ({ input }) => {
-      // Query the job_matching_progress table
-      const progress = await db.getMatchingProgress(input.jobId);
-
-      if (!progress) {
-        return {
-          status: 'not_started',
-          totalCandidates: 0,
-          processedCandidates: 0,
-          matchesFound: 0,
-          percentComplete: 0,
-        };
-      }
-
-      const percentComplete = progress.total_candidates > 0
-        ? Math.round((progress.processed_candidates / progress.total_candidates) * 100)
-        : 0;
-
-      return {
-        status: progress.status,
-        totalCandidates: progress.total_candidates,
-        processedCandidates: progress.processed_candidates,
-        matchesFound: progress.matches_found,
-        percentComplete,
-        startedAt: progress.started_at,
-        completedAt: progress.completed_at,
-        errorMessage: progress.error_message,
-        processingTimeMs: progress.processing_time_ms,
-      };
-    }),
-
-  // 🆕 GET MATCHES FOR SCHOOLS/AFFILIATES (Main "Vagas" page data)
-  // Returns matched candidates with scores and reasoning
-  getMatchesForJob: publicProcedure
-    .input(z.object({
-      jobId: z.string().uuid(),
-      page: z.number().min(1).default(1),
-      pageSize: z.number().min(1).max(100).default(50),
-      minScore: z.number().min(0).max(100).optional().default(50),
-    }))
-    .query(async ({ input }) => {
-      const { jobId, page, pageSize, minScore } = input;
-
-      // Get matches from database (sorted by score)
-      const allMatches = await db.getJobMatchesByJobId(jobId);
-
-      // Filter by minimum score
-      const filteredMatches = allMatches.filter(m => m.composite_score >= minScore);
-
-      // Pagination
-      const totalMatches = filteredMatches.length;
-      const totalPages = Math.ceil(totalMatches / pageSize);
-      const startIndex = (page - 1) * pageSize;
-      const endIndex = startIndex + pageSize;
-      const paginatedMatches = filteredMatches.slice(startIndex, endIndex);
-
-      // Get candidate details for each match
-      const matchesWithCandidates = await Promise.all(
-        paginatedMatches.map(async (match) => {
-          const candidate = await db.getCandidateById(match.candidate_id);
-
-          return {
-            matchId: match.id,
-            candidateId: match.candidate_id,
-            candidateName: candidate?.full_name || 'Unknown',
-            candidateEmail: candidate?.email,
-            compositeScore: match.composite_score,
-            confidenceScore: match.confidence_score,
-            recommendation: match.recommendation,
-            matchFactors: match.match_factors,
-            semanticFactors: match.semantic_factors,
-            reasoning: match.match_reasoning,
-            createdAt: match.created_at,
-            // Include candidate profile for display
-            candidateProfile: {
-              skills: candidate?.skills,
-              yearsOfExperience: candidate?.years_of_experience,
-              educationLevel: candidate?.education_level,
-              city: candidate?.city,
-              state: candidate?.state,
-            },
-          };
-        })
-      );
-
-      return {
-        matches: matchesWithCandidates,
-        pagination: {
-          page,
-          pageSize,
-          totalPages,
-          totalMatches,
-          hasMore: page < totalPages,
-        },
-      };
-    }),
-
-  // 🆕 MANUALLY TRIGGER RE-MATCHING (Admin)
-  // Allows re-running matching if job requirements changed
-  triggerReMatching: adminProcedure
-    .input(z.object({
-      jobId: z.string().uuid(),
-    }))
-    .mutation(async ({ input }) => {
-      const job = await db.getJobById(input.jobId);
-
-      if (!job) {
-        throw new TRPCError({ code: 'NOT_FOUND', message: 'Job not found' });
-      }
-
-      console.log(`[ReMatcher] Manually triggering re-matching for job ${input.jobId}...`);
-
-      // Create context and trigger matching
-      const matchingContext = createJobCreatedContext(db);
-      await onJobCreated(job, matchingContext);
-
-      return {
-        success: true,
-        message: 'Re-matching initiated in background',
-      };
-    }),
-
-  // 🆕 TRIGGER MATCHING (Company)
-  // Allows companies to manually trigger matching for their jobs
-  triggerMatching: companyProcedure
-    .input(z.object({
-      jobId: z.string(),
-    }))
-    .mutation(async ({ ctx, input }) => {
-      const job = await db.getJobById(input.jobId);
-
-      // Verify job exists and ownership
-      if (!job) {
-        throw new TRPCError({
-          code: 'NOT_FOUND',
-          message: 'Vaga não encontrada',
-        });
-      }
-
-      const company = await db.getCompanyByUserId(ctx.user.id);
-      if (!company || job.company_id !== company.id) {
-        throw new TRPCError({
-          code: 'FORBIDDEN',
-          message: 'Você não tem permissão para iniciar busca nesta vaga',
-        });
-      }
-
-      console.log(`[CompanyMatching] Company ${company.id} triggering matching for job ${input.jobId}...`);
-
-      // Create context and trigger matching
-      const matchingContext = createJobCreatedContext(db);
-      await onJobCreated(job, matchingContext);
-
-      return {
-        success: true,
-        message: 'Busca de candidatos iniciada',
-      };
-    }),
-
-  // Trigger matching for a job (school access)
-  triggerMatchingForSchool: schoolProcedure
-    .input(z.object({
-      jobId: z.string(),
-    }))
-    .mutation(async ({ ctx, input }) => {
-      const job = await db.getJobById(input.jobId);
-
-      if (!job) {
-        throw new TRPCError({
-          code: 'NOT_FOUND',
-          message: 'Vaga não encontrada',
-        });
-      }
-
-      // Verify school has access to this company's jobs
-      const school = await db.getSchoolForUserContext(ctx.user.id, ctx.user.role);
-      if (!school) {
-        throw new TRPCError({
-          code: 'FORBIDDEN',
-          message: 'Escola não encontrada',
-        });
-      }
-
-      // Check if company belongs to this school's affiliate
-      const { data: company } = await supabaseAdmin
-        .from('companies')
-        .select('id, affiliate_id, school_id')
-        .eq('id', job.company_id)
-        .single();
-
-      if (!company || (company.school_id !== school.id && company.affiliate_id !== school.affiliate_id)) {
-        throw new TRPCError({
-          code: 'FORBIDDEN',
-          message: 'Você não tem permissão para iniciar busca nesta vaga',
-        });
-      }
-
-      // Trigger matching
-      const matchingContext = createJobCreatedContext(db);
-      await onJobCreated(job, matchingContext);
-
-      return {
-        success: true,
-        message: 'Busca de candidatos iniciada',
-      };
-    }),
-
   // Get jobs for a school (all jobs from companies linked to this school)
   getBySchool: schoolProcedure.query(async ({ ctx }) => {
     const school = await db.getSchoolForUserContext(ctx.user.id, ctx.user.role);
@@ -442,12 +178,11 @@ export const jobRouter = router({
     }
 
     // Get all jobs where school_id matches
-    const { data, error } = await db.supabaseAdmin
+    const { data, error } = await supabaseAdmin
       .from('jobs')
       .select(`
         *,
-        company:companies(id, company_name, email),
-        job_matches(count)
+        company:companies(id, company_name, email)
       `)
       .eq('school_id', school.id)
       .order('created_at', { ascending: false });
@@ -496,5 +231,74 @@ export const jobRouter = router({
       }
 
       return data || [];
+    }),
+
+  // Get matching candidates for a job (using vector similarity)
+  getMatchingCandidates: companyProcedure
+    .input(z.object({
+      jobId: z.string().uuid(),
+      threshold: z.number().min(0).max(1).default(0.5),
+      limit: z.number().min(1).max(100).default(50),
+    }))
+    .query(async ({ ctx, input }) => {
+      // Verify job belongs to company
+      const company = await db.getCompanyByUserId(ctx.user.id);
+      if (!company) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Company not found' });
+      }
+
+      const job = await db.getJobById(input.jobId);
+      if (!job || job.company_id !== company.id) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Job not found or access denied' });
+      }
+
+      const matches = await findMatchingCandidates(input.jobId, {
+        threshold: input.threshold,
+        limit: input.limit,
+      });
+
+      return matches;
+    }),
+
+  // Get matching candidates for a job (school/affiliate access)
+  getMatchingCandidatesForSchool: schoolProcedure
+    .input(z.object({
+      jobId: z.string().uuid(),
+      threshold: z.number().min(0).max(1).default(0.5),
+      limit: z.number().min(1).max(100).default(50),
+    }))
+    .query(async ({ ctx, input }) => {
+      const school = await db.getSchoolForUserContext(ctx.user.id, ctx.user.role);
+      if (!school) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'School not found' });
+      }
+
+      // Verify job belongs to a company linked to this school
+      const { data: job, error } = await supabaseAdmin
+        .from('jobs')
+        .select('id, school_id')
+        .eq('id', input.jobId)
+        .single();
+
+      if (error || !job || job.school_id !== school.id) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Job not found or access denied' });
+      }
+
+      const matches = await findMatchingCandidates(input.jobId, {
+        threshold: input.threshold,
+        limit: input.limit,
+      });
+
+      return matches;
+    }),
+
+  // Regenerate embedding for a job (admin only)
+  regenerateEmbedding: adminProcedure
+    .input(z.object({
+      jobId: z.string().uuid(),
+    }))
+    .mutation(async ({ input }) => {
+      const success = await generateJobEmbedding(input.jobId);
+      return { success };
     }),
 });

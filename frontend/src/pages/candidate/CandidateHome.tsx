@@ -84,7 +84,7 @@ export default function CandidateHome() {
         <Card className="max-w-md">
           <CardHeader>
             <CardTitle>Acesso Negado</CardTitle>
-            <CardDescription>Esta pagina e exclusiva para candidatos.</CardDescription>
+            <CardDescription>Esta página é exclusiva para candidatos.</CardDescription>
           </CardHeader>
         </Card>
       </div>
@@ -113,7 +113,7 @@ export default function CandidateHome() {
                   <PartyPopper className="h-6 w-6 text-green-600" />
                 </div>
                 <div className="flex-1">
-                  <h3 className="font-bold text-green-900 text-lg">Parabens! Voce foi contratado!</h3>
+                  <h3 className="font-bold text-green-900 text-lg">Parabéns! Você foi contratado!</h3>
                   <p className="text-green-700 text-sm">
                     Confira os detalhes em suas candidaturas
                   </p>
@@ -136,7 +136,7 @@ export default function CandidateHome() {
                   <Calendar className="h-6 w-6 text-blue-600" />
                 </div>
                 <div className="flex-1">
-                  <h3 className="font-bold text-blue-900">Voce tem entrevista agendada!</h3>
+                  <h3 className="font-bold text-blue-900">Você tem entrevista agendada!</h3>
                   <p className="text-blue-700 text-sm">
                     Confira os detalhes e prepare-se para o grande dia
                   </p>
@@ -158,9 +158,9 @@ export default function CandidateHome() {
                   <CheckCircle className="h-6 w-6 text-yellow-600" />
                 </div>
                 <div className="flex-1">
-                  <h3 className="font-bold text-yellow-900">Voce foi pre-selecionado!</h3>
+                  <h3 className="font-bold text-yellow-900">Você foi pré-selecionado!</h3>
                   <p className="text-yellow-700 text-sm">
-                    Aguarde nosso contato para os proximos passos
+                    Aguarde nosso contato para os próximos passos
                   </p>
                 </div>
               </div>
@@ -225,7 +225,7 @@ export default function CandidateHome() {
         {profileCompletion < 100 && (
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">Seu perfil esta {profileCompletion}% completo</CardTitle>
+              <CardTitle className="text-lg">Seu perfil está {profileCompletion}% completo</CardTitle>
             </CardHeader>
             <CardContent>
               <Progress value={profileCompletion} className="h-2 mb-4" />
@@ -240,7 +240,7 @@ export default function CandidateHome() {
                   {!profile?.state && <li className="flex items-center gap-2"><AlertTriangle className="h-4 w-4 text-yellow-500" /> Estado</li>}
                   {!profile?.education_level && <li className="flex items-center gap-2"><AlertTriangle className="h-4 w-4 text-yellow-500" /> Escolaridade</li>}
                   {(!profile?.skills || (profile.skills as string[]).length === 0) && <li className="flex items-center gap-2"><AlertTriangle className="h-4 w-4 text-yellow-500" /> Habilidades</li>}
-                  {(!profile?.experience || (profile.experience as any[]).length === 0) && <li className="flex items-center gap-2"><AlertTriangle className="h-4 w-4 text-yellow-500" /> Experiencia profissional</li>}
+                  {(!profile?.experience || (profile.experience as any[]).length === 0) && <li className="flex items-center gap-2"><AlertTriangle className="h-4 w-4 text-yellow-500" /> Experiência profissional</li>}
                   {!profile?.photo_url && <li className="flex items-center gap-2"><AlertTriangle className="h-4 w-4 text-yellow-500" /> Foto</li>}
                 </ul>
                 <Button variant="outline" className="mt-4" onClick={() => setLocation('/candidate/perfil')}>
@@ -264,7 +264,7 @@ export default function CandidateHome() {
                     <div>
                       <h4 className="font-medium">{app.jobs?.title || 'Vaga'}</h4>
                       <p className="text-sm text-muted-foreground">
-                        {app.jobs?.contract_type} • {app.jobs?.location || 'Local nao informado'}
+                        {app.jobs?.contract_type} • {app.jobs?.location || 'Local não informado'}
                       </p>
                     </div>
                     <Badge variant={
@@ -272,12 +272,12 @@ export default function CandidateHome() {
                       app.status === 'rejected' ? 'destructive' :
                       'secondary'
                     }>
-                      {app.status === 'applied' && 'Em analise'}
-                      {app.status === 'screening' && 'Pre-selecionado'}
+                      {app.status === 'applied' && 'Em análise'}
+                      {app.status === 'screening' && 'Pré-selecionado'}
                       {app.status === 'interview-scheduled' && 'Entrevista agendada'}
                       {app.status === 'interviewed' && 'Entrevista realizada'}
                       {app.status === 'selected' && 'Contratado'}
-                      {app.status === 'rejected' && 'Nao selecionado'}
+                      {app.status === 'rejected' && 'Não selecionado'}
                     </Badge>
                   </div>
                 ))}

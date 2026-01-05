@@ -2,6 +2,7 @@
 // Company database operations
 import { supabaseAdmin } from "../supabase";
 import type { Company, InsertCompany } from "./types";
+import { generateCompanySummary, generateJobSummary } from "../services/ai/summarizer";
 
 export async function createCompany(company: InsertCompany): Promise<string> {
   // Use admin client to bypass RLS during company creation (e.g., during onboarding)
@@ -344,6 +345,27 @@ export async function createCompanyWithUser(input: {
     throw companyError;
   }
 
+  // Generate company summary in background (fire and forget)
+  generateCompanySummary({
+    companyName: input.companyName,
+    cnpj: input.cnpj,
+    city: input.city,
+    state: input.state,
+  }).then(async (summary) => {
+    if (summary) {
+      await supabaseAdmin
+        .from("companies")
+        .update({
+          summary,
+          summary_generated_at: new Date().toISOString(),
+        })
+        .eq("id", companyResult.id);
+      console.log(`Generated summary for company ${companyResult.id}`);
+    }
+  }).catch((err) => {
+    console.error('Failed to generate company summary:', err);
+  });
+
   return {
     email: input.email,
     userId: authData.user.id,
@@ -572,7 +594,7 @@ export async function bulkCreateCompanies(
           // Parse openings count, default to 1
           const openingsCount = company.job.openings ? parseInt(company.job.openings, 10) : 1;
 
-          await supabaseAdmin.from('jobs').insert({
+          const { data: jobData } = await supabaseAdmin.from('jobs').insert({
             company_id: data.id,
             school_id: schoolId || null,
             title: company.job.title,
@@ -592,8 +614,66 @@ export async function bulkCreateCompanies(
             status: 'open',
             created_at: new Date().toISOString(),
             published_at: new Date().toISOString(),
-          });
+          }).select('id').single();
+
+          // Generate job summary in background (fire and forget)
+          if (jobData?.id) {
+            generateJobSummary({
+              title: company.job.title,
+              description: company.job.description || '',
+              contractType: normalizeContractType(company.job.contract_type),
+              workType: normalizeWorkType(company.job.work_type),
+              requirements: company.job.required_skills,
+              benefits: company.job.benefits,
+              salary: company.job.salary,
+              companyName: company.company_name,
+            }).then(async (summary) => {
+              if (summary) {
+                await supabaseAdmin
+                  .from("jobs")
+                  .update({
+                    summary,
+                    summary_generated_at: new Date().toISOString(),
+                  })
+                  .eq("id", jobData.id);
+                console.log(`Generated summary for job ${jobData.id}`);
+              }
+            }).catch((err) => {
+              console.error(`Failed to generate job summary for ${jobData.id}:`, err);
+            });
+          }
         }
+
+        // Generate company summary in background (fire and forget)
+        generateCompanySummary({
+          companyName: company.company_name,
+          cnpj: company.cnpj,
+          industry: company.industry,
+          companySize: company.company_size,
+          website: company.website,
+          description: company.description,
+          city: company.city,
+          state: company.state,
+          jobTitle: company.job?.title,
+          contractType: company.job?.contract_type,
+          workType: company.job?.work_type,
+          mainActivities: company.job?.description,
+          requiredSkills: company.job?.required_skills,
+          notes: company.notes,
+        }).then(async (summary) => {
+          if (summary) {
+            await supabaseAdmin
+              .from("companies")
+              .update({
+                summary,
+                summary_generated_at: new Date().toISOString(),
+              })
+              .eq("id", data.id);
+            console.log(`Generated summary for company ${data.id}`);
+          }
+        }).catch((err) => {
+          console.error(`Failed to generate company summary for ${data.id}:`, err);
+        });
       }
     } catch (err: any) {
       errors.push({

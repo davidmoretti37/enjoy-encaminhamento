@@ -30,7 +30,6 @@ import ContractPage from "./pages/ContractPage";
 import PaymentPage from "./pages/PaymentPage";
 import CalendarPage from "./pages/CalendarPage";
 import FeedbackManagement from "./pages/FeedbackManagement";
-import AIMatchingManagement from "./pages/AIMatchingManagement";
 import RegionalManagement from "./pages/RegionalManagement";
 import AffiliateDashboard from "./pages/AffiliateDashboard";
 import AffiliateSchools from "./pages/AffiliateSchools";
@@ -48,7 +47,6 @@ import SettingsPage from "./pages/SettingsPage";
 // Onboarding Pages
 import CompanyOnboarding from "./pages/company/CompanyOnboarding";
 import CandidateOnboarding from "./pages/candidate/CandidateOnboarding";
-import AIChat from "./pages/AIChat";
 import VagasPage from "./pages/VagasPage";
 import CompanyVagasPage from "./pages/CompanyVagasPage";
 
@@ -70,7 +68,6 @@ function Router() {
       <Route path={"/admin/dashboard"} component={AdminDashboard} />
       <Route path={"/admin/regional"} component={RegionalManagement} />
       <Route path={"/admin/feedback"} component={FeedbackManagement} />
-      <Route path={"/admin/ai-matching"} component={AIMatchingManagement} />
       <Route path={"/admin/calendar"} component={AdminCalendar} />
       {/* Simplified role-aware pages (all roles use same URL) */}
       <Route path={"/candidates"} component={CandidatePage} />
@@ -80,7 +77,6 @@ function Router() {
       <Route path={"/payments"} component={PaymentPage} />
       <Route path={"/calendar"} component={CalendarPage} />
       <Route path={"/settings"} component={SettingsPage} />
-      <Route path={"/ai-chat"} component={AIChat} />
       <Route path={"/company/dashboard"} component={CompanyPortalDashboard} />
       {/* Onboarding Routes */}
       <Route path={"/company/onboarding"} component={CompanyOnboarding} />

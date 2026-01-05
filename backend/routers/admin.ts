@@ -1,16 +1,6 @@
 // @ts-nocheck
 /**
  * Admin Router - Admin dashboard and management
- *
- * Note: For advanced AI analytics and insights, use the agents router:
- *   - trpc.agents.getSystemStatus - Agent system status
- *   - trpc.agents.getAgentMetrics - Execution metrics
- *   - trpc.agents.getExecutionHistory - Task history
- *   - trpc.agents.forecastWorkforce - Workforce planning
- *   - trpc.agents.analyzePipeline - Pipeline analysis
- *   - trpc.agents.analyzeFeedback - Feedback trends
- *
- * @see ../routers/agents.ts for full agent capabilities
  */
 import { z } from "zod";
 import { router } from "../_core/trpc";

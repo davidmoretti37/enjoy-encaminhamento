@@ -89,6 +89,8 @@ export interface Database {
           contract_signer_name: string | null
           contract_signer_cpf: string | null
           contract_signed_at: string | null
+          summary: string | null
+          summary_generated_at: string | null
           created_at: string
           updated_at: string
         }
@@ -121,6 +123,8 @@ export interface Database {
           contract_signer_name?: string | null
           contract_signer_cpf?: string | null
           contract_signed_at?: string | null
+          summary?: string | null
+          summary_generated_at?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -153,6 +157,8 @@ export interface Database {
           contract_signer_name?: string | null
           contract_signer_cpf?: string | null
           contract_signed_at?: string | null
+          summary?: string | null
+          summary_generated_at?: string | null
           created_at?: string
           updated_at?: string
         }

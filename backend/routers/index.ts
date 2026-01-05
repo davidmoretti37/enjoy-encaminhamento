@@ -28,5 +28,4 @@ export { contractRouter } from "./contract";
 export { invitationRouter } from "./invitation";
 export { affiliateRouter } from "./affiliate";
 export { adminRouter } from "./admin";
-export { agentsRouter } from "./agents";
 export { batchRouter } from "./batch";

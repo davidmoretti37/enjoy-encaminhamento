@@ -2,6 +2,8 @@
 // Candidate database operations
 import { supabase, supabaseAdmin } from "../supabase";
 import type { Candidate, InsertCandidate } from "./types";
+import { generateCandidateSummary } from "../services/ai/summarizer";
+import { generateCandidateEmbedding } from "../services/matching";
 
 export async function createCandidate(candidate: InsertCandidate): Promise<string> {
   // Use admin client to bypass RLS during candidate creation (e.g., during onboarding)
@@ -263,6 +265,15 @@ export async function bulkCreateCandidates(
     available_for_clt?: boolean;
     available_for_apprentice?: boolean;
     preferred_work_type?: 'presencial' | 'remoto' | 'hibrido';
+    // DISC profile
+    disc_dominante?: number;
+    disc_influente?: number;
+    disc_estavel?: number;
+    disc_conforme?: number;
+    // PDP data
+    pdp_competencies?: string[];
+    pdp_intrapersonal?: Record<string, string>;
+    pdp_interpersonal?: Record<string, string>;
   }>,
   schoolId: string
 ): Promise<{ created: string[]; errors: { email: string; message: string }[] }> {
@@ -360,6 +371,15 @@ export async function bulkCreateCandidates(
       if (candidate.available_for_clt !== undefined) candidateData.available_for_clt = candidate.available_for_clt;
       if (candidate.available_for_apprentice !== undefined) candidateData.available_for_apprentice = candidate.available_for_apprentice;
       if (candidate.preferred_work_type) candidateData.preferred_work_type = candidate.preferred_work_type;
+      // DISC profile fields
+      if (candidate.disc_dominante !== undefined) candidateData.disc_dominante = candidate.disc_dominante;
+      if (candidate.disc_influente !== undefined) candidateData.disc_influente = candidate.disc_influente;
+      if (candidate.disc_estavel !== undefined) candidateData.disc_estavel = candidate.disc_estavel;
+      if (candidate.disc_conforme !== undefined) candidateData.disc_conforme = candidate.disc_conforme;
+      // PDP data
+      if (candidate.pdp_competencies) candidateData.pdp_competencies = candidate.pdp_competencies;
+      if (candidate.pdp_intrapersonal) candidateData.pdp_intrapersonal = candidate.pdp_intrapersonal;
+      if (candidate.pdp_interpersonal) candidateData.pdp_interpersonal = candidate.pdp_interpersonal;
 
       // Insert the candidate
       const { data, error } = await supabaseAdmin
@@ -378,6 +398,42 @@ export async function bulkCreateCandidates(
         });
       } else if (data) {
         created.push(data.id);
+
+        // Generate summary in background (fire-and-forget)
+        const candidateId = data.id;
+        generateCandidateSummary({
+          fullName: candidate.full_name,
+          city: candidate.city || '',
+          state: candidate.state || '',
+          educationLevel: candidate.education_level || '',
+          institution: candidate.institution,
+          course: candidate.course,
+          skills: Array.isArray(candidate.skills) ? candidate.skills : [],
+          languages: Array.isArray(candidate.languages) ? candidate.languages : [],
+          discDominante: candidate.disc_dominante,
+          discInfluente: candidate.disc_influente,
+          discEstavel: candidate.disc_estavel,
+          discConforme: candidate.disc_conforme,
+          pdpCompetencies: candidate.pdp_competencies,
+          pdpIntrapersonal: candidate.pdp_intrapersonal,
+          pdpInterpersonal: candidate.pdp_interpersonal,
+        }).then(async (summary) => {
+          if (summary) {
+            await supabaseAdmin
+              .from('candidates')
+              .update({
+                summary,
+                summary_generated_at: new Date().toISOString(),
+              })
+              .eq('id', candidateId);
+
+            // Generate embedding for vector matching
+            await generateCandidateEmbedding(candidateId);
+            console.log(`Generated summary and embedding for imported candidate ${candidateId}`);
+          }
+        }).catch((err) => {
+          console.error(`Failed to generate summary for candidate ${candidate.full_name}:`, err);
+        });
       }
     } catch (err: any) {
       errors.push({

@@ -7,7 +7,7 @@ import { protectedProcedure } from "../_core/trpc";
 import { adminProcedure, companyProcedure } from "./procedures";
 import * as db from "../db";
 import { supabaseAdmin } from "../supabase";
-import { onJobCreated, createJobCreatedContext } from "../events/jobCreated";
+import { generateCompanySummary } from "../services/ai/summarizer";
 
 export const companyRouter = router({
   // Check if company has completed onboarding
@@ -287,13 +287,6 @@ export const companyRouter = router({
         school_id: schoolId,
       });
 
-      // 🚀 TRIGGER AI MATCHING: Automatically match candidates when job is created
-      const job = await db.getJobById(jobId);
-      if (job && job.status === 'open') {
-        const matchingContext = createJobCreatedContext(db);
-        await onJobCreated(job, matchingContext);
-      }
-
       // Save contract signature if provided
       if (input.contractSignature && input.contractSignerName && input.contractSignerCpf) {
         await db.updateCompany(company.id, {
@@ -303,6 +296,37 @@ export const companyRouter = router({
           contract_signed_at: new Date().toISOString(),
         });
       }
+
+      // Generate company summary in background (fire and forget)
+      generateCompanySummary({
+        companyName: input.legalName,
+        cnpj: input.cnpj,
+        industry: undefined, // Not collected in onboarding
+        companySize: input.employeeCount,
+        website: input.website,
+        description: undefined,
+        city: input.city,
+        state: input.state,
+        jobTitle: input.jobTitle,
+        contractType: input.employmentType,
+        workType: 'presencial',
+        compensation: input.compensation,
+        mainActivities: input.mainActivities,
+        requiredSkills: input.requiredSkills,
+        benefits: input.benefits,
+        educationLevel: input.educationLevel,
+        notes: input.notes,
+      }).then(async (summary) => {
+        if (summary && company) {
+          await db.updateCompany(company.id, {
+            summary,
+            summary_generated_at: new Date().toISOString(),
+          });
+          console.log(`Generated summary for company ${company.id}`);
+        }
+      }).catch((err) => {
+        console.error('Failed to generate company summary:', err);
+      });
 
       return { success: true, companyId: company.id };
     }),

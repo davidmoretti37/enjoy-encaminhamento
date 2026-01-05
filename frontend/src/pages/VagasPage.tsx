@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Vagas Page - Job Matches View
  *

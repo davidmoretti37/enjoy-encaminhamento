@@ -9,7 +9,6 @@ import { serveStatic, setupVite } from "./vite";
 import { ENV, validateEnv } from "./env";
 import { globalRateLimiter, authRateLimiter } from "./rateLimit";
 import { logger, captureError } from "./logger";
-import streamingRoutes from "../routes/streaming";
 
 // Validate environment on startup
 const envValidation = validateEnv();
@@ -68,9 +67,6 @@ async function startServer() {
 
   // Stricter rate limiting for auth endpoints
   app.use("/api/trpc/auth", authRateLimiter);
-
-  // Streaming chat routes (SSE)
-  app.use("/api/chat", streamingRoutes);
 
   // tRPC API
   app.use(

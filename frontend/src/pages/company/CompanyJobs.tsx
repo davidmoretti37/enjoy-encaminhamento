@@ -23,7 +23,11 @@ import {
   Users,
   Play,
   DollarSign,
-  MapPin
+  MapPin,
+  ChevronDown,
+  ChevronUp,
+  Building2,
+  FileText
 } from "lucide-react";
 import JobProgressBar, { statusToStep } from "@/components/JobProgressBar";
 import { Link } from "wouter";
@@ -43,6 +47,7 @@ const jobStatusConfig: Record<string, { label: string; color: string; icon: Reac
 export default function CompanyJobs() {
   const { user, loading: authLoading } = useAuth();
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [showSummary, setShowSummary] = useState(false);
   const [formData, setFormData] = useState({
     title: '',
     contract_type: '',
@@ -55,6 +60,11 @@ export default function CompanyJobs() {
 
   const utils = trpc.useUtils();
   const { data: jobs, isLoading } = trpc.company.getJobs.useQuery(
+    undefined,
+    { enabled: !!user && user.role === 'company' }
+  );
+
+  const { data: companyProfile } = trpc.company.getProfile.useQuery(
     undefined,
     { enabled: !!user && user.role === 'company' }
   );
@@ -93,15 +103,16 @@ export default function CompanyJobs() {
     },
   });
 
-  const triggerMatchingMutation = trpc.job.triggerMatching.useMutation({
-    onSuccess: () => {
-      toast.success('Busca de candidatos iniciada!');
-      utils.company.getJobs.invalidate();
-    },
-    onError: (error) => {
-      toast.error('Erro ao iniciar busca: ' + error.message);
-    },
-  });
+  // TODO: triggerMatching endpoint not yet implemented
+  // const triggerMatchingMutation = trpc.job.triggerMatching.useMutation({
+  //   onSuccess: () => {
+  //     toast.success('Busca de candidatos iniciada!');
+  //     utils.company.getJobs.invalidate();
+  //   },
+  //   onError: (error: Error) => {
+  //     toast.error('Erro ao iniciar busca: ' + error.message);
+  //   },
+  // });
 
   if (authLoading) {
     return (
@@ -386,8 +397,8 @@ export default function CompanyJobs() {
                       {job.description && (() => {
                         // Parse description that may contain embedded "Requisitos:" and "Observações:"
                         const descText = job.description;
-                        const reqMatch = descText.match(/Requisitos:\s*(.+?)(?=Observações:|$)/s);
-                        const obsMatch = descText.match(/Observações:\s*(.+?)$/s);
+                        const reqMatch = descText.match(/Requisitos:\s*([\s\S]+?)(?=Observações:|$)/);
+                        const obsMatch = descText.match(/Observações:\s*([\s\S]+?)$/);
                         const mainDesc = descText.split(/Requisitos:/)[0].trim();
                         const embeddedReq = reqMatch ? reqMatch[1].trim() : null;
                         const embeddedObs = obsMatch ? obsMatch[1].trim() : null;
@@ -456,6 +467,39 @@ export default function CompanyJobs() {
                       <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-4">Progresso do Recrutamento</h4>
                       <JobProgressBar currentStep={currentStep} compact />
 
+                      {/* Company Summary Dropdown */}
+                      {companyProfile?.summary && (
+                        <div className="mt-4 pt-4 border-t border-gray-100">
+                          <button
+                            onClick={() => setShowSummary(!showSummary)}
+                            className="w-full flex items-center justify-between text-left hover:bg-gray-100 rounded-lg p-2 -mx-2 transition-colors"
+                          >
+                            <div className="flex items-center gap-2">
+                              <Building2 className="h-4 w-4 text-blue-600" />
+                              <span className="text-sm font-medium text-gray-700">Resumo da Empresa</span>
+                              <span className="text-xs text-gray-400">• Gerado por IA</span>
+                            </div>
+                            {showSummary ? (
+                              <ChevronUp className="h-4 w-4 text-gray-400" />
+                            ) : (
+                              <ChevronDown className="h-4 w-4 text-gray-400" />
+                            )}
+                          </button>
+                          {showSummary && (
+                            <div className="mt-3 bg-white rounded-lg p-4 border border-gray-200">
+                              <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
+                                {companyProfile.summary}
+                              </p>
+                              {companyProfile.summary_generated_at && (
+                                <p className="text-xs text-gray-400 mt-3">
+                                  Gerado em: {format(new Date(companyProfile.summary_generated_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
+                                </p>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
                       {/* Actions */}
                       <div className="flex justify-end gap-2 mt-4 pt-4 border-t border-gray-100">
                         {job.status === 'searching' && (
@@ -480,8 +524,8 @@ export default function CompanyJobs() {
                             Retomar busca
                           </Button>
                         )}
-                        {/* Manual matching trigger for jobs that need it */}
-                        {(job.status === 'pending_review' || job.status === 'paused') && (
+                        {/* TODO: Manual matching trigger - endpoint not yet implemented */}
+                        {/* {(job.status === 'pending_review' || job.status === 'paused') && (
                           <Button
                             variant="default"
                             size="sm"
@@ -491,7 +535,7 @@ export default function CompanyJobs() {
                             <Search className="h-4 w-4 mr-1" />
                             {triggerMatchingMutation.isPending ? 'Iniciando...' : 'Iniciar Busca'}
                           </Button>
-                        )}
+                        )} */}
                       </div>
                     </div>
                   </CardContent>

@@ -24,7 +24,6 @@ import {
   invitationRouter,
   affiliateRouter,
   adminRouter,
-  agentsRouter,
   batchRouter,
 } from "./routers/index";
 
@@ -45,7 +44,6 @@ export const appRouter = router({
   invitation: invitationRouter,
   affiliate: affiliateRouter,
   admin: adminRouter,
-  agents: agentsRouter,
   batch: batchRouter,
 });
 

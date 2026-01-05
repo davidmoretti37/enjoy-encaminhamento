@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * School Job Descriptions Page
  *

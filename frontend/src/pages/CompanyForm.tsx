@@ -20,18 +20,18 @@ import { toast } from "sonner";
 
 const EMPLOYMENT_TYPES = [
   { value: "clt", label: "CLT" },
-  { value: "estagio", label: "Estagio" },
+  { value: "estagio", label: "Estágio" },
   { value: "jovem_aprendiz", label: "Jovem Aprendiz" },
   { value: "pj", label: "PJ" },
-  { value: "temporario", label: "Temporario" },
+  { value: "temporario", label: "Temporário" },
 ];
 
 const URGENCY_OPTIONS = [
   { value: "imediata", label: "Imediata" },
-  { value: "7_dias", label: "Em ate 7 dias" },
-  { value: "15_dias", label: "Em ate 15 dias" },
-  { value: "30_dias", label: "Em ate 30 dias" },
-  { value: "sem_urgencia", label: "Sem urgencia" },
+  { value: "7_dias", label: "Em até 7 dias" },
+  { value: "15_dias", label: "Em até 15 dias" },
+  { value: "30_dias", label: "Em até 30 dias" },
+  { value: "sem_urgencia", label: "Sem urgência" },
 ];
 
 const GENDER_OPTIONS = [
@@ -42,14 +42,14 @@ const GENDER_OPTIONS = [
 
 const BENEFITS_OPTIONS = [
   "Vale Transporte",
-  "Vale Refeicao",
-  "Vale Alimentacao",
-  "Plano de Saude",
-  "Plano Odontologico",
+  "Vale Refeição",
+  "Vale Alimentação",
+  "Plano de Saúde",
+  "Plano Odontológico",
   "Seguro de Vida",
   "Gympass",
   "PLR",
-  "Auxilio Creche",
+  "Auxílio Creche",
   "Home Office",
 ];
 
@@ -62,20 +62,20 @@ const BRAZILIAN_STATES = [
 const INTRO_FEATURES = [
   {
     step: "Passo 1",
-    title: "Tecnologia de IA Avancada",
-    content: "Utilizamos inteligencia artificial de ponta para encontrar os melhores candidatos para sua empresa, analisando milhares de perfis em segundos.",
+    title: "Tecnologia de IA Avançada",
+    content: "Utilizamos inteligência artificial de ponta para encontrar os melhores candidatos para sua empresa, analisando milhares de perfis em segundos.",
     image: "https://images.unsplash.com/photo-1677442136019-21780ecad995?w=800&q=80",
   },
   {
     step: "Passo 2",
     title: "Equipe de Especialistas",
-    content: "Nossa equipe de recrutadores experientes faz uma triagem pessoal de cada candidato, garantindo qualidade e adequacao ao seu perfil.",
+    content: "Nossa equipe de recrutadores experientes faz uma triagem pessoal de cada candidato, garantindo qualidade e adequação ao seu perfil.",
     image: "https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=800&q=80",
   },
   {
     step: "Passo 3",
-    title: "Preco Justo e Acessivel",
-    content: "Oferecemos servicos de recrutamento de alta qualidade por um preco justo, sem taxas ocultas ou surpresas.",
+    title: "Preço Justo e Acessível",
+    content: "Oferecemos serviços de recrutamento de alta qualidade por um preço justo, sem taxas ocultas ou surpresas.",
     image: "https://images.unsplash.com/photo-1554224155-6726b3ff858f?w=800&q=80",
   },
 ];
@@ -138,7 +138,7 @@ export default function CompanyForm() {
   const submitFormMutation = trpc.outreach.submitCompanyForm.useMutation({
     onSuccess: () => {
       setSubmitted(true);
-      toast.success("Formulario enviado com sucesso!");
+      toast.success("Formulário enviado com sucesso!");
     },
     onError: (error) => {
       toast.error(`Erro ao enviar: ${error.message}`);
@@ -181,12 +181,12 @@ export default function CompanyForm() {
 
     // Validate required fields
     if (!formData.cnpj || !formData.legalName || !formData.email) {
-      toast.error("Por favor, preencha CNPJ, Razao Social e Email");
+      toast.error("Por favor, preencha CNPJ, Razão Social e Email");
       return;
     }
     if (!formData.jobTitle || !formData.compensation || !formData.mainActivities ||
         !formData.requiredSkills || !formData.educationLevel || !formData.workSchedule) {
-      toast.error("Por favor, preencha todos os campos obrigatorios da vaga");
+      toast.error("Por favor, preencha todos os campos obrigatórios da vaga");
       return;
     }
 
@@ -233,16 +233,16 @@ export default function CompanyForm() {
             <div className="mx-auto mb-4 h-16 w-16 rounded-full bg-green-100 flex items-center justify-center">
               <CheckCircle className="h-10 w-10 text-green-600" />
             </div>
-            <CardTitle className="text-2xl">Formulario Enviado!</CardTitle>
+            <CardTitle className="text-2xl">Formulário Enviado!</CardTitle>
             <CardDescription>
-              Obrigado por preencher o formulario. Seus dados foram salvos com sucesso.
+              Obrigado por preencher o formulário. Seus dados foram salvos com sucesso.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             {contractToken ? (
               <>
                 <p className="text-center text-muted-foreground">
-                  Agora voce pode assinar o contrato de parceria.
+                  Agora você pode assinar o contrato de parceria.
                 </p>
                 <div className="flex justify-center gap-3">
                   <Button onClick={() => setLocation(`/contract/${contractToken}`)}>
@@ -254,19 +254,19 @@ export default function CompanyForm() {
                     onClick={() => setLocation(`/book/${adminId}?email=${encodeURIComponent(formData.email)}`)}
                   >
                     <CalendarDays className="h-4 w-4 mr-2" />
-                    Agendar Reuniao
+                    Agendar Reunião
                   </Button>
                 </div>
               </>
             ) : (
               <>
                 <p className="text-center text-muted-foreground">
-                  Agende uma reuniao para dar continuidade ao processo.
+                  Agende uma reunião para dar continuidade ao processo.
                 </p>
                 <div className="flex justify-center">
                   <Button onClick={() => setLocation(`/book/${adminId}?email=${encodeURIComponent(formData.email)}`)}>
                     <CalendarDays className="h-4 w-4 mr-2" />
-                    Agendar Reuniao
+                    Agendar Reunião
                   </Button>
                 </div>
               </>
@@ -304,17 +304,17 @@ export default function CompanyForm() {
           <Card className="shadow-xl border-2 border-primary/20">
             <CardContent className="p-8">
               <div className="text-center space-y-4">
-                <h3 className="text-2xl font-bold">Pronto para comecar?</h3>
+                <h3 className="text-2xl font-bold">Pronto para começar?</h3>
                 <p className="text-muted-foreground">
-                  Preencha o formulario a seguir com os dados da sua empresa e da vaga que deseja preencher.
-                  Em poucos minutos, nossa equipe comecara a trabalhar para encontrar o candidato ideal para voce.
+                  Preencha o formulário a seguir com os dados da sua empresa e da vaga que deseja preencher.
+                  Em poucos minutos, nossa equipe começará a trabalhar para encontrar o candidato ideal para você.
                 </p>
                 <Button
                   size="lg"
                   className="mt-4 gap-2"
                   onClick={() => setShowIntro(false)}
                 >
-                  Comecar Cadastro
+                  Começar Cadastro
                   <ArrowRight className="h-5 w-5" />
                 </Button>
               </div>
@@ -350,16 +350,16 @@ export default function CompanyForm() {
                 Dados da Empresa
               </CardTitle>
               <CardDescription>
-                Informacoes basicas sobre sua empresa
+                Informações básicas sobre sua empresa
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="grid gap-2">
-                  <Label htmlFor="contactPerson">Contato / Responsavel</Label>
+                  <Label htmlFor="contactPerson">Contato / Responsável</Label>
                   <Input
                     id="contactPerson"
-                    placeholder="Nome do responsavel"
+                    placeholder="Nome do responsável"
                     value={formData.contactPerson}
                     onChange={(e) => setFormData({ ...formData, contactPerson: e.target.value })}
                   />
@@ -398,10 +398,10 @@ export default function CompanyForm() {
               </div>
 
               <div className="grid gap-2">
-                <Label htmlFor="legalName">Razao Social *</Label>
+                <Label htmlFor="legalName">Razão Social *</Label>
                 <Input
                   id="legalName"
-                  placeholder="Razao social completa"
+                  placeholder="Razão social completa"
                   value={formData.legalName}
                   onChange={(e) => setFormData({ ...formData, legalName: e.target.value })}
                   required
@@ -454,7 +454,7 @@ export default function CompanyForm() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="grid gap-2">
-                  <Label htmlFor="employeeCount">Quantidade de Funcionarios</Label>
+                  <Label htmlFor="employeeCount">Quantidade de Funcionários</Label>
                   <Input
                     id="employeeCount"
                     placeholder="Ex: 50"
@@ -484,10 +484,10 @@ export default function CompanyForm() {
                   />
                 </div>
                 <div className="col-span-2 grid gap-2">
-                  <Label htmlFor="address">Endereco e Numero</Label>
+                  <Label htmlFor="address">Endereço e Número</Label>
                   <Input
                     id="address"
-                    placeholder="Rua, numero"
+                    placeholder="Rua, número"
                     value={formData.address}
                     onChange={(e) => setFormData({ ...formData, address: e.target.value })}
                   />
@@ -553,7 +553,7 @@ export default function CompanyForm() {
                 Dados da Vaga
               </CardTitle>
               <CardDescription>
-                Informacoes sobre a vaga que deseja preencher
+                Informações sobre a vaga que deseja preencher
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -569,7 +569,7 @@ export default function CompanyForm() {
                   />
                 </div>
                 <div className="grid gap-2">
-                  <Label htmlFor="compensation">Remuneracao *</Label>
+                  <Label htmlFor="compensation">Remuneração *</Label>
                   <Input
                     id="compensation"
                     placeholder="Ex: R$ 2.000,00"
@@ -593,10 +593,10 @@ export default function CompanyForm() {
               </div>
 
               <div className="grid gap-2">
-                <Label htmlFor="requiredSkills">Competencias Requeridas *</Label>
+                <Label htmlFor="requiredSkills">Competências Requeridas *</Label>
                 <Textarea
                   id="requiredSkills"
-                  placeholder="Liste as competencias e habilidades necessarias..."
+                  placeholder="Liste as competências e habilidades necessárias..."
                   value={formData.requiredSkills}
                   onChange={(e) => setFormData({ ...formData, requiredSkills: e.target.value })}
                   rows={3}
@@ -624,7 +624,7 @@ export default function CompanyForm() {
                   </Select>
                 </div>
                 <div className="grid gap-2">
-                  <Label htmlFor="urgency">Urgencia</Label>
+                  <Label htmlFor="urgency">Urgência</Label>
                   <Select
                     value={formData.urgency}
                     onValueChange={(v) => setFormData({ ...formData, urgency: v })}
@@ -645,7 +645,7 @@ export default function CompanyForm() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="grid gap-2">
-                  <Label htmlFor="ageRange">Faixa Etaria</Label>
+                  <Label htmlFor="ageRange">Faixa Etária</Label>
                   <Input
                     id="ageRange"
                     placeholder="Ex: 18-30 anos"
@@ -657,7 +657,7 @@ export default function CompanyForm() {
                   <Label htmlFor="educationLevel">Escolaridade *</Label>
                   <Input
                     id="educationLevel"
-                    placeholder="Ex: Ensino Medio Completo"
+                    placeholder="Ex: Ensino Médio Completo"
                     value={formData.educationLevel}
                     onChange={(e) => setFormData({ ...formData, educationLevel: e.target.value })}
                     required
@@ -666,7 +666,7 @@ export default function CompanyForm() {
               </div>
 
               <div className="space-y-3">
-                <Label>Beneficios</Label>
+                <Label>Benefícios</Label>
                 <div className="grid grid-cols-2 gap-2">
                   {BENEFITS_OPTIONS.map((benefit) => (
                     <div key={benefit} className="flex items-center space-x-2">
@@ -685,10 +685,10 @@ export default function CompanyForm() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="grid gap-2">
-                  <Label htmlFor="workSchedule">Horario de Trabalho *</Label>
+                  <Label htmlFor="workSchedule">Horário de Trabalho *</Label>
                   <Input
                     id="workSchedule"
-                    placeholder="Ex: 08:00 as 17:00"
+                    placeholder="Ex: 08:00 às 17:00"
                     value={formData.workSchedule}
                     onChange={(e) => setFormData({ ...formData, workSchedule: e.target.value })}
                     required
@@ -706,7 +706,7 @@ export default function CompanyForm() {
               </div>
 
               <div className="grid gap-2 max-w-[200px]">
-                <Label htmlFor="genderPreference">Genero</Label>
+                <Label htmlFor="genderPreference">Gênero</Label>
                 <Select
                   value={formData.genderPreference}
                   onValueChange={(v) => setFormData({ ...formData, genderPreference: v })}
@@ -725,10 +725,10 @@ export default function CompanyForm() {
               </div>
 
               <div className="grid gap-2">
-                <Label htmlFor="notes">Observacoes Gerais</Label>
+                <Label htmlFor="notes">Observações Gerais</Label>
                 <Textarea
                   id="notes"
-                  placeholder="Informacoes adicionais sobre a vaga..."
+                  placeholder="Informações adicionais sobre a vaga..."
                   value={formData.notes}
                   onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
                   rows={4}
@@ -748,7 +748,7 @@ export default function CompanyForm() {
               ) : (
                 <>
                   <CheckCircle className="h-4 w-4 mr-2" />
-                  Enviar Formulario
+                  Enviar Formulário
                 </>
               )}
             </Button>

@@ -72,8 +72,16 @@ function Calendar({
           defaultClassNames.dropdown_root
         ),
         dropdown: cn(
-          "absolute bg-popover inset-0 opacity-0",
+          "absolute inset-0 opacity-0 cursor-pointer",
           defaultClassNames.dropdown
+        ),
+        months_dropdown: cn(
+          "max-h-[180px] overflow-y-auto",
+          defaultClassNames.months_dropdown
+        ),
+        years_dropdown: cn(
+          "max-h-[180px] overflow-y-auto",
+          defaultClassNames.years_dropdown
         ),
         caption_label: cn(
           "select-none font-medium",

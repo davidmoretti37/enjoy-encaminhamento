@@ -9,6 +9,7 @@ import * as db from "../db";
 import { createZoomMeeting, isZoomConfigured } from "../integrations/zoom";
 import { createGoogleMeeting, isGoogleMeetConfigured } from "../integrations/googleMeet";
 import { ENV } from "../_core/env";
+import { generateCompanySummary } from "../services/ai/summarizer";
 
 export const outreachRouter = router({
   // Send outreach email (available to schools and affiliates)
@@ -940,6 +941,39 @@ export const outreachRouter = router({
         } catch (jobError) {
           console.error("Failed to create job from form data:", jobError);
         }
+      }
+
+      // Generate company summary in background (fire and forget)
+      if (result.companyId) {
+        generateCompanySummary({
+          companyName,
+          cnpj: formData?.cnpj,
+          industry: undefined,
+          companySize: formData?.employee_count,
+          website: formData?.website,
+          description: undefined,
+          city: formData?.city,
+          state: formData?.state,
+          jobTitle: formData?.job_title,
+          contractType: formData?.employment_type,
+          workType: undefined,
+          compensation: formData?.compensation,
+          mainActivities: formData?.main_activities,
+          requiredSkills: formData?.required_skills,
+          benefits: formData?.benefits,
+          educationLevel: formData?.education_level,
+          notes: formData?.notes,
+        }).then(async (summary) => {
+          if (summary && result.companyId) {
+            await db.updateCompany(result.companyId, {
+              summary,
+              summary_generated_at: new Date().toISOString(),
+            });
+            console.log(`Generated summary for company ${result.companyId}`);
+          }
+        }).catch((err) => {
+          console.error('Failed to generate company summary:', err);
+        });
       }
 
       return { success: true, email: result.email };

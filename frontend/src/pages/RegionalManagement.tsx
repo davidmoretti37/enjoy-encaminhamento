@@ -87,7 +87,7 @@ export default function RegionalManagement() {
         <Card className="max-w-md">
           <CardHeader>
             <CardTitle>Acesso Negado</CardTitle>
-            <CardDescription>Voce precisa ser um administrador para acessar esta pagina.</CardDescription>
+            <CardDescription>Você precisa ser um administrador para acessar esta página.</CardDescription>
           </CardHeader>
         </Card>
       </div>

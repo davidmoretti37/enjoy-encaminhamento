@@ -162,7 +162,7 @@ export default function SettingsPage() {
 
   const handleSaveHtml = () => {
     if (!editorContent.trim()) {
-      toast.error("O contrato nao pode estar vazio");
+      toast.error("O contrato não pode estar vazio");
       return;
     }
     setIsSavingHtml(true);
@@ -202,7 +202,7 @@ export default function SettingsPage() {
               <User className="h-5 w-5" />
               Perfil
             </CardTitle>
-            <CardDescription>Informacoes da sua conta</CardDescription>
+            <CardDescription>Informações da sua conta</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex items-center gap-3">
@@ -348,7 +348,7 @@ export default function SettingsPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <LogOut className="h-5 w-5" />
-              Sessao
+              Sessão
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -369,7 +369,7 @@ export default function SettingsPage() {
             <AlertDialogHeader>
               <AlertDialogTitle>Remover Contrato?</AlertDialogTitle>
               <AlertDialogDescription>
-                Esta acao nao pode ser desfeita. O contrato sera removido permanentemente.
+                Esta ação não pode ser desfeita. O contrato será removido permanentemente.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
@@ -394,7 +394,7 @@ export default function SettingsPage() {
             <DialogHeader>
               <DialogTitle>Criar Contrato</DialogTitle>
               <DialogDescription>
-                Escreva o texto do contrato. Use a formatacao para estruturar o documento.
+                Escreva o texto do contrato. Use a formatação para estruturar o documento.
               </DialogDescription>
             </DialogHeader>
             <div className="min-h-[400px] border rounded-md">
