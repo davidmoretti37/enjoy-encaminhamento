@@ -28,9 +28,11 @@ export default function PersonaCard({
       onClick={onClick}
       className={cn(
         "relative w-full p-8 md:p-10 rounded-3xl border-2 bg-white/80 backdrop-blur-sm text-left transition-colors cursor-pointer",
-        "hover:border-primary/50",
+        isCompany ? "hover:border-[#0A2342]/50" : "hover:border-[#FF6B35]/50",
         selected
-          ? "border-primary ring-2 ring-primary/20"
+          ? isCompany
+            ? "border-[#0A2342] ring-2 ring-[#0A2342]/20"
+            : "border-[#FF6B35] ring-2 ring-[#FF6B35]/20"
           : "border-border/50"
       )}
       whileHover={{ scale: 1.02, y: -4 }}
@@ -45,8 +47,8 @@ export default function PersonaCard({
           "absolute inset-0 rounded-3xl opacity-0 transition-opacity duration-300",
           selected ? "opacity-100" : "group-hover:opacity-50",
           isCompany
-            ? "bg-gradient-to-br from-blue-500/10 to-indigo-500/10"
-            : "bg-gradient-to-br from-emerald-500/10 to-teal-500/10"
+            ? "bg-gradient-to-br from-[#0A2342]/10 to-[#0A2342]/5"
+            : "bg-gradient-to-br from-[#FF6B35]/10 to-[#FF6B35]/5"
         )}
       />
 
@@ -56,8 +58,8 @@ export default function PersonaCard({
           className={cn(
             "h-16 w-16 rounded-2xl flex items-center justify-center mb-6",
             isCompany
-              ? "bg-gradient-to-br from-blue-500 to-indigo-600"
-              : "bg-gradient-to-br from-emerald-500 to-teal-600"
+              ? "bg-[#0A2342]"
+              : "bg-[#FF6B35]"
           )}
         >
           <Icon className="h-8 w-8 text-white" />
@@ -78,8 +80,8 @@ export default function PersonaCard({
           className={cn(
             "inline-flex items-center gap-2 px-6 py-3 rounded-xl font-semibold text-white transition-all",
             isCompany
-              ? "bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700"
-              : "bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700"
+              ? "bg-[#0A2342] hover:bg-[#0A2342]/90"
+              : "bg-[#FF6B35] hover:bg-[#FF6B35]/90"
           )}
         >
           {ctaText}
@@ -111,8 +113,8 @@ export default function PersonaCard({
             className={cn(
               "h-8 w-8 rounded-full flex items-center justify-center",
               isCompany
-                ? "bg-gradient-to-br from-blue-500 to-indigo-600"
-                : "bg-gradient-to-br from-emerald-500 to-teal-600"
+                ? "bg-[#0A2342]"
+                : "bg-[#FF6B35]"
             )}
           >
             <svg

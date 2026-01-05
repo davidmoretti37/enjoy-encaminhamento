@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Poppins:wght@600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap');
 
 @import "tailwindcss";
 @import "tw-animate-css";
@@ -121,14 +121,13 @@
   }
   body {
     @apply bg-background text-foreground;
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    font-family: 'Montserrat', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
-  
+
   h1, h2, h3, h4, h5, h6 {
-    font-family: 'Inter', sans-serif;
+    font-family: 'Montserrat', sans-serif;
     font-weight: 600;
     letter-spacing: -0.01em;
   }
@@ -184,18 +183,36 @@
     min-width: 0;
   }
   
-  /* Custom gradient utilities */
+  /* ANEC Brand Colors */
+  /* Navy Blue: #0A2342 | Orange: #FF6B35 */
+
   .text-gradient {
     @apply bg-clip-text text-transparent;
-    background-image: linear-gradient(135deg, oklch(0.623 0.214 259.815), oklch(0.7 0.25 280));
+    background-image: linear-gradient(135deg, #0A2342, #FF6B35);
   }
-  
+
   .bg-gradient-brand {
-    background-image: linear-gradient(135deg, oklch(0.623 0.214 259.815), oklch(0.7 0.25 280));
+    background-image: linear-gradient(135deg, #0A2342, #FF6B35);
   }
-  
+
+  .bg-anec-navy {
+    background-color: #0A2342;
+  }
+
+  .bg-anec-orange {
+    background-color: #FF6B35;
+  }
+
+  .text-anec-navy {
+    color: #0A2342;
+  }
+
+  .text-anec-orange {
+    color: #FF6B35;
+  }
+
   .shadow-glow {
-    box-shadow: 0 10px 40px -10px oklch(0.623 0.214 259.815 / 0.15);
+    box-shadow: 0 10px 40px -10px rgba(10, 35, 66, 0.25);
   }
   
   .shadow-soft {

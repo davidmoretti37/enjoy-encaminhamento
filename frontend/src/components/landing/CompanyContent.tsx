@@ -72,17 +72,17 @@ export default function CompanyContent() {
       <section className="py-20 bg-slate-50/50">
         <div className="container mx-auto px-4">
           <motion.div variants={itemVariants} className="text-center mb-16">
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-blue-100 text-blue-700 mb-6">
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[#0A2342]/10 text-[#0A2342] mb-6">
               <Sparkles className="h-4 w-4" />
               <span className="text-sm font-medium">Tecnologia de Ponta</span>
             </div>
             <h2 className="text-3xl md:text-4xl font-bold text-slate-900 mb-4">
-              Como Nossa <span className="text-gradient">IA</span> Encontra os
-              Melhores Candidatos
+              Como a <span className="text-gradient">ANEC</span> Conecta Você
+              aos Melhores Talentos
             </h2>
             <p className="text-lg text-slate-600 max-w-2xl mx-auto">
-              Processo automatizado e inteligente que economiza seu tempo e
-              garante qualidade
+              Processo integrado que facilita o encontro entre sua empresa e
+              profissionais qualificados em todo o Brasil
             </p>
           </motion.div>
 
@@ -126,10 +126,10 @@ export default function CompanyContent() {
                 variants={getStepCardVariants(index)}
                 className="relative"
               >
-                <Card className="h-full border-2 border-slate-200 hover:border-blue-300 transition-colors">
+                <Card className="h-full border-2 border-slate-200 hover:border-[#0A2342]/50 transition-colors">
                   <CardContent className="p-6 text-center">
                     <div className="relative mx-auto mb-4">
-                      <div className="h-16 w-16 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center mx-auto shadow-lg">
+                      <div className="h-16 w-16 rounded-2xl bg-[#0A2342] flex items-center justify-center mx-auto shadow-lg">
                         <item.icon className="h-8 w-8 text-white" />
                       </div>
                       <div className="absolute -top-2 -right-2 h-7 w-7 rounded-full bg-slate-900 text-white text-sm font-bold flex items-center justify-center">
@@ -174,27 +174,27 @@ export default function CompanyContent() {
           <div className="grid md:grid-cols-3 gap-8 max-w-4xl mx-auto">
             {[
               {
-                type: "Estagio",
-                description: "Contratos de estagio para estudantes",
+                type: "Estágio",
+                description: "Contratos de estágio para estudantes",
                 features: [
                   "Matching com IA",
-                  "Gestao de contratos",
+                  "Gestão de contratos",
                   "Feedbacks mensais",
                   "Suporte dedicado",
                 ],
-                color: "from-emerald-500 to-teal-600",
+                color: "bg-[#FF6B35]",
               },
               {
                 type: "CLT",
                 description: "Contratos de trabalho permanente",
                 features: [
                   "Matching com IA",
-                  "Gestao de contratos",
+                  "Gestão de contratos",
                   "Feedbacks mensais",
-                  "Suporte prioritario",
-                  "Analytics avancado",
+                  "Suporte prioritário",
+                  "Analytics avançado",
                 ],
-                color: "from-blue-500 to-indigo-600",
+                color: "bg-[#0A2342]",
                 popular: true,
               },
               {
@@ -202,31 +202,31 @@ export default function CompanyContent() {
                 description: "Programa jovem aprendiz",
                 features: [
                   "Matching com IA",
-                  "Gestao de contratos",
+                  "Gestão de contratos",
                   "Feedbacks mensais",
                   "Conformidade legal",
                 ],
-                color: "from-violet-500 to-purple-600",
+                color: "bg-[#FF6B35]",
               },
             ].map((plan, index) => (
               <motion.div key={index} variants={itemVariants}>
                 <Card
                   className={`relative h-full border-2 ${
                     plan.popular
-                      ? "border-blue-500 shadow-xl"
+                      ? "border-[#0A2342] shadow-xl"
                       : "border-slate-200"
                   }`}
                 >
                   {plan.popular && (
                     <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                      <span className="bg-gradient-to-r from-blue-500 to-indigo-600 text-white text-xs font-bold px-4 py-1 rounded-full">
+                      <span className="bg-[#0A2342] text-white text-xs font-bold px-4 py-1 rounded-full">
                         Mais Popular
                       </span>
                     </div>
                   )}
                   <CardContent className="p-6">
                     <div
-                      className={`h-12 w-12 rounded-xl bg-gradient-to-br ${plan.color} flex items-center justify-center mb-4`}
+                      className={`h-12 w-12 rounded-xl ${plan.color} flex items-center justify-center mb-4`}
                     >
                       <FileText className="h-6 w-6 text-white" />
                     </div>
@@ -239,7 +239,7 @@ export default function CompanyContent() {
                     <ul className="space-y-3 mb-6">
                       {plan.features.map((feature, i) => (
                         <li key={i} className="flex items-center gap-2 text-sm">
-                          <CheckCircle2 className="h-4 w-4 text-emerald-500 flex-shrink-0" />
+                          <CheckCircle2 className="h-4 w-4 text-[#FF6B35] flex-shrink-0" />
                           <span className="text-slate-700">{feature}</span>
                         </li>
                       ))}
@@ -262,28 +262,28 @@ export default function CompanyContent() {
             <motion.div variants={itemVariants}>
               <h2 className="text-3xl md:text-4xl font-bold text-slate-900 mb-6">
                 Por que Empresas <span className="text-gradient">Confiam</span>{" "}
-                em Nos
+                na ANEC
               </h2>
               <p className="text-lg text-slate-600 mb-8">
-                Transforme seu processo de recrutamento com tecnologia de ponta
-                e suporte especializado
+                Somos uma agência integradora nacional, conectando sua empresa
+                aos melhores profissionais com credibilidade e eficiência
               </p>
 
               <div className="space-y-4">
                 {[
-                  "Reduza tempo de contratacao em ate 70%",
-                  "Matching preciso com IA avancada",
-                  "Gestao completa de contratos e pagamentos",
-                  "Feedbacks automatizados mensais",
-                  "Conformidade legal garantida",
-                  "Suporte dedicado e treinamento",
+                  "Conexão direta com talentos qualificados em todo o Brasil",
+                  "Integração completa entre sua empresa e candidatos",
+                  "Gestão profissional de contratos e documentação",
+                  "Acompanhamento contínuo do desenvolvimento",
+                  "Conformidade legal e trabalhista garantida",
+                  "Suporte dedicado da nossa equipe nacional",
                 ].map((benefit, index) => (
                   <motion.div
                     key={index}
                     variants={itemVariants}
                     className="flex items-start gap-3"
                   >
-                    <CheckCircle2 className="h-6 w-6 text-emerald-500 flex-shrink-0 mt-0.5" />
+                    <CheckCircle2 className="h-6 w-6 text-[#FF6B35] flex-shrink-0 mt-0.5" />
                     <span className="text-lg text-slate-700">{benefit}</span>
                   </motion.div>
                 ))}
@@ -296,26 +296,26 @@ export default function CompanyContent() {
             >
               <div className="bg-white rounded-2xl border-2 border-slate-200 p-8 shadow-xl">
                 <div className="space-y-6">
-                  <div className="flex items-center justify-between p-4 bg-emerald-50 rounded-xl">
+                  <div className="flex items-center justify-between p-4 bg-[#FF6B35]/10 rounded-xl">
                     <div className="flex items-center gap-3">
-                      <div className="h-10 w-10 rounded-lg bg-emerald-500 flex items-center justify-center">
+                      <div className="h-10 w-10 rounded-lg bg-[#FF6B35] flex items-center justify-center">
                         <Search className="h-5 w-5 text-white" />
                       </div>
                       <div>
                         <div className="font-semibold text-slate-900">
                           Vagas Preenchidas
                         </div>
-                        <div className="text-sm text-slate-600">Este mes</div>
+                        <div className="text-sm text-slate-600">Este mês</div>
                       </div>
                     </div>
-                    <span className="text-2xl font-bold text-emerald-600">
+                    <span className="text-2xl font-bold text-[#FF6B35]">
                       +47
                     </span>
                   </div>
 
-                  <div className="flex items-center justify-between p-4 bg-blue-50 rounded-xl">
+                  <div className="flex items-center justify-between p-4 bg-[#0A2342]/10 rounded-xl">
                     <div className="flex items-center gap-3">
-                      <div className="h-10 w-10 rounded-lg bg-blue-500 flex items-center justify-center">
+                      <div className="h-10 w-10 rounded-lg bg-[#0A2342] flex items-center justify-center">
                         <Users className="h-5 w-5 text-white" />
                       </div>
                       <div>
@@ -327,32 +327,32 @@ export default function CompanyContent() {
                         </div>
                       </div>
                     </div>
-                    <span className="text-2xl font-bold text-blue-600">
+                    <span className="text-2xl font-bold text-[#0A2342]">
                       1,247
                     </span>
                   </div>
 
-                  <div className="flex items-center justify-between p-4 bg-violet-50 rounded-xl">
+                  <div className="flex items-center justify-between p-4 bg-[#FF6B35]/10 rounded-xl">
                     <div className="flex items-center gap-3">
-                      <div className="h-10 w-10 rounded-lg bg-violet-500 flex items-center justify-center">
+                      <div className="h-10 w-10 rounded-lg bg-[#FF6B35] flex items-center justify-center">
                         <Calendar className="h-5 w-5 text-white" />
                       </div>
                       <div>
                         <div className="font-semibold text-slate-900">
-                          Tempo Medio
+                          Tempo Médio
                         </div>
                         <div className="text-sm text-slate-600">
                           Para contratar
                         </div>
                       </div>
                     </div>
-                    <span className="text-2xl font-bold text-violet-600">
+                    <span className="text-2xl font-bold text-[#FF6B35]">
                       5 dias
                     </span>
                   </div>
                 </div>
               </div>
-              <div className="absolute -inset-4 bg-gradient-to-r from-blue-500/20 to-indigo-500/20 rounded-3xl blur-2xl -z-10" />
+              <div className="absolute -inset-4 bg-gradient-to-r from-[#0A2342]/20 to-[#FF6B35]/20 rounded-3xl blur-2xl -z-10" />
             </motion.div>
           </div>
         </div>
@@ -363,15 +363,15 @@ export default function CompanyContent() {
         <div className="container mx-auto px-4">
           <motion.div
             variants={itemVariants}
-            className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-blue-600 to-indigo-700 p-12 md:p-16 text-center"
+            className="relative overflow-hidden rounded-3xl bg-[#0A2342] p-12 md:p-16 text-center"
           >
             <div className="relative z-10">
               <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">
-                Pronto para encontrar os melhores talentos?
+                Pronto para conectar sua empresa aos melhores talentos?
               </h2>
               <p className="text-white/90 text-lg mb-8 max-w-2xl mx-auto">
-                Junte-se a centenas de empresas que ja transformaram seu
-                processo de contratacao
+                Junte-se às empresas que já contam com a ANEC para construir
+                equipes de sucesso em todo o Brasil
               </p>
               <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
                 <Link href="/login?tab=signup&role=company">

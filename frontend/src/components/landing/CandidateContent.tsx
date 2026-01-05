@@ -71,19 +71,19 @@ export default function CandidateContent() {
       variants={containerVariants}
     >
       {/* How It Works Section */}
-      <section className="py-20 bg-emerald-50/30">
+      <section className="py-20 bg-[#FF6B35]/5">
         <div className="container mx-auto px-4">
           <motion.div variants={itemVariants} className="text-center mb-16">
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-emerald-100 text-emerald-700 mb-6">
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[#FF6B35]/10 text-[#FF6B35] mb-6">
               <Sparkles className="h-4 w-4" />
               <span className="text-sm font-medium">Simples e Gratuito</span>
             </div>
             <h2 className="text-3xl md:text-4xl font-bold text-slate-900 mb-4">
-              Como Funciona <span className="text-gradient">Para Você</span>
+              Como a <span className="text-gradient">ANEC</span> Impulsiona Sua Carreira
             </h2>
             <p className="text-lg text-slate-600 max-w-2xl mx-auto">
-              Cadastre-se gratuitamente e deixe nossa tecnologia trabalhar por
-              você
+              Cadastre-se gratuitamente e conecte-se com oportunidades de emprego
+              em empresas parceiras em todo o Brasil
             </p>
           </motion.div>
 
@@ -94,28 +94,28 @@ export default function CandidateContent() {
                 icon: UserPlus,
                 title: "Cadastre seu Perfil",
                 description:
-                  "Complete suas informações, habilidades e experiências",
+                  "Complete suas informações, habilidades e objetivos de carreira",
               },
               {
                 step: "2",
                 icon: Brain,
-                title: "IA Encontra Vagas",
+                title: "ANEC Conecta Você",
                 description:
-                  "Algoritmos combinam seu perfil com oportunidades ideais",
+                  "Nosso sistema integra seu perfil com oportunidades ideais",
               },
               {
                 step: "3",
                 icon: Bell,
-                title: "Seja Selecionado",
+                title: "Seja Descoberto",
                 description:
-                  "Empresas visualizam seu perfil e entram em contato",
+                  "Empresas parceiras visualizam seu perfil e iniciam contato",
               },
               {
                 step: "4",
                 icon: Trophy,
-                title: "Conquiste o Emprego",
+                title: "Construa sua Carreira",
                 description:
-                  "Acompanhe o processo até a contratação",
+                  "Desenvolva-se profissionalmente com nosso acompanhamento",
               },
             ].map((item, index) => (
               <motion.div
@@ -127,10 +127,10 @@ export default function CandidateContent() {
                 variants={getStepCardVariants(index)}
                 className="relative"
               >
-                <Card className="h-full border-2 border-slate-200 hover:border-emerald-300 transition-colors">
+                <Card className="h-full border-2 border-slate-200 hover:border-[#FF6B35]/50 transition-colors">
                   <CardContent className="p-6 text-center">
                     <div className="relative mx-auto mb-4">
-                      <div className="h-16 w-16 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center mx-auto shadow-lg">
+                      <div className="h-16 w-16 rounded-2xl bg-[#FF6B35] flex items-center justify-center mx-auto shadow-lg">
                         <item.icon className="h-8 w-8 text-white" />
                       </div>
                       <div className="absolute -top-2 -right-2 h-7 w-7 rounded-full bg-slate-900 text-white text-sm font-bold flex items-center justify-center">
@@ -168,7 +168,7 @@ export default function CandidateContent() {
               <div className="bg-white rounded-2xl border-2 border-slate-200 p-8 shadow-xl">
                 {/* Free badge */}
                 <div className="flex items-center justify-center mb-8">
-                  <div className="inline-flex items-center gap-2 px-6 py-3 rounded-full bg-gradient-to-r from-emerald-500 to-teal-600 text-white">
+                  <div className="inline-flex items-center gap-2 px-6 py-3 rounded-full bg-[#FF6B35] text-white">
                     <Gift className="h-5 w-5" />
                     <span className="font-bold text-lg">100% Gratuito</span>
                   </div>
@@ -201,8 +201,8 @@ export default function CandidateContent() {
                       key={index}
                       className="flex items-start gap-4 p-4 rounded-xl hover:bg-slate-50 transition-colors"
                     >
-                      <div className="h-10 w-10 rounded-lg bg-emerald-100 flex items-center justify-center flex-shrink-0">
-                        <item.icon className="h-5 w-5 text-emerald-600" />
+                      <div className="h-10 w-10 rounded-lg bg-[#FF6B35]/10 flex items-center justify-center flex-shrink-0">
+                        <item.icon className="h-5 w-5 text-[#FF6B35]" />
                       </div>
                       <div>
                         <h4 className="font-semibold text-slate-900">
@@ -216,7 +216,7 @@ export default function CandidateContent() {
                   ))}
                 </div>
               </div>
-              <div className="absolute -inset-4 bg-gradient-to-r from-emerald-500/20 to-teal-500/20 rounded-3xl blur-2xl -z-10" />
+              <div className="absolute -inset-4 bg-gradient-to-r from-[#FF6B35]/20 to-[#FF6B35]/10 rounded-3xl blur-2xl -z-10" />
             </motion.div>
 
             <motion.div variants={itemVariants} className="order-1 lg:order-2">
@@ -224,25 +224,25 @@ export default function CandidateContent() {
                 Sua Carreira <span className="text-gradient">Começa Aqui</span>
               </h2>
               <p className="text-lg text-slate-600 mb-8">
-                Cadastre-se gratuitamente e tenha acesso a oportunidades
-                exclusivas em empresas parceiras
+                A ANEC conecta você com oportunidades de crescimento profissional
+                em empresas de todo o Brasil
               </p>
 
               <div className="space-y-4">
                 {[
-                  "Acesso a vagas exclusivas de empresas parceiras",
-                  "Matching automático com seu perfil",
-                  "Acompanhamento em tempo real das candidaturas",
-                  "Feedback sobre suas aplicações",
+                  "Conexão direta com empresas parceiras em âmbito nacional",
+                  "Oportunidades alinhadas ao seu perfil e objetivos",
+                  "Acompanhamento do seu desenvolvimento profissional",
+                  "Suporte para construir uma carreira sólida",
                   "100% gratuito para candidatos",
-                  "Suporte durante todo o processo",
+                  "Integração completa durante todo o processo",
                 ].map((benefit, index) => (
                   <motion.div
                     key={index}
                     variants={itemVariants}
                     className="flex items-start gap-3"
                   >
-                    <CheckCircle2 className="h-6 w-6 text-emerald-500 flex-shrink-0 mt-0.5" />
+                    <CheckCircle2 className="h-6 w-6 text-[#FF6B35] flex-shrink-0 mt-0.5" />
                     <span className="text-lg text-slate-700">{benefit}</span>
                   </motion.div>
                 ))}
@@ -253,19 +253,19 @@ export default function CandidateContent() {
       </section>
 
       {/* CTA Section */}
-      <section className="py-20 bg-emerald-50/30">
+      <section className="py-20 bg-[#FF6B35]/5">
         <div className="container mx-auto px-4">
           <motion.div
             variants={itemVariants}
-            className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-emerald-600 to-teal-700 p-12 md:p-16 text-center"
+            className="relative overflow-hidden rounded-3xl bg-[#FF6B35] p-12 md:p-16 text-center"
           >
             <div className="relative z-10">
               <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">
-                Comece sua jornada profissional hoje
+                Comece a construir sua carreira hoje
               </h2>
               <p className="text-white/90 text-lg mb-8 max-w-2xl mx-auto">
-                Milhares de candidatos já encontraram oportunidades incríveis.
-                Você pode ser o próximo!
+                Milhares de profissionais já se conectaram com oportunidades através da ANEC.
+                Faça parte dessa rede nacional de talentos!
               </p>
               <Link href="/login?tab=signup&role=candidate">
                 <Button

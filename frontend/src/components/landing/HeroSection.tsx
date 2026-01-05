@@ -1,7 +1,6 @@
 import { Building2, User } from "lucide-react";
 import PersonaCard from "./PersonaCard";
-import { APP_TITLE } from "@/const";
-import { Briefcase } from "lucide-react";
+import { APP_TITLE, APP_LOGO } from "@/const";
 import { motion } from "motion/react";
 
 interface HeroSectionProps {
@@ -15,11 +14,11 @@ export default function HeroSection({
 }: HeroSectionProps) {
   return (
     <section className="relative min-h-screen flex flex-col items-center justify-center py-20 px-4 overflow-hidden">
-      {/* Background gradients */}
-      <div className="absolute inset-0 bg-gradient-to-br from-slate-50 via-white to-slate-50" />
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,oklch(0.623_0.214_259.815_/_0.08),transparent_50%)]" />
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_80%,oklch(0.7_0.25_280_/_0.06),transparent_50%)]" />
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,oklch(0.6_0.2_160_/_0.04),transparent_60%)]" />
+      {/* Background gradients - ANEC colors */}
+      <div className="absolute inset-0 bg-gradient-to-br from-slate-50 via-white to-orange-50/30" />
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(10,35,66,0.06),transparent_50%)]" />
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_80%,rgba(255,107,53,0.08),transparent_50%)]" />
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(10,35,66,0.03),transparent_60%)]" />
 
       <div className="relative z-10 w-full max-w-5xl mx-auto">
         {/* Logo and title */}
@@ -29,19 +28,24 @@ export default function HeroSection({
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5 }}
         >
-          <div className="flex items-center justify-center gap-3 mb-6">
-            <div className="h-12 w-12 rounded-xl bg-gradient-brand flex items-center justify-center shadow-glow">
-              <Briefcase className="h-6 w-6 text-white" />
+          <div className="flex flex-col items-center justify-center gap-4 mb-8">
+            <img
+              src={APP_LOGO}
+              alt="ANEC Logo"
+              className="h-24 md:h-32 w-auto"
+            />
+            <div className="text-center">
+              <span className="text-3xl md:text-4xl font-bold text-anec-navy">{APP_TITLE}</span>
+              <p className="text-sm md:text-base text-gray-500 mt-1">Agência Nacional de Emprego e Carreira</p>
             </div>
-            <span className="text-3xl font-bold text-gradient">{APP_TITLE}</span>
           </div>
-          <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-slate-900 mb-4">
-            Conectamos <span className="text-gradient">Talentos</span> e{" "}
-            <span className="text-gradient">Oportunidades</span>
+          <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-anec-navy mb-4">
+            Conectando <span className="text-gradient">Talentos</span> a{" "}
+            <span className="text-gradient">Empresas</span>
           </h1>
-          <p className="text-lg md:text-xl text-slate-600 max-w-2xl mx-auto">
-            Plataforma inteligente de recrutamento com IA para encontrar a
-            combinacao perfeita entre empresas e candidatos
+          <p className="text-lg md:text-xl text-gray-600 max-w-2xl mx-auto">
+            Agência integradora que facilita o encontro entre profissionais qualificados
+            e oportunidades de emprego, construindo carreiras sólidas em todo o Brasil
           </p>
         </motion.div>
 

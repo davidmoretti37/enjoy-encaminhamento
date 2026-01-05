@@ -1,19 +1,20 @@
-import { Briefcase } from "lucide-react";
-import { APP_TITLE } from "@/const";
+import { APP_TITLE, APP_LOGO } from "@/const";
 
 export default function LandingFooter() {
   return (
-    <footer className="border-t border-border py-12 bg-slate-50/50">
+    <footer className="border-t border-border py-12 bg-[#F5F5F5]">
       <div className="container mx-auto px-4">
         <div className="grid md:grid-cols-4 gap-8">
           <div>
-            <div className="flex items-center space-x-2 mb-4">
-              <Briefcase className="h-6 w-6 text-primary" />
-              <span className="text-lg font-bold">{APP_TITLE}</span>
+            <div className="flex items-center space-x-3 mb-4">
+              <img src={APP_LOGO} alt="ANEC Logo" className="h-12 w-auto" />
+              <span className="text-lg font-bold text-[#0A2342]">{APP_TITLE}</span>
             </div>
+            <p className="text-sm text-[#0A2342]/70 font-medium mb-2">
+              Conectando Talentos • Construindo Carreiras
+            </p>
             <p className="text-sm text-muted-foreground">
-              Plataforma completa para gestao de recrutamento e contratos de
-              trabalho.
+              Agência Nacional de Emprego e Carreira
             </p>
           </div>
 
