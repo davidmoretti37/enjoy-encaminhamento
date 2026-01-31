@@ -62,7 +62,7 @@ export async function getEmailOutreachHistory(
 export async function getCompanyFullHistory(
   adminId: string,
   companyEmail: string,
-  schoolId?: string
+  agencyId?: string
 ): Promise<{
   meeting: any;
   form: any;
@@ -71,7 +71,7 @@ export async function getCompanyFullHistory(
   contracts: any[];
   jobs: any[];
   timeline: { date: string; event: string; type: string; details?: string }[];
-  schoolContract: { type: string; pdfUrl?: string | null; html?: string | null } | null;
+  agencyContract: { type: string; pdfUrl?: string | null; html?: string | null } | null;
   phoneNumbers: { label: string; phone_number: string }[];
   companyEmails: { label: string; email: string; is_primary: boolean }[];
 }> {
@@ -88,16 +88,16 @@ export async function getCompanyFullHistory(
 
   meeting = meetingByAdmin;
 
-  if (!meeting && schoolId) {
-    const { data: meetingBySchool } = await supabaseAdmin
+  if (!meeting && agencyId) {
+    const { data: meetingByAgency } = await supabaseAdmin
       .from("scheduled_meetings")
       .select("*")
-      .eq("school_id", schoolId)
+      .eq("agency_id", agencyId)
       .eq("company_email", companyEmail)
       .order("created_at", { ascending: false })
       .limit(1)
       .single();
-    meeting = meetingBySchool;
+    meeting = meetingByAgency;
   }
 
   const { data: form } = await supabaseAdmin
@@ -234,25 +234,25 @@ export async function getCompanyFullHistory(
 
   timeline.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
-  let schoolContract = null;
-  let schoolIdToUse = meeting?.school_id;
+  let agencyContract = null;
+  let agencyIdToUse = meeting?.agency_id;
 
-  if (!schoolIdToUse) {
-    schoolIdToUse = await getAdminSchoolContext(adminId);
+  if (!agencyIdToUse) {
+    agencyIdToUse = await getAdminAgencyContext(adminId);
   }
 
-  if (schoolIdToUse) {
-    const { data: school } = await supabaseAdmin
-      .from("schools")
+  if (agencyIdToUse) {
+    const { data: agency } = await supabaseAdmin
+      .from("agencies")
       .select("contract_type, contract_pdf_url, contract_html")
-      .eq("id", schoolIdToUse)
+      .eq("id", agencyIdToUse)
       .single();
 
-    if (school?.contract_type) {
-      schoolContract = {
-        type: school.contract_type,
-        pdfUrl: school.contract_pdf_url,
-        html: school.contract_html,
+    if (agency?.contract_type) {
+      agencyContract = {
+        type: agency.contract_type,
+        pdfUrl: agency.contract_pdf_url,
+        html: agency.contract_html,
       };
     }
   }
@@ -265,7 +265,7 @@ export async function getCompanyFullHistory(
     contracts,
     jobs,
     timeline,
-    schoolContract,
+    agencyContract,
     phoneNumbers,
     companyEmails,
   };
@@ -428,7 +428,7 @@ export async function deleteCompanyForm(formId: string): Promise<void> {
 
 export async function getCompanyFormsByAdmin(
   adminId: string,
-  schoolId?: string
+  agencyId?: string
 ): Promise<any[]> {
   let query = supabaseAdmin
     .from("company_forms")
@@ -436,8 +436,8 @@ export async function getCompanyFormsByAdmin(
     .eq("admin_id", adminId)
     .order("created_at", { ascending: false });
 
-  if (schoolId) {
-    query = query.eq("school_id", schoolId);
+  if (agencyId) {
+    query = query.eq("agency_id", agencyId);
   }
 
   const { data, error } = await query;
@@ -452,15 +452,15 @@ export async function getCompanyFormsByAdmin(
 
 // ============ Admin Availability ============
 
-export async function getAdminAvailability(adminId: string, schoolId?: string): Promise<any[]> {
+export async function getAdminAvailability(adminId: string, agencyId?: string): Promise<any[]> {
   let query = supabaseAdmin
     .from("admin_availability")
     .select("*")
     .eq("admin_id", adminId)
     .order("day_of_week", { ascending: true });
 
-  if (schoolId) {
-    query = query.eq("school_id", schoolId);
+  if (agencyId) {
+    query = query.eq("agency_id", agencyId);
   }
 
   const { data, error } = await query;
@@ -475,7 +475,7 @@ export async function getAdminAvailability(adminId: string, schoolId?: string): 
 
 export async function createAdminAvailability(input: {
   adminId: string;
-  schoolId?: string;
+  agencyId?: string;
   dayOfWeek?: number;
   specificDate?: string;
   startTime: string;
@@ -487,7 +487,7 @@ export async function createAdminAvailability(input: {
     .from("admin_availability")
     .insert({
       admin_id: input.adminId,
-      school_id: input.schoolId,
+      agency_id: input.agencyId,
       day_of_week: input.dayOfWeek,
       specific_date: input.specificDate,
       start_time: input.startTime,
@@ -523,12 +523,12 @@ export async function deleteAdminAvailability(id: string, adminId: string): Prom
 
 export async function getAdminSettings(
   adminId: string,
-  schoolId?: string
-): Promise<{ meeting_duration_minutes: number; school_id?: string } | null> {
+  agencyId?: string
+): Promise<{ meeting_duration_minutes: number; agency_id?: string } | null> {
   let query = supabaseAdmin.from("admin_settings").select("*").eq("admin_id", adminId);
 
-  if (schoolId) {
-    query = query.eq("school_id", schoolId);
+  if (agencyId) {
+    query = query.eq("agency_id", agencyId);
   }
 
   const { data, error } = await query.single();
@@ -543,11 +543,11 @@ export async function getAdminSettings(
 export async function saveAdminSettings(
   adminId: string,
   settings: { meeting_duration_minutes: number },
-  schoolId?: string
+  agencyId?: string
 ): Promise<void> {
   const { error } = await supabaseAdmin.from("admin_settings").upsert({
     admin_id: adminId,
-    school_id: schoolId,
+    agency_id: agencyId,
     meeting_duration_minutes: settings.meeting_duration_minutes,
     updated_at: new Date().toISOString(),
   });
@@ -563,7 +563,7 @@ export async function saveAdminSettings(
 export async function getBlockedSlots(
   adminId: string,
   date: string,
-  schoolId?: string
+  agencyId?: string
 ): Promise<any[]> {
   const [year, month, day] = date.split("-").map(Number);
   const dateObj = new Date(year, month - 1, day);
@@ -576,8 +576,8 @@ export async function getBlockedSlots(
     .eq("is_blocked", true)
     .or(`day_of_week.eq.${dayOfWeek},specific_date.eq.${date}`);
 
-  if (schoolId) {
-    query = query.eq("school_id", schoolId);
+  if (agencyId) {
+    query = query.eq("agency_id", agencyId);
   }
 
   const { data, error } = await query;
@@ -596,13 +596,13 @@ export async function blockTimeSlot(input: {
   endTime: string;
   specificDate?: string;
   dayOfWeek?: number;
-  schoolId?: string;
+  agencyId?: string;
 }): Promise<any> {
   const { data, error } = await supabaseAdmin
     .from("admin_availability")
     .insert({
       admin_id: input.adminId,
-      school_id: input.schoolId || null,
+      agency_id: input.agencyId || null,
       start_time: input.startTime,
       end_time: input.endTime,
       specific_date: input.specificDate || null,
@@ -623,7 +623,7 @@ export async function blockTimeSlot(input: {
 export async function unblockTimeSlot(
   id: string,
   adminId: string,
-  schoolId?: string
+  agencyId?: string
 ): Promise<void> {
   let query = supabaseAdmin
     .from("admin_availability")
@@ -632,8 +632,8 @@ export async function unblockTimeSlot(
     .eq("admin_id", adminId)
     .eq("is_blocked", true);
 
-  if (schoolId) {
-    query = query.eq("school_id", schoolId);
+  if (agencyId) {
+    query = query.eq("agency_id", agencyId);
   }
 
   const { error } = await query;
@@ -649,15 +649,15 @@ export async function unblockTimeSlot(
 export async function getScheduledMeetings(
   adminId: string,
   status?: string,
-  schoolId?: string
+  agencyId?: string
 ): Promise<any[]> {
   let query = supabaseAdmin
     .from("scheduled_meetings")
-    .select("*, schools:school_id(id, school_name)")
+    .select("*, agencies:agency_id(id, agency_name)")
     .order("scheduled_at", { ascending: true });
 
-  if (schoolId) {
-    query = query.eq("school_id", schoolId);
+  if (agencyId) {
+    query = query.eq("agency_id", agencyId);
   } else {
     const { data: affiliate } = await supabaseAdmin
       .from("affiliates")
@@ -666,15 +666,15 @@ export async function getScheduledMeetings(
       .single();
 
     if (affiliate) {
-      const { data: schools } = await supabaseAdmin
-        .from("schools")
+      const { data: agencies } = await supabaseAdmin
+        .from("agencies")
         .select("id")
         .eq("affiliate_id", affiliate.id);
 
-      const schoolIds = schools?.map((s) => s.id) || [];
+      const agencyIds = agencies?.map((s) => s.id) || [];
 
-      if (schoolIds.length > 0) {
-        query = query.or(`school_id.in.(${schoolIds.join(",")}),admin_id.eq.${adminId}`);
+      if (agencyIds.length > 0) {
+        query = query.or(`agency_id.in.(${agencyIds.join(",")}),admin_id.eq.${adminId}`);
       } else {
         query = query.eq("admin_id", adminId);
       }
@@ -696,13 +696,13 @@ export async function getScheduledMeetings(
 
   return (data || []).map((meeting) => ({
     ...meeting,
-    school_name: meeting.schools?.school_name || null,
+    agency_name: meeting.agencies?.agency_name || null,
   }));
 }
 
 export async function createScheduledMeeting(input: {
   adminId: string;
-  schoolId?: string;
+  agencyId?: string;
   scheduledAt: string;
   companyEmail: string;
   companyName?: string;
@@ -714,7 +714,7 @@ export async function createScheduledMeeting(input: {
     .from("scheduled_meetings")
     .insert({
       admin_id: input.adminId,
-      school_id: input.schoolId,
+      agency_id: input.agencyId,
       scheduled_at: input.scheduledAt,
       company_email: input.companyEmail,
       company_name: input.companyName,
@@ -740,7 +740,7 @@ export async function updateMeetingStatus(
   adminId: string,
   status: string,
   cancellationReason?: string,
-  schoolId?: string
+  agencyId?: string
 ): Promise<void> {
   const updateData: any = { status };
 
@@ -754,8 +754,8 @@ export async function updateMeetingStatus(
 
   let query = supabaseAdmin.from("scheduled_meetings").update(updateData).eq("id", id);
 
-  if (schoolId) {
-    query = query.eq("school_id", schoolId);
+  if (agencyId) {
+    query = query.eq("agency_id", agencyId);
   } else {
     query = query.eq("admin_id", adminId);
   }
@@ -771,12 +771,12 @@ export async function updateMeetingStatus(
 export async function getMeetingById(
   id: string,
   adminId: string,
-  schoolId?: string
+  agencyId?: string
 ): Promise<any | null> {
   let query = supabaseAdmin.from("scheduled_meetings").select("*").eq("id", id);
 
-  if (schoolId) {
-    query = query.eq("school_id", schoolId);
+  if (agencyId) {
+    query = query.eq("agency_id", agencyId);
   } else {
     query = query.eq("admin_id", adminId);
   }
@@ -795,7 +795,7 @@ export async function rescheduleMeeting(
   id: string,
   adminId: string,
   newScheduledAt: string,
-  schoolId?: string
+  agencyId?: string
 ): Promise<void> {
   let query = supabaseAdmin
     .from("scheduled_meetings")
@@ -805,8 +805,8 @@ export async function rescheduleMeeting(
     })
     .eq("id", id);
 
-  if (schoolId) {
-    query = query.eq("school_id", schoolId);
+  if (agencyId) {
+    query = query.eq("agency_id", agencyId);
   } else {
     query = query.eq("admin_id", adminId);
   }
@@ -827,7 +827,7 @@ export async function updateMeetingLink(
     meetingPlatform: "zoom" | "google_meet";
     meetingId: string;
   },
-  schoolId?: string
+  agencyId?: string
 ): Promise<void> {
   let query = supabaseAdmin
     .from("scheduled_meetings")
@@ -838,8 +838,8 @@ export async function updateMeetingLink(
     })
     .eq("id", id);
 
-  if (schoolId) {
-    query = query.eq("school_id", schoolId);
+  if (agencyId) {
+    query = query.eq("agency_id", agencyId);
   } else {
     query = query.eq("admin_id", adminId);
   }
@@ -913,7 +913,7 @@ export async function getScheduledMeetingById(meetingId: string): Promise<any | 
   return data;
 }
 
-export async function sendContractToMeeting(meetingId: string, schoolId?: string): Promise<string> {
+export async function sendContractToMeeting(meetingId: string, agencyId?: string): Promise<string> {
   const contractToken = crypto.randomUUID();
 
   const updateData: any = {
@@ -921,8 +921,8 @@ export async function sendContractToMeeting(meetingId: string, schoolId?: string
     contract_sent_at: new Date().toISOString(),
   };
 
-  if (schoolId) {
-    updateData.school_id = schoolId;
+  if (agencyId) {
+    updateData.agency_id = agencyId;
   }
 
   const { error } = await supabaseAdmin
@@ -979,30 +979,30 @@ export async function signMeetingContract(input: {
   return { company_email: data.company_email, company_name: data.company_name };
 }
 
-// ============ Admin School Context ============
+// ============ Admin Agency Context ============
 
-export async function getAdminSchoolContext(adminId: string): Promise<string | null> {
+export async function getAdminAgencyContext(adminId: string): Promise<string | null> {
   const { data, error } = await supabaseAdmin
-    .from("admin_school_context")
-    .select("current_school_id")
+    .from("admin_agency_context")
+    .select("current_agency_id")
     .eq("admin_id", adminId)
     .single();
 
   if (error && error.code !== "PGRST116") {
-    console.error("Error fetching admin school context:", error);
+    console.error("Error fetching admin agency context:", error);
   }
 
-  return data?.current_school_id || null;
+  return data?.current_agency_id || null;
 }
 
-export async function setAdminSchoolContext(
+export async function setAdminAgencyContext(
   adminId: string,
-  schoolId: string | null
+  agencyId: string | null
 ): Promise<void> {
-  const { error } = await supabaseAdmin.from("admin_school_context").upsert(
+  const { error } = await supabaseAdmin.from("admin_agency_context").upsert(
     {
       admin_id: adminId,
-      current_school_id: schoolId,
+      current_agency_id: agencyId,
       updated_at: new Date().toISOString(),
     },
     {
@@ -1011,25 +1011,25 @@ export async function setAdminSchoolContext(
   );
 
   if (error) {
-    console.error("Error setting admin school context:", error);
+    console.error("Error setting admin agency context:", error);
     throw error;
   }
 }
 
-export async function getSchoolsForAdmin(adminId: string, userRole: string): Promise<any[]> {
-  if (userRole === "affiliate") {
+export async function getAgenciesForAdmin(adminId: string, userRole: string): Promise<any[]> {
+  if (userRole === "admin") {
     const { data, error } = await supabaseAdmin
-      .from("schools")
-      .select("id, school_name, city, status")
+      .from("agencies")
+      .select("id, agency_name, city, status")
       .eq("status", "active")
-      .order("school_name", { ascending: true });
+      .order("agency_name", { ascending: true });
 
     if (error) {
-      console.error("Error fetching schools for admin:", error);
+      console.error("Error fetching agencies for admin:", error);
       return [];
     }
 
-    return (data || []).map((s) => ({ id: s.id, name: s.school_name, city: s.city }));
+    return (data || []).map((s) => ({ id: s.id, name: s.agency_name, city: s.city }));
   }
 
   return [];
@@ -1040,13 +1040,13 @@ export async function getSchoolsForAdmin(adminId: string, userRole: string): Pro
 export async function getAvailableSlots(
   adminId: string,
   date: string,
-  schoolId?: string
+  agencyId?: string
 ): Promise<{ start: string; end: string; blocked?: boolean }[]> {
   const [year, month, day] = date.split("-").map(Number);
   const dateObj = new Date(year, month - 1, day);
   const dayOfWeek = dateObj.getDay();
 
-  const settings = await getAdminSettings(adminId, schoolId);
+  const settings = await getAdminSettings(adminId, agencyId);
   const SLOT_DURATION = settings?.meeting_duration_minutes || 30;
 
   let availQuery = supabaseAdmin
@@ -1055,7 +1055,7 @@ export async function getAvailableSlots(
     .eq("admin_id", adminId)
     .or(`day_of_week.eq.${dayOfWeek},specific_date.eq.${date}`)
     .eq("is_blocked", false);
-  if (schoolId) availQuery = availQuery.eq("school_id", schoolId);
+  if (agencyId) availQuery = availQuery.eq("agency_id", agencyId);
   const { data: availability, error: availError } = await availQuery;
 
   if (availError) {
@@ -1069,7 +1069,7 @@ export async function getAvailableSlots(
     .eq("admin_id", adminId)
     .or(`day_of_week.eq.${dayOfWeek},specific_date.eq.${date}`)
     .eq("is_blocked", true);
-  if (schoolId) blockQuery = blockQuery.eq("school_id", schoolId);
+  if (agencyId) blockQuery = blockQuery.eq("agency_id", agencyId);
   const { data: blockedSlots } = await blockQuery;
 
   const startOfDay = `${date}T00:00:00`;
@@ -1082,7 +1082,7 @@ export async function getAvailableSlots(
     .gte("scheduled_at", startOfDay)
     .lte("scheduled_at", endOfDay)
     .neq("status", "cancelled");
-  if (schoolId) meetQuery = meetQuery.eq("school_id", schoolId);
+  if (agencyId) meetQuery = meetQuery.eq("agency_id", agencyId);
   const { data: meetings, error: meetError } = await meetQuery;
 
   if (meetError) {
@@ -1155,13 +1155,13 @@ export async function getAvailableSlots(
 export async function getAllSlotsForDate(
   adminId: string,
   date: string,
-  schoolId?: string
+  agencyId?: string
 ): Promise<{ start: string; end: string; blocked?: boolean }[]> {
   const [year, month, day] = date.split("-").map(Number);
   const dateObj = new Date(year, month - 1, day);
   const dayOfWeek = dateObj.getDay();
 
-  const settings = await getAdminSettings(adminId, schoolId);
+  const settings = await getAdminSettings(adminId, agencyId);
   const SLOT_DURATION = settings?.meeting_duration_minutes || 30;
 
   let availQuery = supabaseAdmin
@@ -1170,7 +1170,7 @@ export async function getAllSlotsForDate(
     .eq("admin_id", adminId)
     .or(`day_of_week.eq.${dayOfWeek},specific_date.eq.${date}`)
     .eq("is_blocked", false);
-  if (schoolId) availQuery = availQuery.eq("school_id", schoolId);
+  if (agencyId) availQuery = availQuery.eq("agency_id", agencyId);
   const { data: availability, error: availError } = await availQuery;
 
   if (availError) {
@@ -1184,7 +1184,7 @@ export async function getAllSlotsForDate(
     .eq("admin_id", adminId)
     .or(`day_of_week.eq.${dayOfWeek},specific_date.eq.${date}`)
     .eq("is_blocked", true);
-  if (schoolId) blockQuery = blockQuery.eq("school_id", schoolId);
+  if (agencyId) blockQuery = blockQuery.eq("agency_id", agencyId);
   const { data: blockedSlots } = await blockQuery;
 
   const slots: { start: string; end: string; blocked?: boolean }[] = [];

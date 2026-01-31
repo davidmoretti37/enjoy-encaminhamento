@@ -21,29 +21,29 @@ export const companyRouter = router({
     return { completed, company };
   }),
 
-  // Get the school's contract for company onboarding
-  getSchoolContract: protectedProcedure.query(async ({ ctx }) => {
+  // Get the agency's contract for company onboarding
+  getAgencyContract: protectedProcedure.query(async ({ ctx }) => {
     if (ctx.user.role !== 'company') {
       return null;
     }
-    // Get school_id from user's profile
+    // Get agency_id from user's profile
     const userProfile = await db.getUserById(ctx.user.id);
-    const schoolId = userProfile?.school_id || ctx.user.school_id;
+    const agencyId = userProfile?.agency_id || ctx.user.agency_id;
 
-    if (!schoolId) {
+    if (!agencyId) {
       return null;
     }
 
-    const school = await db.getSchoolById(schoolId);
-    if (!school) {
+    const agency = await db.getAgencyById(agencyId);
+    if (!agency) {
       return null;
     }
 
     return {
-      school_name: school.name,
-      contract_type: school.contract_type || null,
-      contract_pdf_url: school.contract_pdf_url || null,
-      contract_html: school.contract_html || null,
+      agency_name: agency.name,
+      contract_type: agency.contract_type || null,
+      contract_pdf_url: agency.contract_pdf_url || null,
+      contract_html: agency.contract_html || null,
     };
   }),
 
@@ -107,23 +107,23 @@ export const companyRouter = router({
           email: ctx.user.email || '',
           name: ctx.user.name || null,
           role: 'company',
-          school_id: ctx.user.school_id || null,
+          agency_id: ctx.user.agency_id || null,
         });
       }
 
-      // Get school_id from user profile (set during signup)
+      // Get agency_id from user profile (set during signup)
       const userProfile = existingProfile || await db.getUserById(ctx.user.id);
-      const schoolId = userProfile?.school_id || ctx.user.school_id;
+      const agencyId = userProfile?.agency_id || ctx.user.agency_id;
 
-      if (!schoolId) {
-        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Escola nao vinculada. Por favor, faca login novamente.' });
+      if (!agencyId) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Agência não vinculada. Por favor, faça login novamente.' });
       }
 
-      // Get school's affiliate_id for proper linking
-      const { data: schoolData } = await supabaseAdmin
-        .from('schools')
+      // Get agency's affiliate_id for proper linking
+      const { data: agencyData } = await supabaseAdmin
+        .from('agencies')
         .select('id, affiliate_id')
-        .eq('id', schoolId)
+        .eq('id', agencyId)
         .single();
 
       // Check if company already exists
@@ -136,7 +136,7 @@ export const companyRouter = router({
       const primaryEmail = input.emails?.find(e => e.isPrimary)?.email || input.emails?.[0]?.email || ctx.user.email || '';
 
       if (company) {
-        // Update existing company - also set school linking if not already set
+        // Update existing company - also set agency linking if not already set
         await db.updateCompany(company.id, {
           cnpj: input.cnpj,
           company_name: input.legalName,
@@ -155,8 +155,8 @@ export const companyRouter = router({
           neighborhood: input.neighborhood,
           city: input.city,
           state: input.state,
-          school_id: schoolId,
-          affiliate_id: schoolData?.affiliate_id || null,
+          agency_id: agencyId,
+          affiliate_id: agencyData?.affiliate_id || null,
         });
       } else {
         // Create new company - use snake_case column names to match database schema
@@ -171,8 +171,8 @@ export const companyRouter = router({
           state: input.state,
           website: input.website,
           status: 'active',
-          school_id: schoolId,
-          affiliate_id: schoolData?.affiliate_id || null,
+          agency_id: agencyId,
+          affiliate_id: agencyData?.affiliate_id || null,
         });
         company = await db.getCompanyById(companyId);
       }
@@ -284,7 +284,7 @@ export const companyRouter = router({
         openings: input.positionsCount ? parseInt(input.positionsCount) : 1,
         status: 'open',
         published_at: new Date().toISOString(),
-        school_id: schoolId,
+        agency_id: agencyId,
       });
 
       // Save contract signature if provided

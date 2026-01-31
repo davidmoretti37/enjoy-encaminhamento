@@ -1,6 +1,7 @@
 import { useState, useRef } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { AnimatePresence } from "motion/react";
+import LandingHeader from "@/components/landing/LandingHeader";
 import HeroSection from "@/components/landing/HeroSection";
 import CompanyContent from "@/components/landing/CompanyContent";
 import CandidateContent from "@/components/landing/CandidateContent";
@@ -26,6 +27,9 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-white">
+      {/* Navigation Header */}
+      <LandingHeader hasSelectedPersona={selectedPersona !== "none"} />
+
       {/* Hero Section with Persona Selection */}
       <HeroSection
         selectedPersona={selectedPersona}

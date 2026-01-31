@@ -11,8 +11,14 @@ import {
   Brain,
   Calendar,
   Handshake,
+  UserCheck,
 } from "lucide-react";
 import { Link } from "wouter";
+import TestimonialsSection from "./TestimonialsSection";
+import RegionsSection from "./RegionsSection";
+import InstitutionsSection from "./InstitutionsSection";
+import TrustBadgesSection from "./TrustBadgesSection";
+import FAQSection from "./FAQSection";
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -69,7 +75,7 @@ export default function CompanyContent() {
       variants={containerVariants}
     >
       {/* AI Matching Section */}
-      <section className="py-20 bg-slate-50/50">
+      <section id="como-funciona" className="py-20 bg-slate-50/50 scroll-mt-20">
         <div className="container mx-auto px-4">
           <motion.div variants={itemVariants} className="text-center mb-16">
             <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[#0A2342]/10 text-[#0A2342] mb-6">
@@ -77,7 +83,7 @@ export default function CompanyContent() {
               <span className="text-sm font-medium">Tecnologia de Ponta</span>
             </div>
             <h2 className="text-3xl md:text-4xl font-bold text-slate-900 mb-4">
-              Como a <span className="text-gradient">ANEC</span> Conecta Você
+              Como a <span className="text-gradient">ANEC RG</span> Conecta Você
               aos Melhores Talentos
             </h2>
             <p className="text-lg text-slate-600 max-w-2xl mx-auto">
@@ -86,7 +92,7 @@ export default function CompanyContent() {
             </p>
           </motion.div>
 
-          <div className="grid md:grid-cols-4 gap-6 max-w-5xl mx-auto overflow-hidden">
+          <div className="grid md:grid-cols-5 gap-4 max-w-6xl mx-auto overflow-hidden">
             {[
               {
                 step: "1",
@@ -104,17 +110,24 @@ export default function CompanyContent() {
               },
               {
                 step: "3",
+                icon: UserCheck,
+                title: "Pré-Seleção Humana",
+                description:
+                  "Nossa equipe faz a curadoria dos melhores candidatos",
+              },
+              {
+                step: "4",
                 icon: Users,
                 title: "Receba Candidatos",
                 description:
                   "Apresentamos os candidatos mais compatíveis com sua vaga",
               },
               {
-                step: "4",
+                step: "5",
                 icon: Handshake,
                 title: "Contrate",
                 description:
-                  "Agende entrevistas e finalize a contratacao conosco",
+                  "Agende entrevistas e finalize a contratação conosco",
               },
             ].map((item, index) => (
               <motion.div
@@ -142,7 +155,7 @@ export default function CompanyContent() {
                     <p className="text-sm text-slate-600">{item.description}</p>
                   </CardContent>
                 </Card>
-                {index < 3 && (
+                {index < 4 && (
                   <motion.div
                     className="hidden md:block absolute top-1/2 -right-3 transform -translate-y-1/2 z-10"
                     initial={{ opacity: 0 }}
@@ -160,14 +173,14 @@ export default function CompanyContent() {
       </section>
 
       {/* Pricing Section */}
-      <section className="py-20">
+      <section id="planos" className="py-20 scroll-mt-20">
         <div className="container mx-auto px-4">
           <motion.div variants={itemVariants} className="text-center mb-16">
             <h2 className="text-3xl md:text-4xl font-bold text-slate-900 mb-4">
               Planos <span className="text-gradient">Transparentes</span>
             </h2>
             <p className="text-lg text-slate-600 max-w-2xl mx-auto">
-              Taxa mensal por contrato ativo. Sem surpresas, sem custos ocultos.
+              Captamos candidatos para Estágios, Menor Aprendiz e CLT
             </p>
           </motion.div>
 
@@ -177,53 +190,47 @@ export default function CompanyContent() {
                 type: "Estágio",
                 description: "Contratos de estágio para estudantes",
                 features: [
-                  "Matching com IA",
+                  "Match com IA",
                   "Gestão de contratos",
+                  "Seguro de vida",
                   "Feedbacks mensais",
                   "Suporte dedicado",
+                  "Conformidade legal",
+                  "Desenvolvimento pessoal e profissional",
                 ],
                 color: "bg-[#FF6B35]",
               },
               {
                 type: "CLT",
-                description: "Contratos de trabalho permanente",
+                description: "Taxa única por contrato ativo",
                 features: [
-                  "Matching com IA",
+                  "Match com IA",
+                  "Plano de Desenvolvimento Profissional (PDP)",
+                  "Análise do perfil comportamental",
                   "Gestão de contratos",
                   "Feedbacks mensais",
                   "Suporte prioritário",
                   "Analytics avançado",
                 ],
                 color: "bg-[#0A2342]",
-                popular: true,
               },
               {
                 type: "Menor Aprendiz",
                 description: "Programa jovem aprendiz",
                 features: [
-                  "Matching com IA",
+                  "Match com IA",
                   "Gestão de contratos",
+                  "Seguro de vida",
                   "Feedbacks mensais",
-                  "Conformidade legal",
+                  "Desenvolvimento pessoal e profissional",
                 ],
                 color: "bg-[#FF6B35]",
               },
             ].map((plan, index) => (
               <motion.div key={index} variants={itemVariants}>
                 <Card
-                  className={`relative h-full border-2 ${
-                    plan.popular
-                      ? "border-[#0A2342] shadow-xl"
-                      : "border-slate-200"
-                  }`}
+                  className="relative h-full border-2 border-slate-200"
                 >
-                  {plan.popular && (
-                    <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                      <span className="bg-[#0A2342] text-white text-xs font-bold px-4 py-1 rounded-full">
-                        Mais Popular
-                      </span>
-                    </div>
-                  )}
                   <CardContent className="p-6">
                     <div
                       className={`h-12 w-12 rounded-xl ${plan.color} flex items-center justify-center mb-4`}
@@ -236,7 +243,7 @@ export default function CompanyContent() {
                     <p className="text-sm text-slate-600 mb-6">
                       {plan.description}
                     </p>
-                    <ul className="space-y-3 mb-6">
+                    <ul className="space-y-3">
                       {plan.features.map((feature, i) => (
                         <li key={i} className="flex items-center gap-2 text-sm">
                           <CheckCircle2 className="h-4 w-4 text-[#FF6B35] flex-shrink-0" />
@@ -244,9 +251,6 @@ export default function CompanyContent() {
                         </li>
                       ))}
                     </ul>
-                    <p className="text-xs text-slate-500 text-center">
-                      Taxa mensal por contrato ativo
-                    </p>
                   </CardContent>
                 </Card>
               </motion.div>
@@ -262,7 +266,7 @@ export default function CompanyContent() {
             <motion.div variants={itemVariants}>
               <h2 className="text-3xl md:text-4xl font-bold text-slate-900 mb-6">
                 Por que Empresas <span className="text-gradient">Confiam</span>{" "}
-                na ANEC
+                na ANEC RG
               </h2>
               <p className="text-lg text-slate-600 mb-8">
                 Somos uma agência integradora nacional, conectando sua empresa
@@ -328,7 +332,7 @@ export default function CompanyContent() {
                       </div>
                     </div>
                     <span className="text-2xl font-bold text-[#0A2342]">
-                      1,247
+                      6,000+
                     </span>
                   </div>
 
@@ -358,6 +362,21 @@ export default function CompanyContent() {
         </div>
       </section>
 
+      {/* Trust Badges Section */}
+      <TrustBadgesSection />
+
+      {/* Testimonials Section */}
+      <TestimonialsSection />
+
+      {/* Regions Section */}
+      <RegionsSection />
+
+      {/* FAQ Section */}
+      <FAQSection />
+
+      {/* Institutions Section */}
+      <InstitutionsSection />
+
       {/* CTA Section */}
       <section className="py-20">
         <div className="container mx-auto px-4">
@@ -367,20 +386,22 @@ export default function CompanyContent() {
           >
             <div className="relative z-10">
               <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">
-                Pronto para conectar sua empresa aos melhores talentos?
+                Comece a Contratar Talentos Hoje
               </h2>
-              <p className="text-white/90 text-lg mb-8 max-w-2xl mx-auto">
-                Junte-se às empresas que já contam com a ANEC para construir
-                equipes de sucesso em todo o Brasil
+              <p className="text-white/90 text-lg mb-4 max-w-2xl mx-auto">
+                Junte-se a mais de 500 empresas que já encontraram os melhores
+                profissionais através da ANEC RG
+              </p>
+              <p className="text-white/60 text-sm mb-8">
+                Sem compromisso inicial • Suporte dedicado • Resultados em dias
               </p>
               <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
                 <Link href="/login?tab=signup&role=company">
                   <Button
                     size="lg"
-                    variant="secondary"
-                    className="text-lg px-8 py-6"
+                    className="text-lg px-8 py-6 bg-[#FF6B35] hover:bg-[#FF6B35]/90 text-white"
                   >
-                    Cadastrar Empresa
+                    Publicar Minha Primeira Vaga
                     <ArrowRight className="ml-2 h-5 w-5" />
                   </Button>
                 </Link>
@@ -389,7 +410,7 @@ export default function CompanyContent() {
                   variant="outline"
                   className="text-lg px-8 py-6 bg-transparent border-white text-white hover:bg-white/10"
                 >
-                  Falar com Consultor
+                  Agendar Demonstração
                 </Button>
               </div>
             </div>

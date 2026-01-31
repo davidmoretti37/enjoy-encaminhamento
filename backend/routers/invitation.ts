@@ -1,5 +1,5 @@
 // @ts-nocheck
-// Invitation router - school invitations management
+// Invitation router - agency invitations management
 import { z } from "zod";
 import { router } from "../_core/trpc";
 import { TRPCError } from "@trpc/server";
@@ -16,7 +16,7 @@ export const invitationRouter = router({
       notes: z.string().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
-      return await db.createSchoolInvitation(
+      return await db.createAgencyInvitation(
         input.email,
         input.affiliateId,
         ctx.user.id,
@@ -42,8 +42,8 @@ export const invitationRouter = router({
     .input(z.object({
       token: z.string().uuid(),
       password: z.string().min(6),
-      schoolData: z.object({
-        school_name: z.string().min(1),
+      agencyData: z.object({
+        agency_name: z.string().min(1),
         trade_name: z.string().optional(),
         legal_name: z.string().optional(),
         cnpj: z.string().min(14),
@@ -57,10 +57,10 @@ export const invitationRouter = router({
       }),
     }))
     .mutation(async ({ input }) => {
-      return await db.acceptSchoolInvitationWithPassword({
+      return await db.acceptAgencyInvitationWithPassword({
         token: input.token,
         password: input.password,
-        schoolData: input.schoolData,
+        agencyData: input.agencyData,
       });
     }),
 
@@ -68,8 +68,8 @@ export const invitationRouter = router({
   accept: protectedProcedure
     .input(z.object({
       token: z.string().uuid(),
-      schoolData: z.object({
-        school_name: z.string().min(1),
+      agencyData: z.object({
+        agency_name: z.string().min(1),
         trade_name: z.string().optional(),
         legal_name: z.string().optional(),
         cnpj: z.string().min(14),
@@ -86,7 +86,7 @@ export const invitationRouter = router({
       return await db.acceptInvitation(
         input.token,
         ctx.user.id,
-        input.schoolData
+        input.agencyData
       );
     }),
 

@@ -53,7 +53,7 @@ export const applicationRouter = router({
 
   // Get applications by job (company only)
   getByJob: companyProcedure
-    .input(z.object({ jobId: z.number() }))
+    .input(z.object({ jobId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
       const job = await db.getJobById(input.jobId);
       if (!job) {
@@ -61,7 +61,7 @@ export const applicationRouter = router({
       }
 
       const company = await db.getCompanyByUserId(ctx.user.id);
-      if (job.companyId !== company?.id && ctx.user.role !== 'affiliate') {
+      if (job.companyId !== company?.id && ctx.user.role !== 'admin') {
         throw new TRPCError({ code: 'FORBIDDEN' });
       }
 
@@ -71,7 +71,7 @@ export const applicationRouter = router({
   // Update application status
   updateStatus: companyProcedure
     .input(z.object({
-      id: z.number(),
+      id: z.string().uuid(),
       status: z.enum(["applied", "screening", "interview-scheduled", "interviewed", "selected", "rejected", "withdrawn"]),
       companyNotes: z.string().optional(),
       rejectionReason: z.string().optional(),

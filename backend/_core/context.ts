@@ -67,7 +67,7 @@ export async function createContext(
             email: authUser.email || '',
             name: authUser.user_metadata?.name || null,
             role: authUser.user_metadata?.role || null,
-            school_id: authUser.user_metadata?.school_id || null,
+            agency_id: authUser.user_metadata?.agency_id || null,
             created_at: authUser.created_at,
             updated_at: null,
             last_signed_in: null,

@@ -1,7 +1,8 @@
 /**
- * Import Companies Modal
+ * Import Companies Modal - Fully Automatic
  *
- * Allows affiliates and schools to import companies from Excel/CSV files
+ * Flow: Select Agency → Upload → Preview → Import
+ * No manual column mapping required
  */
 
 import { useState, useRef, useEffect } from "react";
@@ -30,7 +31,6 @@ import {
   AlertTriangle,
   Trash2,
   Loader2,
-  Info,
 } from "lucide-react";
 import {
   Tooltip,
@@ -40,9 +40,8 @@ import {
 import {
   parseExcelFile,
   getValidationSummary,
-  getDocumentTypeLabel,
   type ParsedCompany,
-  type ParsedEmail,
+  type ParseResult,
 } from "@/lib/excelParser";
 import { useAuth } from "@/_core/hooks/useAuth";
 
@@ -52,7 +51,7 @@ interface ImportCompaniesModalProps {
   onSuccess?: () => void;
 }
 
-type ImportStep = "select-school" | "upload" | "preview" | "importing" | "complete";
+type ImportStep = "select-agency" | "upload" | "preview" | "importing" | "complete";
 
 export default function ImportCompaniesModal({
   open,
@@ -60,35 +59,37 @@ export default function ImportCompaniesModal({
   onSuccess,
 }: ImportCompaniesModalProps) {
   const { user } = useAuth();
-  const isSchoolUser = user?.role === 'school';
+  const isAgencyUser = user?.role === 'agency';
 
-  // For school users, skip school selection and go directly to upload
-  const initialStep = isSchoolUser ? "upload" : "select-school";
+  const initialStep = isAgencyUser ? "upload" : "select-agency";
 
   const [step, setStep] = useState<ImportStep>(initialStep);
-  const [selectedSchoolId, setSelectedSchoolId] = useState<string>("");
+  const [selectedAgencyId, setSelectedAgencyId] = useState<string>("");
+  const [isDragging, setIsDragging] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [companies, setCompanies] = useState<ParsedCompany[]>([]);
+  const [headers, setHeaders] = useState<string[]>([]);
+  const [rawRows, setRawRows] = useState<Record<string, string>[]>([]);
   const [importResult, setImportResult] = useState<{
     success: number;
     failed: number;
     errors: string[];
   } | null>(null);
-  const [isDragging, setIsDragging] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Reset step when modal opens based on user type
   useEffect(() => {
     if (open) {
-      setStep(isSchoolUser ? "upload" : "select-school");
+      setStep(isAgencyUser ? "upload" : "select-agency");
+      setCompanies([]);
+      setHeaders([]);
+      setRawRows([]);
+      setImportResult(null);
     }
-  }, [open, isSchoolUser]);
+  }, [open, isAgencyUser]);
 
-  // Get schools for dropdown (only for affiliates)
-  const { data: schools } = trpc.school.getAll.useQuery(undefined, {
-    enabled: !isSchoolUser,
+  const { data: agencies } = trpc.agency.getAll.useQuery(undefined, {
+    enabled: !isAgencyUser,
   });
 
-  // Bulk import mutation for affiliates
   const affiliateImportMutation = trpc.affiliate.bulkImportCompanies.useMutation({
     onSuccess: (data) => {
       setImportResult({
@@ -107,8 +108,7 @@ export default function ImportCompaniesModal({
     },
   });
 
-  // Bulk import mutation for schools
-  const schoolImportMutation = trpc.school.bulkImportCompanies.useMutation({
+  const agencyImportMutation = trpc.agency.bulkImportCompanies.useMutation({
     onSuccess: (data) => {
       setImportResult({
         success: data.created,
@@ -127,29 +127,25 @@ export default function ImportCompaniesModal({
   });
 
   const processFile = async (file: File) => {
-    // Validate file type
-    const validTypes = [
-      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      "application/vnd.ms-excel",
-      "text/csv",
-    ];
     const validExtensions = [".xlsx", ".xls", ".csv"];
     const hasValidExtension = validExtensions.some((ext) =>
       file.name.toLowerCase().endsWith(ext)
     );
 
-    if (!validTypes.includes(file.type) && !hasValidExtension) {
+    if (!hasValidExtension) {
       toast.error("Por favor, selecione um arquivo Excel (.xlsx, .xls) ou CSV");
       return;
     }
 
     try {
-      const parsed = await parseExcelFile(file);
-      if (parsed.length === 0) {
+      const result = await parseExcelFile(file);
+      if (result.companies.length === 0) {
         toast.error("O arquivo não contém dados válidos");
         return;
       }
-      setCompanies(parsed);
+      setCompanies(result.companies);
+      setHeaders(result.headers);
+      setRawRows(result.rawRows);
       setStep("preview");
     } catch (error) {
       toast.error(
@@ -187,7 +183,11 @@ export default function ImportCompaniesModal({
   };
 
   const handleRemoveRow = (rowNumber: number) => {
-    setCompanies((prev) => prev.filter((c) => c._rowNumber !== rowNumber));
+    const index = companies.findIndex((c) => c._rowNumber === rowNumber);
+    if (index !== -1) {
+      setCompanies((prev) => prev.filter((c) => c._rowNumber !== rowNumber));
+      setRawRows((prev) => prev.filter((_, i) => i !== index));
+    }
   };
 
   const handleImport = () => {
@@ -199,11 +199,10 @@ export default function ImportCompaniesModal({
 
     setStep("importing");
 
-    // Prepare data for import (remove validation fields)
     const companiesToImport = validCompanies.map((c) => ({
       company_name: c.company_name,
       email: c.email,
-      emails: c.emails, // Pass all parsed emails
+      emails: c.emails,
       cnpj: c.cnpj || undefined,
       phone: c.phone || undefined,
       address: c.address || undefined,
@@ -215,7 +214,6 @@ export default function ImportCompaniesModal({
       website: c.website || undefined,
       description: c.description || undefined,
       notes: c.notes || undefined,
-      // Job data (if present in Excel)
       job: c.job_title ? {
         title: c.job_title,
         description: c.job_description,
@@ -234,24 +232,22 @@ export default function ImportCompaniesModal({
       } : undefined,
     }));
 
-    if (isSchoolUser) {
-      // School users don't need to select a school
-      schoolImportMutation.mutate({
-        companies: companiesToImport,
-      });
+    if (isAgencyUser) {
+      agencyImportMutation.mutate({ companies: companiesToImport });
     } else {
-      // Affiliates need to specify the school
       affiliateImportMutation.mutate({
-        schoolId: selectedSchoolId,
+        agencyId: selectedAgencyId,
         companies: companiesToImport,
       });
     }
   };
 
   const handleClose = () => {
-    setStep(isSchoolUser ? "upload" : "select-school");
-    setSelectedSchoolId("");
+    setStep(isAgencyUser ? "upload" : "select-agency");
+    setSelectedAgencyId("");
     setCompanies([]);
+    setHeaders([]);
+    setRawRows([]);
     setImportResult(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
@@ -261,48 +257,9 @@ export default function ImportCompaniesModal({
 
   const validation = getValidationSummary(companies);
 
-  // Helper to render cell with warning tooltip
-  const renderCellWithWarning = (value: string | undefined, fieldName: string, warnings: string[]) => {
-    const relevantWarning = warnings.find(w => w.toLowerCase().includes(fieldName.toLowerCase()));
-
-    if (!value && relevantWarning) {
-      return (
-        <div className="flex items-center gap-1">
-          <span className="text-gray-400">-</span>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <AlertTriangle className="h-3.5 w-3.5 text-amber-500 cursor-help" />
-            </TooltipTrigger>
-            <TooltipContent side="top">
-              {relevantWarning}
-            </TooltipContent>
-          </Tooltip>
-        </div>
-      );
-    }
-
-    if (value && relevantWarning) {
-      return (
-        <div className="flex items-center gap-1">
-          <span className="truncate max-w-[120px]">{value}</span>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <AlertTriangle className="h-3.5 w-3.5 text-amber-500 cursor-help flex-shrink-0" />
-            </TooltipTrigger>
-            <TooltipContent side="top">
-              {relevantWarning}
-            </TooltipContent>
-          </Tooltip>
-        </div>
-      );
-    }
-
-    return <span className="truncate max-w-[120px]">{value || "-"}</span>;
-  };
-
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="!max-w-[95vw] !w-[1400px] !max-h-[90vh] overflow-hidden flex flex-col">
+      <DialogContent className="!max-w-[95vw] !w-[1200px] !max-h-[90vh] overflow-hidden flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <FileSpreadsheet className="h-5 w-5" />
@@ -311,23 +268,23 @@ export default function ImportCompaniesModal({
         </DialogHeader>
 
         <div className="flex-1 overflow-auto py-4">
-          {/* Step 1: Select School */}
-          {step === "select-school" && (
+          {/* Step 1: Select Agency */}
+          {step === "select-agency" && (
             <div className="space-y-4 max-w-md mx-auto">
               <p className="text-sm text-gray-600">
-                Selecione a escola para qual as empresas serão importadas:
+                Selecione a agência para qual as empresas serão importadas:
               </p>
               <Select
-                value={selectedSchoolId}
-                onValueChange={setSelectedSchoolId}
+                value={selectedAgencyId}
+                onValueChange={setSelectedAgencyId}
               >
                 <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Selecione uma escola" />
+                  <SelectValue placeholder="Selecione uma agência" />
                 </SelectTrigger>
                 <SelectContent>
-                  {schools?.map((school: { id: string; school_name: string }) => (
-                    <SelectItem key={school.id} value={school.id}>
-                      {school.school_name}
+                  {agencies?.map((agency: { id: string; agency_name: string }) => (
+                    <SelectItem key={agency.id} value={agency.id}>
+                      {agency.agency_name}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -339,8 +296,7 @@ export default function ImportCompaniesModal({
           {step === "upload" && (
             <div className="space-y-4 max-w-2xl mx-auto">
               <p className="text-sm text-gray-600">
-                Selecione um arquivo Excel (.xlsx, .xls) ou CSV com os dados das
-                empresas.
+                Selecione um arquivo Excel (.xlsx, .xls) ou CSV com os dados das empresas.
               </p>
 
               <div
@@ -377,32 +333,21 @@ export default function ImportCompaniesModal({
 
               <div className="bg-blue-50 rounded-lg p-4 text-sm">
                 <p className="font-medium text-blue-900 mb-2">
-                  Colunas reconhecidas:
+                  Colunas reconhecidas automaticamente:
                 </p>
                 <div className="grid grid-cols-3 gap-1 text-blue-800 text-xs">
-                  <span>• Nome / Empresa / Razão Social</span>
-                  <span>• Email / E-mail</span>
+                  <span>• Nome Fantasia / Razão Social</span>
+                  <span>• Email</span>
                   <span>• CNPJ / CPF</span>
-                  <span>• Telefone / Phone</span>
-                  <span>• Endereço / Address</span>
-                  <span>• Cidade / City</span>
-                  <span>• Estado / UF</span>
-                  <span>• CEP / Zip</span>
-                  <span>• Setor / Industry</span>
-                  <span>• Tamanho / Size</span>
-                  <span>• Website / Site</span>
-                  <span>• Descrição / Notas</span>
-                </div>
-                <p className="font-medium text-blue-900 mb-2 mt-3">
-                  Colunas de vaga (opcional):
-                </p>
-                <div className="grid grid-cols-3 gap-1 text-blue-800 text-xs">
-                  <span>• Título / Cargo / Vaga</span>
-                  <span>• Salário / Remuneração / Bolsa</span>
-                  <span>• Horário / Jornada</span>
+                  <span>• Telefone / Celular</span>
+                  <span>• Endereço / Bairro</span>
+                  <span>• Cidade / Estado / CEP</span>
+                  <span>• Website / Redes Sociais</span>
+                  <span>• Título da Vaga / Cargo</span>
+                  <span>• Salário / Remuneração</span>
                   <span>• Benefícios</span>
-                  <span>• Tipo de Contrato / Vínculo</span>
-                  <span>• Modalidade / Local de Trabalho</span>
+                  <span>• Tipo de Contrato</span>
+                  <span>• Horário / Jornada</span>
                 </div>
               </div>
             </div>
@@ -411,7 +356,6 @@ export default function ImportCompaniesModal({
           {/* Step 3: Preview */}
           {step === "preview" && (
             <div className="space-y-4">
-              {/* Summary */}
               <div className="flex items-center gap-6 p-3 bg-gray-50 rounded-lg">
                 <div className="flex items-center gap-2">
                   <CheckCircle className="h-4 w-4 text-green-600" />
@@ -423,7 +367,7 @@ export default function ImportCompaniesModal({
                   <div className="flex items-center gap-2">
                     <AlertTriangle className="h-4 w-4 text-amber-500" />
                     <span className="text-sm">
-                      <strong>{validation.withWarnings}</strong> com avisos (serão importadas)
+                      <strong>{validation.withWarnings}</strong> com avisos
                     </span>
                   </div>
                 )}
@@ -431,7 +375,7 @@ export default function ImportCompaniesModal({
                   <div className="flex items-center gap-2">
                     <XCircle className="h-4 w-4 text-red-600" />
                     <span className="text-sm">
-                      <strong>{validation.invalid}</strong> com erros (não serão importadas)
+                      <strong>{validation.invalid}</strong> com erros
                     </span>
                   </div>
                 )}
@@ -440,156 +384,103 @@ export default function ImportCompaniesModal({
                 </span>
               </div>
 
-              {/* Full Table */}
-              <div className="border rounded-lg overflow-auto" style={{ maxHeight: 'calc(90vh - 220px)' }}>
+              <div className="border rounded-lg overflow-auto" style={{ maxHeight: 'calc(90vh - 280px)' }}>
                 <table className="w-full text-sm">
                   <thead className="bg-gray-50 sticky top-0 z-10">
                     <tr>
                       <th className="px-2 py-2 text-left font-medium text-gray-700 whitespace-nowrap">#</th>
                       <th className="px-2 py-2 text-left font-medium text-gray-700 whitespace-nowrap">Status</th>
-                      <th className="px-2 py-2 text-left font-medium text-gray-700 whitespace-nowrap">Nome</th>
-                      <th className="px-2 py-2 text-left font-medium text-gray-700 whitespace-nowrap">Email</th>
-                      <th className="px-2 py-2 text-left font-medium text-gray-700 whitespace-nowrap">CNPJ/CPF</th>
-                      <th className="px-2 py-2 text-left font-medium text-gray-700 whitespace-nowrap">Telefone</th>
-                      <th className="px-2 py-2 text-left font-medium text-gray-700 whitespace-nowrap">Cidade</th>
-                      <th className="px-2 py-2 text-left font-medium text-gray-700 whitespace-nowrap">Estado</th>
-                      <th className="px-2 py-2 text-left font-medium text-gray-700 whitespace-nowrap">Endereço</th>
-                      <th className="px-2 py-2 text-left font-medium text-gray-700 whitespace-nowrap">CEP</th>
-                      <th className="px-2 py-2 text-left font-medium text-gray-700 whitespace-nowrap">Setor</th>
-                      <th className="px-2 py-2 text-left font-medium text-gray-700 whitespace-nowrap">Tamanho</th>
-                      <th className="px-2 py-2 text-left font-medium text-gray-700 whitespace-nowrap">Website</th>
-                      <th className="px-2 py-2 text-left font-medium text-gray-700 whitespace-nowrap">Vaga</th>
+                      {headers.map((header) => (
+                        <th key={header} className="px-2 py-2 text-left font-medium text-gray-700 whitespace-nowrap max-w-[200px]">
+                          <span className="block truncate" title={header}>{header}</span>
+                        </th>
+                      ))}
                       <th className="px-2 py-2 text-left font-medium text-gray-700 whitespace-nowrap">Ações</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {companies.map((company) => (
-                      <tr
-                        key={company._rowNumber}
-                        className={
-                          !company._isValid
-                            ? "bg-red-50 hover:bg-red-100"
-                            : company._warnings.length > 0
-                            ? "bg-amber-50/50 hover:bg-amber-50"
-                            : "hover:bg-gray-50"
-                        }
-                      >
-                        <td className="px-2 py-2 text-gray-500">
-                          {company._rowNumber}
-                        </td>
-                        <td className="px-2 py-2">
-                          {!company._isValid ? (
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <div className="flex items-center gap-1 cursor-help">
-                                  <XCircle className="h-4 w-4 text-red-600" />
-                                </div>
-                              </TooltipTrigger>
-                              <TooltipContent side="top" className="max-w-[300px]">
-                                <p className="font-medium mb-1">Erros:</p>
-                                <ul className="space-y-0.5">
-                                  {company._errors.map((error, i) => (
-                                    <li key={i} className="text-red-200">• {error}</li>
-                                  ))}
-                                </ul>
-                              </TooltipContent>
-                            </Tooltip>
-                          ) : company._warnings.length > 0 ? (
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <div className="flex items-center gap-1 cursor-help">
-                                  <AlertTriangle className="h-4 w-4 text-amber-500" />
-                                </div>
-                              </TooltipTrigger>
-                              <TooltipContent side="top" className="max-w-[300px]">
-                                <p className="font-medium mb-1">Avisos:</p>
-                                <ul className="space-y-0.5">
-                                  {company._warnings.map((warning, i) => (
-                                    <li key={i}>• {warning}</li>
-                                  ))}
-                                </ul>
-                              </TooltipContent>
-                            </Tooltip>
-                          ) : (
-                            <CheckCircle className="h-4 w-4 text-green-600" />
-                          )}
-                        </td>
-                        <td className="px-2 py-2 font-medium">
-                          {company.company_name || <span className="text-red-500">-</span>}
-                        </td>
-                        <td className="px-2 py-2">
-                          {company.emails && company.emails.length > 0 ? (
-                            <div className="flex flex-col gap-0.5">
-                              {company.emails.map((e, idx) => (
-                                <span key={idx} className={idx === 0 ? "font-medium" : "text-gray-500 text-xs"}>
-                                  {e.email}
-                                </span>
-                              ))}
-                            </div>
-                          ) : company.email ? (
-                            company.email
-                          ) : (
-                            <span className="text-red-500">-</span>
-                          )}
-                        </td>
-                        <td className="px-2 py-2 text-gray-600">
-                          {renderCellWithWarning(company.cnpj, 'cnpj', company._warnings)}
-                        </td>
-                        <td className="px-2 py-2 text-gray-600">
-                          {renderCellWithWarning(company.phone, 'telefone', company._warnings)}
-                        </td>
-                        <td className="px-2 py-2 text-gray-600">
-                          {renderCellWithWarning(company.city, 'cidade', company._warnings)}
-                        </td>
-                        <td className="px-2 py-2 text-gray-600">
-                          {company.state || "-"}
-                        </td>
-                        <td className="px-2 py-2 text-gray-600">
-                          <span className="truncate max-w-[150px] block">{company.address || "-"}</span>
-                        </td>
-                        <td className="px-2 py-2 text-gray-600">
-                          {company.zip_code || "-"}
-                        </td>
-                        <td className="px-2 py-2 text-gray-600">
-                          {company.industry || "-"}
-                        </td>
-                        <td className="px-2 py-2 text-gray-600">
-                          {company.company_size || "-"}
-                        </td>
-                        <td className="px-2 py-2 text-gray-600">
-                          <span className="truncate max-w-[100px] block">{company.website || "-"}</span>
-                        </td>
-                        <td className="px-2 py-2 text-gray-600">
-                          {company.job_title ? (
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <span className="truncate max-w-[150px] block cursor-help text-blue-600">
-                                  {company.job_title}
-                                </span>
-                              </TooltipTrigger>
-                              <TooltipContent side="top" className="max-w-[300px]">
-                                <p className="font-medium">{company.job_title}</p>
-                                {company.job_salary && <p className="text-xs">Salário: {company.job_salary}</p>}
-                                {company.job_schedule && <p className="text-xs">Horário: {company.job_schedule}</p>}
-                                {company.job_contract_type && <p className="text-xs">Tipo: {company.job_contract_type}</p>}
-                              </TooltipContent>
-                            </Tooltip>
-                          ) : (
-                            "-"
-                          )}
-                        </td>
-                        <td className="px-2 py-2">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleRemoveRow(company._rowNumber)}
-                            className="h-7 w-7 p-0 text-gray-400 hover:text-red-600"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </td>
-                      </tr>
-                    ))}
+                    {companies.map((company, index) => {
+                      const rawRow = rawRows[index] || {};
+                      return (
+                        <tr
+                          key={company._rowNumber}
+                          className={
+                            !company._isValid
+                              ? "bg-red-50 hover:bg-red-100"
+                              : company._warnings.length > 0
+                              ? "bg-amber-50/50 hover:bg-amber-50"
+                              : "hover:bg-gray-50"
+                          }
+                        >
+                          <td className="px-2 py-2 text-gray-500">{company._rowNumber}</td>
+                          <td className="px-2 py-2">
+                            {!company._isValid ? (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <XCircle className="h-4 w-4 text-red-600 cursor-help" />
+                                </TooltipTrigger>
+                                <TooltipContent side="top" className="max-w-[300px]">
+                                  <p className="font-medium mb-1">Erros:</p>
+                                  <ul className="space-y-0.5">
+                                    {company._errors.map((error, i) => (
+                                      <li key={i}>• {error}</li>
+                                    ))}
+                                  </ul>
+                                </TooltipContent>
+                              </Tooltip>
+                            ) : company._warnings.length > 0 ? (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <AlertTriangle className="h-4 w-4 text-amber-500 cursor-help" />
+                                </TooltipTrigger>
+                                <TooltipContent side="top" className="max-w-[300px]">
+                                  <p className="font-medium mb-1">Avisos:</p>
+                                  <ul className="space-y-0.5">
+                                    {company._warnings.map((warning, i) => (
+                                      <li key={i}>• {warning}</li>
+                                    ))}
+                                  </ul>
+                                </TooltipContent>
+                              </Tooltip>
+                            ) : (
+                              <CheckCircle className="h-4 w-4 text-green-600" />
+                            )}
+                          </td>
+                          {headers.map((header) => {
+                            const value = rawRow[header] || '';
+                            const displayValue = String(value).trim();
+                            return (
+                              <td key={header} className="px-2 py-2 text-gray-600 max-w-[200px]">
+                                {displayValue ? (
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <span className="block truncate cursor-help" title={displayValue}>
+                                        {displayValue}
+                                      </span>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="top" className="max-w-[400px]">
+                                      <p className="whitespace-pre-wrap break-words">{displayValue}</p>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                ) : (
+                                  <span className="text-gray-400">-</span>
+                                )}
+                              </td>
+                            );
+                          })}
+                          <td className="px-2 py-2">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleRemoveRow(company._rowNumber)}
+                              className="h-7 w-7 p-0 text-gray-400 hover:text-red-600"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -615,9 +506,6 @@ export default function ImportCompaniesModal({
             <div className="flex flex-col items-center justify-center py-12">
               <Loader2 className="h-10 w-10 text-primary animate-spin mb-4" />
               <p className="text-gray-600">Importando empresas...</p>
-              <p className="text-sm text-gray-400 mt-1">
-                Isso pode levar alguns segundos
-              </p>
             </div>
           )}
 
@@ -631,9 +519,7 @@ export default function ImportCompaniesModal({
                   <XCircle className="h-12 w-12 text-red-600 mb-4" />
                 )}
                 <h3 className="text-lg font-semibold">
-                  {importResult.success > 0
-                    ? "Importação Concluída!"
-                    : "Falha na Importação"}
+                  {importResult.success > 0 ? "Importação Concluída!" : "Falha na Importação"}
                 </h3>
               </div>
 
@@ -642,30 +528,26 @@ export default function ImportCompaniesModal({
                   <p className="text-2xl font-bold text-green-700">
                     {importResult.success}
                   </p>
-                  <p className="text-sm text-green-600">
-                    Empresas importadas com sucesso
-                  </p>
+                  <p className="text-sm text-green-600">Importadas</p>
                 </div>
                 <div className="bg-red-50 rounded-lg p-4 text-center">
                   <p className="text-2xl font-bold text-red-700">
                     {importResult.failed}
                   </p>
-                  <p className="text-sm text-red-600">Empresas com erro</p>
+                  <p className="text-sm text-red-600">Com erro</p>
                 </div>
               </div>
 
               {importResult.errors.length > 0 && (
                 <div className="bg-gray-50 rounded-lg p-4">
-                  <p className="font-medium text-gray-700 mb-2">
-                    Erros encontrados:
-                  </p>
+                  <p className="font-medium text-gray-700 mb-2">Erros:</p>
                   <ul className="text-sm text-gray-600 space-y-1">
                     {importResult.errors.slice(0, 5).map((error, i) => (
                       <li key={i}>• {error}</li>
                     ))}
                     {importResult.errors.length > 5 && (
                       <li className="text-gray-400">
-                        ... e mais {importResult.errors.length - 5} erros
+                        ... e mais {importResult.errors.length - 5}
                       </li>
                     )}
                   </ul>
@@ -676,15 +558,12 @@ export default function ImportCompaniesModal({
         </div>
 
         <DialogFooter>
-          {step === "select-school" && (
+          {step === "select-agency" && (
             <>
               <Button variant="outline" onClick={handleClose}>
                 Cancelar
               </Button>
-              <Button
-                onClick={() => setStep("upload")}
-                disabled={!selectedSchoolId}
-              >
+              <Button onClick={() => setStep("upload")} disabled={!selectedAgencyId}>
                 Continuar
               </Button>
             </>
@@ -692,12 +571,12 @@ export default function ImportCompaniesModal({
 
           {step === "upload" && (
             <>
-              {!isSchoolUser && (
-                <Button variant="outline" onClick={() => setStep("select-school")}>
+              {!isAgencyUser && (
+                <Button variant="outline" onClick={() => setStep("select-agency")}>
                   Voltar
                 </Button>
               )}
-              {isSchoolUser && (
+              {isAgencyUser && (
                 <Button variant="outline" onClick={handleClose}>
                   Cancelar
                 </Button>
@@ -710,10 +589,7 @@ export default function ImportCompaniesModal({
               <Button variant="outline" onClick={() => setStep("upload")}>
                 Voltar
               </Button>
-              <Button
-                onClick={handleImport}
-                disabled={validation.valid === 0}
-              >
+              <Button onClick={handleImport} disabled={validation.valid === 0}>
                 Importar {validation.valid} empresa(s)
               </Button>
             </>

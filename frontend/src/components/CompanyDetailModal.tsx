@@ -368,7 +368,7 @@ export default function CompanyDetailModal({
 
   // Contract Preview Content
   const ContractPreviewContent = () => {
-    const schoolContract = historyData?.schoolContract;
+    const agencyContract = historyData?.agencyContract;
     const contractSignature = historyData?.meeting?.contract_signature;
 
     return (
@@ -382,12 +382,12 @@ export default function CompanyDetailModal({
             </CardTitle>
           </CardHeader>
           <CardContent className="p-0">
-            {schoolContract?.type === "pdf" && schoolContract.pdfUrl ? (
+            {agencyContract?.type === "pdf" && agencyContract.pdfUrl ? (
               <div>
                 <div className="bg-gray-100 p-3 flex items-center justify-between border-b">
                   <span className="text-sm font-medium text-gray-700">Contrato PDF</span>
                   <a
-                    href={schoolContract.pdfUrl}
+                    href={agencyContract.pdfUrl}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-1 text-sm text-blue-600 hover:underline"
@@ -397,17 +397,17 @@ export default function CompanyDetailModal({
                   </a>
                 </div>
                 <iframe
-                  src={`${schoolContract.pdfUrl}#toolbar=1&navpanes=0&view=FitH`}
+                  src={`${agencyContract.pdfUrl}#toolbar=1&navpanes=0&view=FitH`}
                   className="w-full border-0"
                   style={{ height: "50vh", minHeight: "400px" }}
                   title="Contrato PDF"
                 />
               </div>
-            ) : schoolContract?.type === "html" && schoolContract.html ? (
+            ) : agencyContract?.type === "html" && agencyContract.html ? (
               <div className="p-6 max-h-[50vh] overflow-y-auto">
                 <div
                   className="prose prose-sm max-w-none"
-                  dangerouslySetInnerHTML={{ __html: schoolContract.html }}
+                  dangerouslySetInnerHTML={{ __html: agencyContract.html }}
                 />
               </div>
             ) : (

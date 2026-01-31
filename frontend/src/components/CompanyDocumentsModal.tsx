@@ -444,7 +444,7 @@ export default function CompanyDocumentsModal({
                     )}
 
                     {/* View signed contract button */}
-                    {contractData.signed_at && (historyData?.schoolContract || contractData.signature) && (
+                    {contractData.signed_at && (historyData?.agencyContract || contractData.signature) && (
                       <Button
                         variant="outline"
                         size="sm"
@@ -825,8 +825,10 @@ export default function CompanyDocumentsModal({
                       <div>
                         <label className="text-sm text-muted-foreground">Benefícios</label>
                         <p className="font-medium">
-                          {displayData.benefits && displayData.benefits.length > 0
-                            ? displayData.benefits.join(", ")
+                          {displayData.benefits
+                            ? (Array.isArray(displayData.benefits)
+                                ? displayData.benefits.join(", ")
+                                : displayData.benefits)
                             : "-"}
                         </p>
                       </div>
@@ -917,16 +919,16 @@ export default function CompanyDocumentsModal({
                 )}
 
                 {/* Contract Content */}
-                {historyData?.schoolContract && (
+                {historyData?.agencyContract && (
                   <div className="p-4 rounded-lg border bg-white">
                     <h3 className="font-semibold mb-3 flex items-center gap-2">
                       <FileText className="h-4 w-4 text-blue-600" />
                       Contrato
                     </h3>
-                    {historyData.schoolContract.type === 'pdf' && historyData.schoolContract.pdfUrl ? (
+                    {historyData.agencyContract.type === 'pdf' && historyData.agencyContract.pdfUrl ? (
                       <div className="space-y-3">
                         <a
-                          href={historyData.schoolContract.pdfUrl}
+                          href={historyData.agencyContract.pdfUrl}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
@@ -936,15 +938,15 @@ export default function CompanyDocumentsModal({
                           <ExternalLink className="h-3 w-3" />
                         </a>
                         <iframe
-                          src={historyData.schoolContract.pdfUrl}
+                          src={historyData.agencyContract.pdfUrl}
                           className="w-full h-[500px] border rounded-lg"
                           title="Contrato PDF"
                         />
                       </div>
-                    ) : historyData.schoolContract.type === 'html' && historyData.schoolContract.html ? (
+                    ) : historyData.agencyContract.type === 'html' && historyData.agencyContract.html ? (
                       <div
                         className="prose prose-sm max-w-none p-4 bg-gray-50 rounded-lg border overflow-auto max-h-[500px]"
-                        dangerouslySetInnerHTML={{ __html: historyData.schoolContract.html }}
+                        dangerouslySetInnerHTML={{ __html: historyData.agencyContract.html }}
                       />
                     ) : (
                       <p className="text-sm text-muted-foreground">
@@ -954,8 +956,8 @@ export default function CompanyDocumentsModal({
                   </div>
                 )}
 
-                {/* If no school contract but there's a PDF URL */}
-                {!historyData?.schoolContract && contractData.pdf_url && (
+                {/* If no agency contract but there's a PDF URL */}
+                {!historyData?.agencyContract && contractData.pdf_url && (
                   <div className="p-4 rounded-lg border bg-white">
                     <h3 className="font-semibold mb-3 flex items-center gap-2">
                       <FileText className="h-4 w-4 text-blue-600" />

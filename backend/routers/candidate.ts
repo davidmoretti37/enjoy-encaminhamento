@@ -31,14 +31,14 @@ export const candidateRouter = router({
     return { completed, candidate };
   }),
 
-  // Get the school linked to the current user (for pre-populating city/state)
-  getMySchool: protectedProcedure.query(async ({ ctx }) => {
+  // Get the agency linked to the current user (for pre-populating city/state)
+  getMyAgency: protectedProcedure.query(async ({ ctx }) => {
     const user = await db.getUserById(ctx.user.id);
-    if (!user?.school_id) {
+    if (!user?.agency_id) {
       return null;
     }
-    const school = await db.getSchoolById(user.school_id);
-    return school;
+    const agency = await db.getAgencyById(user.agency_id);
+    return agency;
   }),
 
   // Submit onboarding (create/update full candidate profile)
@@ -91,9 +91,9 @@ export const candidateRouter = router({
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Only candidates can submit onboarding' });
       }
 
-      // Get user's school_id for candidate linking
+      // Get user's agency_id for candidate linking
       const user = await db.getUserById(ctx.user.id);
-      const schoolId = user?.school_id;
+      const agencyId = user?.agency_id;
 
       // Map frontend education level values to database enum
       const educationLevelMap: Record<string, string> = {
@@ -110,13 +110,13 @@ export const candidateRouter = router({
       };
       const mappedEducationLevel = educationLevelMap[input.education_level] || input.education_level;
 
-      // Prepare data with mapped education level and school_id
+      // Prepare data with mapped education level and agency_id
       // Convert courses array to comma-separated string for storage
       const courseString = input.courses?.join(', ') || '';
       const candidateData: any = {
         ...input,
         education_level: mappedEducationLevel,
-        school_id: schoolId,
+        agency_id: agencyId,
         course: courseString, // Store as comma-separated string
       };
       delete candidateData.courses; // Remove array version
@@ -148,7 +148,7 @@ export const candidateRouter = router({
           phone: input.phone,
           city: input.city,
           state: input.state,
-          school_id: schoolId,
+          agency_id: agencyId,
         });
         candidate = await db.getCandidateById(candidateId);
         if (candidate) {
@@ -337,7 +337,7 @@ export const candidateRouter = router({
       status: z.string().optional(),
     }))
     .query(async ({ ctx, input }) => {
-      if (ctx.user.role !== 'company' && ctx.user.role !== 'affiliate') {
+      if (ctx.user.role !== 'company' && ctx.user.role !== 'admin') {
         throw new TRPCError({ code: 'FORBIDDEN' });
       }
       return await db.searchCandidates(input);

@@ -412,6 +412,158 @@ export async function suggestColumnMappings(
   return { mappings: schema, confidence };
 }
 
+// ============================================
+// COMPANY COLUMN MAPPING (for company imports)
+// ============================================
+
+const COMPANY_FIELDS: Record<string, string> = {
+  // Company info
+  company_name: "Nome da empresa, razão social, ou nome fantasia",
+  email: "Email principal da empresa",
+  cnpj: "CNPJ - documento com 14 dígitos",
+  phone: "Telefone fixo ou principal da empresa",
+  mobile_phone: "Celular ou telefone móvel",
+  address: "Endereço completo ou rua com número",
+  neighborhood: "Bairro",
+  city: "Cidade",
+  state: "Estado ou UF",
+  zip_code: "CEP - código postal",
+  website: "Website ou redes sociais",
+  company_size: "Quantidade de funcionários ou porte da empresa",
+  industry: "Setor ou segmento de atuação",
+
+  // Contact person
+  contact_name: "Nome da pessoa responsável pelas contratações ou contato",
+  contact_phone: "Telefone do contato/responsável (se diferente do principal)",
+
+  // Job info
+  job_title: "Título da vaga, cargo ou função",
+  job_description: "Descrição da vaga ou principais atividades",
+  job_salary: "Salário, remuneração, bolsa ou valor",
+  job_schedule: "Horário de trabalho, jornada ou dias e horários",
+  job_benefits: "Benefícios oferecidos",
+  job_contract_type: "Tipo de contrato: CLT, estágio, jovem aprendiz, etc",
+  job_work_type: "Modalidade: presencial, remoto ou híbrido",
+  job_required_skills: "Habilidades, competências ou requisitos",
+  job_openings: "Quantidade de vagas abertas",
+  job_urgency: "Urgência da vaga",
+  job_gender_preference: "Preferência por sexo/gênero",
+  job_age_range: "Faixa etária de preferência",
+  job_education: "Escolaridade exigida",
+  job_notes: "Observações gerais sobre a vaga",
+
+  // Skip
+  ignore: "Coluna deve ser ignorada (timestamp, dados irrelevantes, etc)",
+};
+
+export type CompanyColumnSchema = Record<string, string>;
+
+/**
+ * AI-powered column mapping for company imports
+ * Analyzes Excel headers and sample data to suggest field mappings
+ */
+export async function suggestCompanyColumnMappings(
+  headers: string[],
+  sampleRows: Record<string, string>[]
+): Promise<{ mappings: CompanyColumnSchema; unmapped: string[] }> {
+  // Build column info with samples
+  const columnsInfo = headers.map((header) => {
+    const samples = sampleRows
+      .map((row) => row[header])
+      .filter((v) => v !== undefined && v !== null && v !== "")
+      .slice(0, 3);
+
+    return `"${header}": [${samples.map((s) => `"${String(s).substring(0, 80)}"`).join(", ")}]`;
+  }).join("\n");
+
+  const fieldsInfo = Object.entries(COMPANY_FIELDS)
+    .map(([key, desc]) => `- ${key}: ${desc}`)
+    .join("\n");
+
+  const systemPrompt = `Você é um especialista em análise de planilhas Excel de cadastro de empresas.
+Sua tarefa é mapear colunas da planilha para os campos do nosso sistema.
+
+Campos disponíveis no sistema:
+${fieldsInfo}
+
+Regras importantes:
+1. CNPJ tem 14 dígitos numéricos (pode estar formatado como XX.XXX.XXX/XXXX-XX)
+2. Email sempre contém @
+3. Telefone tem 10-11 dígitos
+4. Se a coluna for timestamp ou irrelevante, mapeie para "ignore"
+5. Se a coluna tiver descrição longa mas claramente indica um campo, mapeie corretamente
+6. Exemplos de mapeamentos corretos:
+   - "TÍTULO DA VAGA: Cargo + área (ex.: Atendente de Loja)" → job_title
+   - "PRINCIPAIS ATIVIDADES . Liste as tarefas do dia a dia" → job_description
+   - "Contato | Pessoa responsável pelas contratações" → contact_name
+   - "Enderenço e número" (mesmo com erro de digitação) → address
+7. Mapeie TODAS as colunas, mesmo as com nomes longos ou com erros de ortografia`;
+
+  const userPrompt = `Analise estas colunas e seus valores de exemplo de uma planilha de cadastro de empresas:
+
+${columnsInfo}
+
+Retorne um JSON mapeando TODAS as colunas para o campo correspondente.
+Use "ignore" para colunas que devem ser ignoradas (timestamps, colunas vazias, etc).
+
+Formato esperado:
+{
+  "Nome da Coluna": "campo_do_sistema",
+  "Outra Coluna": "outro_campo"
+}`;
+
+  try {
+    const result = await invokeLLM({
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+      responseFormat: { type: "json_object" },
+    });
+
+    const content = result.choices[0]?.message?.content;
+    if (!content || typeof content !== "string") {
+      console.error("[CompanyColumnMapper] Empty response from LLM");
+      return { mappings: {}, unmapped: headers };
+    }
+
+    const rawMappings = JSON.parse(content) as Record<string, string>;
+
+    // Validate mappings - only keep valid field mappings
+    const validFields = new Set(Object.keys(COMPANY_FIELDS));
+    const mappings: CompanyColumnSchema = {};
+    const unmapped: string[] = [];
+
+    for (const header of headers) {
+      const suggestedField = rawMappings[header];
+      if (suggestedField && validFields.has(suggestedField) && suggestedField !== "ignore") {
+        mappings[header] = suggestedField;
+      } else if (!suggestedField) {
+        unmapped.push(header);
+      }
+      // If "ignore", we simply don't add it to mappings or unmapped
+    }
+
+    console.log(`[CompanyColumnMapper] Mapped ${Object.keys(mappings).length} columns, ${unmapped.length} unmapped`);
+    return { mappings, unmapped };
+  } catch (error) {
+    console.error("[CompanyColumnMapper] Failed to suggest mappings:", error);
+    return { mappings: {}, unmapped: headers };
+  }
+}
+
+/**
+ * Get list of available company fields for manual mapping UI
+ */
+export function getCompanyFieldsList(): Array<{ value: string; label: string }> {
+  return Object.entries(COMPANY_FIELDS)
+    .filter(([key]) => key !== "ignore")
+    .map(([key, desc]) => ({
+      value: key,
+      label: desc,
+    }));
+}
+
 /**
  * NEW SIMPLIFIED APPROACH
  * Only identifies the 3 essential columns: name, cpf, email

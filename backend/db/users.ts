@@ -35,14 +35,14 @@ export async function createUserProfile(profile: {
   email: string;
   name: string | null;
   role: "company" | "candidate";
-  school_id: string | null;
+  agency_id: string | null;
 }): Promise<{ error: any }> {
   const { error } = await supabaseAdmin.from("users").insert({
     id: profile.id,
     email: profile.email,
     name: profile.name,
     role: profile.role,
-    school_id: profile.school_id,
+    agency_id: profile.agency_id,
   });
 
   return { error };

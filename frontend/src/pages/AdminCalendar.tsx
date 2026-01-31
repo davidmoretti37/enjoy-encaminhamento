@@ -330,7 +330,7 @@ export default function AdminCalendar() {
     );
   }
 
-  if (!user || user.role !== 'affiliate') {
+  if (!user || user.role !== 'admin') {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Card className="max-w-md">

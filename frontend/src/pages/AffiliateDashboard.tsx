@@ -26,9 +26,9 @@ export default function AffiliateDashboard() {
   const [, setLocation] = useLocation();
 
   const { data: affiliate, isLoading: affiliateLoading } = trpc.affiliate.getByUserId.useQuery();
-  // Pass null to get stats for ALL schools (not filtered by selected school context)
-  const { data: stats, isLoading: statsLoading } = trpc.affiliate.getDashboardStats.useQuery({ schoolId: null });
-  const { data: schools, isLoading: schoolsLoading } = trpc.affiliate.getSchools.useQuery();
+  // Pass null to get stats for ALL agencies (not filtered by selected agency context)
+  const { data: stats, isLoading: statsLoading } = trpc.affiliate.getDashboardStats.useQuery({ agencyId: null });
+  const { data: agencies, isLoading: agenciesLoading } = trpc.affiliate.getAgencies.useQuery();
 
   const isLoading = authLoading || affiliateLoading || statsLoading;
 
@@ -40,7 +40,7 @@ export default function AffiliateDashboard() {
     );
   }
 
-  if (!user || user.role !== 'affiliate') {
+  if (!user || user.role !== 'admin') {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Card className="max-w-md">
@@ -66,7 +66,7 @@ export default function AffiliateDashboard() {
     );
   }
 
-  const pendingSchools = schools?.filter((s: any) => s.status === 'pending') || [];
+  const pendingAgencies = agencies?.filter((s: any) => s.status === 'pending') || [];
 
   return (
     <DashboardLayout>
@@ -78,20 +78,20 @@ export default function AffiliateDashboard() {
         </div>
 
         {/* Pending Approvals Alert */}
-        {pendingSchools.length > 0 && (
+        {pendingAgencies.length > 0 && (
           <Card className="border-amber-200 bg-amber-50/50 shadow-md">
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <AlertCircle className="h-5 w-5 text-amber-600" />
                   <CardTitle className="text-amber-900">
-                    {pendingSchools.length} {pendingSchools.length === 1 ? 'Escola Aguardando' : 'Escolas Aguardando'} Aprovação
+                    {pendingAgencies.length} {pendingAgencies.length === 1 ? 'Agência Aguardando' : 'Agências Aguardando'} Aprovação
                   </CardTitle>
                 </div>
                 <Button
                   variant="default"
                   size="sm"
-                  onClick={() => setLocation('/affiliate/schools')}
+                  onClick={() => setLocation('/admin/agencies')}
                   className="gap-2"
                 >
                   Revisar Agora
@@ -108,15 +108,15 @@ export default function AffiliateDashboard() {
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
             <Card className="border-slate-200 shadow-md hover:shadow-lg transition-shadow">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium text-slate-600">Total de Escolas</CardTitle>
+                <CardTitle className="text-sm font-medium text-slate-600">Total de Agências</CardTitle>
                 <Building className="h-5 w-5 text-slate-400" />
               </CardHeader>
               <CardContent>
                 <div className="text-3xl font-semibold mb-1 text-slate-900">
-                  {stats?.totalSchools || 0}
+                  {stats?.totalAgencies || 0}
                 </div>
                 <p className="text-xs text-slate-500">
-                  {stats?.activeSchools || 0} ativas • {stats?.pendingSchools || 0} pendentes
+                  {stats?.activeAgencies || 0} ativas • {stats?.pendingAgencies || 0} pendentes
                 </p>
               </CardContent>
             </Card>
@@ -174,21 +174,21 @@ export default function AffiliateDashboard() {
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             <Card
               className="cursor-pointer hover:shadow-lg transition-shadow border-slate-200"
-              onClick={() => setLocation('/affiliate/schools')}
+              onClick={() => setLocation('/admin/agencies')}
             >
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-lg">
                   <Building className="h-5 w-5 text-slate-600" />
-                  Gerenciar Escolas
+                  Gerenciar Agências
                 </CardTitle>
                 <CardDescription>
-                  Aprovar e gerenciar escolas da sua região
+                  Aprovar e gerenciar agências da sua região
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                {pendingSchools.length > 0 && (
+                {pendingAgencies.length > 0 && (
                   <Badge className="bg-amber-500">
-                    {pendingSchools.length} pendente{pendingSchools.length > 1 ? 's' : ''}
+                    {pendingAgencies.length} pendente{pendingAgencies.length > 1 ? 's' : ''}
                   </Badge>
                 )}
               </CardContent>
@@ -196,7 +196,7 @@ export default function AffiliateDashboard() {
 
             <Card
               className="cursor-pointer hover:shadow-lg transition-shadow border-slate-200"
-              onClick={() => setLocation('/affiliate/companies')}
+              onClick={() => setLocation('/companies')}
             >
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-lg">
@@ -211,7 +211,7 @@ export default function AffiliateDashboard() {
 
             <Card
               className="cursor-pointer hover:shadow-lg transition-shadow border-slate-200"
-              onClick={() => setLocation('/affiliate/jobs')}
+              onClick={() => setLocation('/jobs')}
             >
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-lg">
@@ -226,7 +226,7 @@ export default function AffiliateDashboard() {
 
             <Card
               className="cursor-pointer hover:shadow-lg transition-shadow border-slate-200"
-              onClick={() => setLocation('/affiliate/candidates')}
+              onClick={() => setLocation('/candidates')}
             >
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-lg">
@@ -241,7 +241,7 @@ export default function AffiliateDashboard() {
 
             <Card
               className="cursor-pointer hover:shadow-lg transition-shadow border-slate-200"
-              onClick={() => setLocation('/affiliate/contracts')}
+              onClick={() => setLocation('/contracts')}
             >
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-lg">
@@ -256,7 +256,7 @@ export default function AffiliateDashboard() {
 
             <Card
               className="cursor-pointer hover:shadow-lg transition-shadow border-slate-200"
-              onClick={() => setLocation('/affiliate/payments')}
+              onClick={() => setLocation('/payments')}
             >
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-lg">
@@ -271,60 +271,60 @@ export default function AffiliateDashboard() {
           </div>
         </div>
 
-        {/* Recent Schools */}
+        {/* Recent Agencies */}
         <Card className="shadow-lg">
           <CardHeader>
             <div className="flex items-center justify-between">
               <div>
-                <CardTitle>Escolas Recentes</CardTitle>
+                <CardTitle>Agências Recentes</CardTitle>
                 <CardDescription>
-                  Últimas escolas cadastradas na sua região
+                  Últimas agências cadastradas na sua região
                 </CardDescription>
               </div>
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setLocation('/affiliate/schools')}
+                onClick={() => setLocation('/admin/agencies')}
               >
                 Ver Todas
               </Button>
             </div>
           </CardHeader>
           <CardContent>
-            {schoolsLoading ? (
+            {agenciesLoading ? (
               <div className="flex justify-center py-8">
                 <ClassicLoader />
               </div>
-            ) : schools && schools.length > 0 ? (
+            ) : agencies && agencies.length > 0 ? (
               <div className="space-y-3">
-                {schools.slice(0, 5).map((school: any) => (
+                {agencies.slice(0, 5).map((agency: any) => (
                   <div
-                    key={school.id}
+                    key={agency.id}
                     className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-200 hover:border-slate-300 transition-colors"
                   >
                     <div className="flex items-center gap-3">
                       <Building className="h-8 w-8 text-slate-400" />
                       <div>
-                        <p className="font-medium">{school.school_name}</p>
+                        <p className="font-medium">{agency.agency_name}</p>
                         <p className="text-sm text-muted-foreground">
-                          {school.city || 'Cidade não informada'}
+                          {agency.city || 'Cidade não informada'}
                         </p>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      {school.status === 'pending' && (
+                      {agency.status === 'pending' && (
                         <Badge className="bg-amber-500">
                           <Clock className="h-3 w-3 mr-1" />
                           Pendente
                         </Badge>
                       )}
-                      {school.status === 'active' && (
+                      {agency.status === 'active' && (
                         <Badge className="bg-green-500">
                           <CheckCircle className="h-3 w-3 mr-1" />
                           Ativa
                         </Badge>
                       )}
-                      {school.status === 'suspended' && (
+                      {agency.status === 'suspended' && (
                         <Badge className="bg-red-500">
                           Suspensa
                         </Badge>
@@ -338,8 +338,8 @@ export default function AffiliateDashboard() {
                 <div className="w-20 h-24 border-2 border-dashed border-gray-300 rounded-xl bg-gray-50/50 flex flex-col items-center justify-center gap-2 mb-6">
                   <Building className="h-8 w-8 text-gray-300" />
                 </div>
-                <h3 className="text-lg font-medium text-gray-500 mb-1">Nenhuma escola cadastrada</h3>
-                <p className="text-gray-400 text-sm">Escolas aparecerão aqui quando se registrarem na sua região</p>
+                <h3 className="text-lg font-medium text-gray-500 mb-1">Nenhuma agência cadastrada</h3>
+                <p className="text-gray-400 text-sm">Agências aparecerão aqui quando se registrarem na sua região</p>
               </div>
             )}
           </CardContent>

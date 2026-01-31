@@ -1,7 +1,7 @@
 // @ts-nocheck
 import { useAuth } from "@/_core/hooks/useAuth";
 import ClassicLoader from "@/components/ui/ClassicLoader";
-import { useSchoolContext } from "@/contexts/SchoolContext";
+import { useAgencyContext } from "@/contexts/AgencyContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -36,41 +36,41 @@ import { useState } from "react";
 
 export default function CandidatePage() {
   const { user, loading: authLoading } = useAuth();
-  const { currentSchool, isAllSchoolsMode } = useSchoolContext();
+  const { currentAgency, isAllAgenciesMode } = useAgencyContext();
   const [searchTerm, setSearchTerm] = useState("");
   const [applicationSearchTerm, setApplicationSearchTerm] = useState("");
   const [selectedCandidate, setSelectedCandidate] = useState<string | null>(null);
   const [showImportModal, setShowImportModal] = useState(false);
 
   // Determine role capabilities
-  const isAffiliate = user?.role === 'affiliate';
-  const isSchool = user?.role === 'school';
+  const isAffiliate = user?.role === 'admin';
+  const isAgency = user?.role === 'agency';
   const isAdmin = isAffiliate; // Affiliates have admin-like capabilities
 
   // Conditional tRPC queries based on role
-  // Affiliate uses affiliate queries with school filtering
-  // Pass null explicitly for "All Schools" mode (currentSchool is null)
+  // Affiliate uses affiliate queries with agency filtering
+  // Pass null explicitly for "All Agencies" mode (currentAgency is null)
   const affiliateCandidatesQuery = trpc.affiliate.getCandidates.useQuery(
-    { schoolId: currentSchool?.id ?? null },
+    { agencyId: currentAgency?.id ?? null },
     { enabled: isAffiliate }
   );
   const affiliateApplicationsQuery = trpc.affiliate.getApplications.useQuery(
-    { schoolId: currentSchool?.id ?? null },
+    { agencyId: currentAgency?.id ?? null },
     { enabled: isAffiliate }
   );
 
-  // School uses school queries
-  const schoolCandidatesQuery = trpc.school.getCandidates.useQuery(undefined, { enabled: isSchool });
-  const schoolApplicationsQuery = trpc.school.getApplications.useQuery(undefined, { enabled: isSchool });
+  // Agency uses agency queries
+  const agencyCandidatesQuery = trpc.agency.getCandidates.useQuery(undefined, { enabled: isAgency });
+  const agencyApplicationsQuery = trpc.agency.getApplications.useQuery(undefined, { enabled: isAgency });
 
   // Select the right data based on role
-  const candidates = isAffiliate ? affiliateCandidatesQuery.data : schoolCandidatesQuery.data;
-  const applications = isAffiliate ? affiliateApplicationsQuery.data : schoolApplicationsQuery.data;
-  const refetchCandidates = isAffiliate ? affiliateCandidatesQuery.refetch : schoolCandidatesQuery.refetch;
-  const refetchApplications = isAffiliate ? affiliateApplicationsQuery.refetch : schoolApplicationsQuery.refetch;
+  const candidates = isAffiliate ? affiliateCandidatesQuery.data : agencyCandidatesQuery.data;
+  const applications = isAffiliate ? affiliateApplicationsQuery.data : agencyApplicationsQuery.data;
+  const refetchCandidates = isAffiliate ? affiliateCandidatesQuery.refetch : agencyCandidatesQuery.refetch;
+  const refetchApplications = isAffiliate ? affiliateApplicationsQuery.refetch : agencyApplicationsQuery.refetch;
 
-  const candidatesLoading = affiliateCandidatesQuery.isLoading || schoolCandidatesQuery.isLoading;
-  const applicationsLoading = affiliateApplicationsQuery.isLoading || schoolApplicationsQuery.isLoading;
+  const candidatesLoading = affiliateCandidatesQuery.isLoading || agencyCandidatesQuery.isLoading;
+  const applicationsLoading = affiliateApplicationsQuery.isLoading || agencyApplicationsQuery.isLoading;
 
   // Mutations (admin only)
   const updateCandidateStatusMutation = trpc.candidate.updateStatus.useMutation({
@@ -91,7 +91,7 @@ export default function CandidatePage() {
     );
   }
 
-  if (!user || !['affiliate', 'school'].includes(user.role)) {
+  if (!user || !['admin', 'agency'].includes(user.role)) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Card className="max-w-md">
@@ -185,7 +185,7 @@ export default function CandidatePage() {
       candidate.cpf?.includes(searchTerm) ||
       email?.toLowerCase().includes(searchLower) ||
       candidate.city?.toLowerCase().includes(searchLower) ||
-      candidate.school?.school_name?.toLowerCase().includes(searchLower)
+      candidate.agency?.name?.toLowerCase().includes(searchLower)
     );
   });
 
@@ -220,7 +220,7 @@ export default function CandidatePage() {
             <h1 className="text-3xl font-bold text-gray-900">Candidatos</h1>
             <p className="text-gray-500 mt-1">Gerencie candidatos e processos seletivos</p>
           </div>
-          {(isSchool || isAffiliate) && (
+          {(isAgency || isAffiliate) && (
             <Button onClick={() => setShowImportModal(true)} className="gap-2">
               <Upload className="h-4 w-4" />
               Importar Candidatos
@@ -314,7 +314,7 @@ export default function CandidatePage() {
                       <TableRow>
                         <TableHead>Nome</TableHead>
                         <TableHead>Email</TableHead>
-                        {isAllSchoolsMode && <TableHead>Escola</TableHead>}
+                        {isAllAgenciesMode && <TableHead>Escola</TableHead>}
                         <TableHead>Escolaridade</TableHead>
                         <TableHead>Cidade</TableHead>
                         <TableHead>Status</TableHead>
@@ -327,11 +327,11 @@ export default function CandidatePage() {
                         <TableRow key={candidate.id}>
                           <TableCell className="font-medium">{candidate.full_name || 'N/A'}</TableCell>
                           <TableCell>{(isAdmin ? candidate.users?.email : candidate.email) || 'N/A'}</TableCell>
-                          {isAllSchoolsMode && (
+                          {isAllAgenciesMode && (
                             <TableCell>
                               <div className="flex items-center gap-2">
                                 <Building className="h-4 w-4 text-slate-400" />
-                                <span className="text-sm">{candidate.school?.school_name || 'N/A'}</span>
+                                <span className="text-sm">{candidate.agency?.name || 'N/A'}</span>
                               </div>
                             </TableCell>
                           )}
@@ -560,7 +560,7 @@ export default function CandidatePage() {
       </div>
 
       {/* Import Modal */}
-      {(isSchool || isAffiliate) && (
+      {(isAgency || isAffiliate) && (
         <ImportCandidatesModal
           open={showImportModal}
           onClose={() => setShowImportModal(false)}

@@ -53,17 +53,17 @@ export default function SettingsPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Detect role
-  const isAffiliate = user?.role === "affiliate";
-  const isSchool = user?.role === "school";
+  const isAffiliate = user?.role === "admin";
+  const isAgency = user?.role === "agency";
 
-  // Get school contract
-  const { data: contract, refetch: refetchContract, isLoading: contractLoading } = trpc.school.getContract.useQuery(
+  // Get agency contract
+  const { data: contract, refetch: refetchContract, isLoading: contractLoading } = trpc.agency.getContract.useQuery(
     undefined,
-    { enabled: isAffiliate || isSchool }
+    { enabled: isAffiliate || isAgency }
   );
 
   // Upload PDF mutation
-  const uploadMutation = trpc.school.uploadContractPdf.useMutation({
+  const uploadMutation = trpc.agency.uploadContractPdf.useMutation({
     onSuccess: () => {
       toast.success("Contrato PDF enviado com sucesso!");
       refetchContract();
@@ -76,7 +76,7 @@ export default function SettingsPage() {
   });
 
   // Save HTML mutation
-  const saveHtmlMutation = trpc.school.saveContractHtml.useMutation({
+  const saveHtmlMutation = trpc.agency.saveContractHtml.useMutation({
     onSuccess: () => {
       toast.success("Contrato salvo com sucesso!");
       refetchContract();
@@ -90,7 +90,7 @@ export default function SettingsPage() {
   });
 
   // Delete contract mutation
-  const deleteMutation = trpc.school.deleteContract.useMutation({
+  const deleteMutation = trpc.agency.deleteContract.useMutation({
     onSuccess: () => {
       toast.success("Contrato removido!");
       refetchContract();
@@ -111,7 +111,7 @@ export default function SettingsPage() {
     );
   }
 
-  if (!user || !user.role || !["affiliate", "school"].includes(user.role)) {
+  if (!user || !user.role || !["admin", "agency"].includes(user.role)) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Card className="max-w-md">

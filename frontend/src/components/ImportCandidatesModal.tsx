@@ -44,7 +44,7 @@ interface ImportCandidatesModalProps {
   onSuccess?: () => void;
 }
 
-type ImportStep = "select-school" | "upload" | "analyzing" | "preview" | "importing" | "complete";
+type ImportStep = "select-agency" | "upload" | "analyzing" | "preview" | "importing" | "complete";
 
 interface IdentifiedColumns {
   nameColumn: string | null;
@@ -58,13 +58,13 @@ export default function ImportCandidatesModal({
   onSuccess,
 }: ImportCandidatesModalProps) {
   const { user } = useAuth();
-  const isSchoolUser = user?.role === 'school';
-  const isAffiliateUser = user?.role === 'affiliate';
+  const isAgencyUser = user?.role === 'agency';
+  const isAffiliateUser = user?.role === 'admin';
 
-  const initialStep = isSchoolUser ? "upload" : "select-school";
+  const initialStep = isAgencyUser ? "upload" : "select-agency";
 
   const [step, setStep] = useState<ImportStep>(initialStep);
-  const [selectedSchoolId, setSelectedSchoolId] = useState<string>("");
+  const [selectedAgencyId, setSelectedAgencyId] = useState<string>("");
 
   // Raw Excel data
   const [excelHeaders, setExcelHeaders] = useState<string[]>([]);
@@ -78,7 +78,7 @@ export default function ImportCandidatesModal({
     emailColumn: null,
   });
 
-  // Candidate source (internal = from school, external = from outside)
+  // Candidate source (internal = from agency, external = from outside)
   const [candidateSource, setCandidateSource] = useState<'internal' | 'external'>('internal');
 
   const [importResult, setImportResult] = useState<{
@@ -92,17 +92,17 @@ export default function ImportCandidatesModal({
   // Reset step when modal opens
   useEffect(() => {
     if (open) {
-      setStep(isSchoolUser ? "upload" : "select-school");
+      setStep(isAgencyUser ? "upload" : "select-agency");
     }
-  }, [open, isSchoolUser]);
+  }, [open, isAgencyUser]);
 
-  // Get schools for dropdown (only for affiliates)
-  const { data: schools } = trpc.school.getAll.useQuery(undefined, {
+  // Get agencies for dropdown (only for affiliates)
+  const { data: agencies } = trpc.agency.getAll.useQuery(undefined, {
     enabled: isAffiliateUser,
   });
 
   // Bulk import mutations
-  const schoolImportMutation = trpc.school.bulkImportCandidates.useMutation({
+  const agencyImportMutation = trpc.agency.bulkImportCandidates.useMutation({
     onSuccess: (data) => {
       setImportResult({
         success: data.created,
@@ -139,7 +139,7 @@ export default function ImportCandidatesModal({
   });
 
   // AI analyze mutations
-  const schoolAnalyzeMutation = trpc.school.analyzeExcel.useMutation();
+  const agencyAnalyzeMutation = trpc.agency.analyzeExcel.useMutation();
   const affiliateAnalyzeMutation = trpc.affiliate.analyzeExcel.useMutation();
 
   // Check if a row has a valid name (only requirement for import now)
@@ -177,7 +177,7 @@ export default function ImportCandidatesModal({
 
       // Send sample rows to AI for column identification
       const sampleRows = rows.slice(0, 5);
-      const analyzeMutation = isSchoolUser ? schoolAnalyzeMutation : affiliateAnalyzeMutation;
+      const analyzeMutation = isAgencyUser ? agencyAnalyzeMutation : affiliateAnalyzeMutation;
 
       const result = await analyzeMutation.mutateAsync({
         headers,
@@ -265,19 +265,19 @@ export default function ImportCandidatesModal({
       source: candidateSource,
     }));
 
-    if (isSchoolUser) {
-      schoolImportMutation.mutate({ candidates: candidatesToImport });
+    if (isAgencyUser) {
+      agencyImportMutation.mutate({ candidates: candidatesToImport });
     } else {
       affiliateImportMutation.mutate({
-        schoolId: selectedSchoolId,
+        agencyId: selectedAgencyId,
         candidates: candidatesToImport,
       });
     }
   };
 
   const handleClose = () => {
-    setStep(isSchoolUser ? "upload" : "select-school");
-    setSelectedSchoolId("");
+    setStep(isAgencyUser ? "upload" : "select-agency");
+    setSelectedAgencyId("");
     setExcelHeaders([]);
     setExcelRows([]);
     setHeaderRowIndex(0);
@@ -307,20 +307,20 @@ export default function ImportCandidatesModal({
         </DialogHeader>
 
         <div className="flex-1 overflow-auto py-4">
-          {/* Step 0: Select School (affiliates only) */}
-          {step === "select-school" && (
+          {/* Step 0: Select Agency (affiliates only) */}
+          {step === "select-agency" && (
             <div className="space-y-4 max-w-md mx-auto">
               <p className="text-sm text-gray-600">
-                Selecione a escola para qual os candidatos serão importados:
+                Selecione a agência para qual os candidatos serão importados:
               </p>
-              <Select value={selectedSchoolId} onValueChange={setSelectedSchoolId}>
+              <Select value={selectedAgencyId} onValueChange={setSelectedAgencyId}>
                 <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Selecione uma escola" />
+                  <SelectValue placeholder="Selecione uma agência" />
                 </SelectTrigger>
                 <SelectContent>
-                  {schools?.map((school: { id: string; school_name: string }) => (
-                    <SelectItem key={school.id} value={school.id}>
-                      {school.school_name}
+                  {agencies?.map((agency: { id: string; agency_name: string }) => (
+                    <SelectItem key={agency.id} value={agency.id}>
+                      {agency.agency_name}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -447,7 +447,7 @@ export default function ImportCandidatesModal({
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="internal">Interno (da escola)</SelectItem>
+                      <SelectItem value="internal">Interno (da agência)</SelectItem>
                       <SelectItem value="external">Externo</SelectItem>
                     </SelectContent>
                   </Select>
@@ -612,12 +612,12 @@ export default function ImportCandidatesModal({
         </div>
 
         <DialogFooter>
-          {step === "select-school" && (
+          {step === "select-agency" && (
             <>
               <Button variant="outline" onClick={handleClose}>
                 Cancelar
               </Button>
-              <Button onClick={() => setStep("upload")} disabled={!selectedSchoolId}>
+              <Button onClick={() => setStep("upload")} disabled={!selectedAgencyId}>
                 Continuar
               </Button>
             </>
@@ -625,12 +625,12 @@ export default function ImportCandidatesModal({
 
           {step === "upload" && (
             <>
-              {!isSchoolUser && (
-                <Button variant="outline" onClick={() => setStep("select-school")}>
+              {!isAgencyUser && (
+                <Button variant="outline" onClick={() => setStep("select-agency")}>
                   Voltar
                 </Button>
               )}
-              {isSchoolUser && (
+              {isAgencyUser && (
                 <Button variant="outline" onClick={handleClose}>
                   Cancelar
                 </Button>

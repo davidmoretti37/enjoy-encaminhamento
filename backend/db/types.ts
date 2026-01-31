@@ -23,16 +23,16 @@ export type Document = Database["public"]["Tables"]["documents"]["Row"];
 export type InsertDocument = Database["public"]["Tables"]["documents"]["Insert"];
 export type Notification = Database["public"]["Tables"]["notifications"]["Row"];
 export type InsertNotification = Database["public"]["Tables"]["notifications"]["Insert"];
-export type School = Database["public"]["Tables"]["schools"]["Row"];
-export type InsertSchool = Database["public"]["Tables"]["schools"]["Insert"];
+export type Agency = Database["public"]["Tables"]["agencies"]["Row"];
+export type InsertAgency = Database["public"]["Tables"]["agencies"]["Insert"];
 export type JobMatch = Database["public"]["Tables"]["job_matches"]["Row"];
 export type InsertJobMatch = Database["public"]["Tables"]["job_matches"]["Insert"];
 
 // Batch types (candidate pre-selection)
 export type CandidateBatch = Database["public"]["Tables"]["candidate_batches"]["Row"];
 export type InsertCandidateBatch = Database["public"]["Tables"]["candidate_batches"]["Insert"];
-export type SchoolEmployeeTypeSetting = Database["public"]["Tables"]["school_employee_type_settings"]["Row"];
-export type InsertSchoolEmployeeTypeSetting = Database["public"]["Tables"]["school_employee_type_settings"]["Insert"];
+export type AgencyEmployeeTypeSetting = Database["public"]["Tables"]["agency_employee_type_settings"]["Row"];
+export type InsertAgencyEmployeeTypeSetting = Database["public"]["Tables"]["agency_employee_type_settings"]["Insert"];
 
 // Re-export Database type for modules that need it
 export type { Database };

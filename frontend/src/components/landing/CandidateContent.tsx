@@ -15,6 +15,11 @@ import {
   Gift,
 } from "lucide-react";
 import { Link } from "wouter";
+import TestimonialsSection from "./TestimonialsSection";
+import RegionsSection from "./RegionsSection";
+import InstitutionsSection from "./InstitutionsSection";
+import TrustBadgesSection from "./TrustBadgesSection";
+import FAQSection from "./FAQSection";
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -71,7 +76,7 @@ export default function CandidateContent() {
       variants={containerVariants}
     >
       {/* How It Works Section */}
-      <section className="py-20 bg-[#FF6B35]/5">
+      <section id="como-funciona" className="py-20 bg-[#FF6B35]/5 scroll-mt-20">
         <div className="container mx-auto px-4">
           <motion.div variants={itemVariants} className="text-center mb-16">
             <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[#FF6B35]/10 text-[#FF6B35] mb-6">
@@ -79,7 +84,7 @@ export default function CandidateContent() {
               <span className="text-sm font-medium">Simples e Gratuito</span>
             </div>
             <h2 className="text-3xl md:text-4xl font-bold text-slate-900 mb-4">
-              Como a <span className="text-gradient">ANEC</span> Impulsiona Sua Carreira
+              Como a <span className="text-gradient">ANEC RG</span> Impulsiona Sua Carreira
             </h2>
             <p className="text-lg text-slate-600 max-w-2xl mx-auto">
               Cadastre-se gratuitamente e conecte-se com oportunidades de emprego
@@ -99,7 +104,7 @@ export default function CandidateContent() {
               {
                 step: "2",
                 icon: Brain,
-                title: "ANEC Conecta Você",
+                title: "ANEC RG Conecta Você",
                 description:
                   "Nosso sistema integra seu perfil com oportunidades ideais",
               },
@@ -224,7 +229,7 @@ export default function CandidateContent() {
                 Sua Carreira <span className="text-gradient">Começa Aqui</span>
               </h2>
               <p className="text-lg text-slate-600 mb-8">
-                A ANEC conecta você com oportunidades de crescimento profissional
+                A ANEC RG conecta você com oportunidades de crescimento profissional
                 em empresas de todo o Brasil
               </p>
 
@@ -252,6 +257,21 @@ export default function CandidateContent() {
         </div>
       </section>
 
+      {/* Trust Badges Section */}
+      <TrustBadgesSection />
+
+      {/* Testimonials Section */}
+      <TestimonialsSection />
+
+      {/* Regions Section */}
+      <RegionsSection />
+
+      {/* FAQ Section */}
+      <FAQSection />
+
+      {/* Institutions Section */}
+      <InstitutionsSection />
+
       {/* CTA Section */}
       <section className="py-20 bg-[#FF6B35]/5">
         <div className="container mx-auto px-4">
@@ -261,25 +281,33 @@ export default function CandidateContent() {
           >
             <div className="relative z-10">
               <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">
-                Comece a construir sua carreira hoje
+                Sua Próxima Oportunidade Está a Um Clique
               </h2>
-              <p className="text-white/90 text-lg mb-8 max-w-2xl mx-auto">
-                Milhares de profissionais já se conectaram com oportunidades através da ANEC.
-                Faça parte dessa rede nacional de talentos!
+              <p className="text-white/90 text-lg mb-4 max-w-2xl mx-auto">
+                Junte-se a mais de 6.000 profissionais que já encontraram
+                oportunidades através da ANEC RG
               </p>
-              <Link href="/login?tab=signup&role=candidate">
+              <p className="text-white/60 text-sm mb-8">
+                100% Gratuito • Cadastro em 2 minutos • Acompanhamento profissional
+              </p>
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+                <Link href="/login?tab=signup&role=candidate">
+                  <Button
+                    size="lg"
+                    className="text-lg px-8 py-6 bg-white text-[#FF6B35] hover:bg-white/90"
+                  >
+                    Criar Meu Perfil Gratuito
+                    <ArrowRight className="ml-2 h-5 w-5" />
+                  </Button>
+                </Link>
                 <Button
                   size="lg"
-                  variant="secondary"
-                  className="text-lg px-8 py-6"
+                  variant="outline"
+                  className="text-lg px-8 py-6 bg-transparent border-white text-white hover:bg-white/10"
                 >
-                  Cadastrar Agora
-                  <ArrowRight className="ml-2 h-5 w-5" />
+                  Ver Vagas Abertas
                 </Button>
-              </Link>
-              <p className="text-white/70 text-sm mt-4">
-                Cadastro gratuito em menos de 2 minutos
-              </p>
+              </div>
             </div>
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_50%,rgba(255,255,255,0.1),transparent_50%)]" />
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_80%,rgba(255,255,255,0.08),transparent_40%)]" />

@@ -2,7 +2,7 @@
 // Type checking disabled: tRPC type inference issues with useQuery options
 import { useAuth } from "@/_core/hooks/useAuth";
 import ClassicLoader from "@/components/ui/ClassicLoader";
-import { useSchoolContext } from "@/contexts/SchoolContext";
+import { useAgencyContext } from "@/contexts/AgencyContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -58,7 +58,7 @@ const DAYS_OF_WEEK = [
 
 export default function CalendarPage() {
   const { user, loading: authLoading } = useAuth();
-  const { currentSchool, isAllSchoolsMode } = useSchoolContext();
+  const { currentAgency, isAllAgenciesMode } = useAgencyContext();
   const [viewMode, setViewMode] = useState<'calendar' | 'status'>('calendar');
   const [daysToShow] = useState(7);
   const [customRange] = useState(false);
@@ -88,24 +88,24 @@ export default function CalendarPage() {
   }>({ isLoading: false, platform: null, message: '' });
 
   // Detect role
-  const isAffiliate = user?.role === 'affiliate';
-  const isSchool = user?.role === 'school';
+  const isAffiliate = user?.role === 'admin';
+  const isAgency = user?.role === 'agency';
 
   // Separate queries for each role (both called but only one enabled at a time)
-  // Pass null explicitly for "All Schools" mode (currentSchool is null)
+  // Pass null explicitly for "All Agencies" mode (currentAgency is null)
   const affiliateMeetingsQuery = trpc.outreach.getMeetings.useQuery(
-    { schoolId: currentSchool?.id ?? null },
+    { agencyId: currentAgency?.id ?? null },
     { enabled: isAffiliate }
   );
-  const schoolMeetingsQuery = trpc.school.getMeetings.useQuery(
+  const agencyMeetingsQuery = trpc.agency.getMeetings.useQuery(
     undefined,
-    { enabled: isSchool }
+    { enabled: isAgency }
   );
 
   // Combine results based on role
-  const meetings = isAffiliate ? affiliateMeetingsQuery.data : schoolMeetingsQuery.data;
-  const loadingMeetings = isAffiliate ? affiliateMeetingsQuery.isLoading : schoolMeetingsQuery.isLoading;
-  const refetchMeetings = isAffiliate ? affiliateMeetingsQuery.refetch : schoolMeetingsQuery.refetch;
+  const meetings = isAffiliate ? affiliateMeetingsQuery.data : agencyMeetingsQuery.data;
+  const loadingMeetings = isAffiliate ? affiliateMeetingsQuery.isLoading : agencyMeetingsQuery.isLoading;
+  const refetchMeetings = isAffiliate ? affiliateMeetingsQuery.refetch : agencyMeetingsQuery.refetch;
 
   // Settings queries
   const { data: availability, refetch: refetchAvailability } = trpc.outreach.getAvailability.useQuery(undefined, {
@@ -300,13 +300,13 @@ export default function CalendarPage() {
     );
   }
 
-  if (!user || (user.role !== 'affiliate' && user.role !== 'school')) {
+  if (!user || (user.role !== 'admin' && user.role !== 'agency')) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Card className="max-w-md">
           <CardHeader>
             <CardTitle>Acesso Negado</CardTitle>
-            <CardDescription>Você precisa ser um franqueado ou escola para acessar esta página.</CardDescription>
+            <CardDescription>Você precisa ser um administrador ou agência para acessar esta página.</CardDescription>
           </CardHeader>
         </Card>
       </div>
@@ -402,8 +402,8 @@ export default function CalendarPage() {
           <div className="flex items-center gap-3 text-xs text-gray-400 mt-1">
             <span>{meeting.company_email}</span>
             {meeting.contact_phone && <span>{meeting.contact_phone}</span>}
-            {isAllSchoolsMode && meeting.school_name && (
-              <span>{meeting.school_name}</span>
+            {isAllAgenciesMode && meeting.agency_name && (
+              <span>{meeting.agency_name}</span>
             )}
           </div>
           {showDate && (
@@ -548,7 +548,7 @@ export default function CalendarPage() {
             </p>
           </div>
           <div className="flex gap-2">
-            {(isAffiliate || isSchool) && (
+            {(isAffiliate || isAgency) && (
               <>
                 <Button variant="outline" size="sm" onClick={() => setSettingsModalOpen(true)} className="gap-2 text-gray-600">
                   <Settings className="h-4 w-4" />

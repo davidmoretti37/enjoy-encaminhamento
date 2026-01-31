@@ -14,9 +14,9 @@ import {
   dashboardRouter,
   notificationRouter,
   outreachRouter,
-  schoolContextRouter,
+  agencyContextRouter,
   companyRouter,
-  schoolRouter,
+  agencyRouter,
   candidateRouter,
   jobRouter,
   applicationRouter,
@@ -25,6 +25,8 @@ import {
   affiliateRouter,
   adminRouter,
   batchRouter,
+  matchingRouter,
+  companyInvitationRouter,
 } from "./routers/index";
 
 // Assemble the main application router
@@ -34,9 +36,9 @@ export const appRouter = router({
   dashboard: dashboardRouter,
   notification: notificationRouter,
   outreach: outreachRouter,
-  schoolContext: schoolContextRouter,
+  agencyContext: agencyContextRouter,
+  agency: agencyRouter,
   company: companyRouter,
-  school: schoolRouter,
   candidate: candidateRouter,
   job: jobRouter,
   application: applicationRouter,
@@ -45,6 +47,8 @@ export const appRouter = router({
   affiliate: affiliateRouter,
   admin: adminRouter,
   batch: batchRouter,
+  matching: matchingRouter,
+  companyInvitation: companyInvitationRouter,
 });
 
 export type AppRouter = typeof appRouter;

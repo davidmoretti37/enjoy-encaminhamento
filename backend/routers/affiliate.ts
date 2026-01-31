@@ -8,7 +8,7 @@ import { adminProcedure } from "./procedures";
 import { sendEmail } from "./email";
 import * as db from "../db";
 import { ENV } from "../_core/env";
-import { parseExcelWithAI, suggestColumnMappings as suggestColumnMappingsAI, identifyBasicColumns } from "../services/ai/columnMapper";
+import { parseExcelWithAI, suggestColumnMappings as suggestColumnMappingsAI, identifyBasicColumns, suggestCompanyColumnMappings, getCompanyFieldsList } from "../services/ai/columnMapper";
 
 export const affiliateRouter = router({
   // Get all affiliates (super admin only)
@@ -51,9 +51,9 @@ export const affiliateRouter = router({
         postal_code: z.string().optional(),
         website: z.string().optional(),
       }),
-      schools: z.array(z.object({
+      agencies: z.array(z.object({
         city: z.string().min(1),
-        school_name: z.string().min(1),
+        agency_name: z.string().min(1),
         trade_name: z.string().optional(),
         legal_name: z.string().optional(),
         cnpj: z.string().min(14),
@@ -71,7 +71,7 @@ export const affiliateRouter = router({
         email: input.email,
         cities: input.cities,
         affiliateData: input.affiliate,
-        schoolsData: input.schools,
+        agenciesData: input.agencies,
         commission_rate: input.commission_rate || 10,
         createdBy: ctx.user.id,
       });
@@ -107,30 +107,38 @@ export const affiliateRouter = router({
       return { success: true };
     }),
 
-  // Get schools in affiliate's region
-  getSchools: protectedProcedure.query(async ({ ctx }) => {
+  // Get agencies in admin's region
+  getAgencies: protectedProcedure.query(async ({ ctx }) => {
     const affiliate = await db.getAffiliateByUserId(ctx.user.id);
     if (!affiliate) {
       throw new TRPCError({ code: 'NOT_FOUND', message: 'Affiliate not found' });
     }
-    return await db.getSchoolsByAffiliateId(affiliate.id);
+    // Check if user has a specific agency selected
+    const agencyId = await db.getAdminAgencyContext(ctx.user.id);
+    if (agencyId) {
+      // Return only the selected agency
+      const agency = await db.getAgencyById(agencyId);
+      return agency ? [agency] : [];
+    }
+    // Return all agencies
+    return await db.getAgenciesByAffiliateId(affiliate.id);
   }),
 
-  // Get companies from affiliate's region (optionally filtered by school)
+  // Get companies from admin's region (optionally filtered by agency)
   getCompanies: protectedProcedure
-    .input(z.object({ schoolId: z.string().uuid().nullable().optional() }).optional())
+    .input(z.object({ agencyId: z.string().uuid().nullable().optional() }).optional())
     .query(async ({ ctx, input }) => {
       const affiliate = await db.getAffiliateByUserId(ctx.user.id);
       if (!affiliate) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Affiliate not found' });
       }
-      // Use provided schoolId, or fall back to stored context, or null for all
-      const schoolId = input?.schoolId ?? await db.getAdminSchoolContext(ctx.user.id);
-      return await db.getCompaniesByAffiliateId(affiliate.id, schoolId);
+      // Use provided agencyId, or fall back to stored context, or null for all
+      const agencyId = input?.agencyId ?? await db.getAdminAgencyContext(ctx.user.id);
+      return await db.getCompaniesByAffiliateId(affiliate.id, agencyId);
     }),
 
-  // Create school invitation (affiliates can invite schools to their region)
-  createSchoolInvitation: protectedProcedure
+  // Create agency invitation (admins can invite agencies to their region)
+  createAgencyInvitation: protectedProcedure
     .input(z.object({
       email: z.string().email(),
       notes: z.string().optional(),
@@ -143,7 +151,7 @@ export const affiliateRouter = router({
       }
 
       // Create invitation with affiliate's ID
-      const result = await db.createSchoolInvitation(
+      const result = await db.createAgencyInvitation(
         input.email,
         affiliate.id,
         ctx.user.id,
@@ -152,18 +160,18 @@ export const affiliateRouter = router({
 
       // Send invitation email via SMTP
       const baseUrl = ENV.appUrl;
-      const inviteLink = `${baseUrl}/register/school?token=${result.token}`;
+      const inviteLink = `${baseUrl}/register/agency?token=${result.token}`;
 
       const htmlBody = `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
           <h2 style="color: #1e293b;">Convite para Cadastro na Plataforma</h2>
           <p>Olá!</p>
-          <p>Você foi convidado(a) por <strong>${affiliate.name}</strong> para cadastrar sua escola em nossa plataforma de recrutamento.</p>
+          <p>Você foi convidado(a) por <strong>${affiliate.name}</strong> para cadastrar sua agência em nossa plataforma de recrutamento.</p>
           ${input.notes ? `<p><strong>Mensagem:</strong> ${input.notes}</p>` : ''}
           <p>Clique no botão abaixo para completar seu cadastro:</p>
           <div style="margin: 30px 0; text-align: center;">
             <a href="${inviteLink}" style="background-color: #2563eb; color: white; padding: 14px 28px; text-decoration: none; border-radius: 8px; font-weight: bold; display: inline-block;">
-              Cadastrar Escola
+              Cadastrar Agência
             </a>
           </div>
           <p style="color: #666; font-size: 14px;">Este link é válido por 7 dias e é exclusivo para ${input.email}.</p>
@@ -179,122 +187,122 @@ export const affiliateRouter = router({
       return result;
     }),
 
-  // Update school status (affiliates can approve/suspend schools in their region)
-  updateSchoolStatus: protectedProcedure
+  // Update agency status (admins can approve/suspend agencies in their region)
+  updateAgencyStatus: protectedProcedure
     .input(z.object({
       id: z.string().uuid(),
       status: z.enum(['pending', 'active', 'suspended'])
     }))
     .mutation(async ({ ctx, input }) => {
-      // Verify the school belongs to this affiliate
+      // Verify the agency belongs to this admin
       const affiliate = await db.getAffiliateByUserId(ctx.user.id);
       if (!affiliate) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Affiliate not found' });
       }
 
-      const school = await db.getSchoolById(input.id);
-      if (!school || school.affiliate_id !== affiliate.id) {
-        throw new TRPCError({ code: 'FORBIDDEN', message: 'You can only manage schools in your region' });
+      const agency = await db.getAgencyById(input.id);
+      if (!agency || agency.affiliate_id !== affiliate.id) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'You can only manage agencies in your region' });
       }
 
-      await db.updateSchoolStatus(input.id, input.status);
+      await db.updateAgencyStatus(input.id, input.status);
       return { success: true };
     }),
 
-  // Get affiliate's dashboard stats (optionally filtered by school)
+  // Get admin's dashboard stats (optionally filtered by agency)
   getDashboardStats: protectedProcedure
-    .input(z.object({ schoolId: z.string().uuid().nullable().optional() }).optional())
+    .input(z.object({ agencyId: z.string().uuid().nullable().optional() }).optional())
     .query(async ({ ctx, input }) => {
       const affiliate = await db.getAffiliateByUserId(ctx.user.id);
       if (!affiliate) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Affiliate not found' });
       }
-      // null = explicitly "all schools" mode, undefined = use stored context
-      const schoolId = input?.schoolId === null
+      // null = explicitly "all agencies" mode, undefined = use stored context
+      const agencyId = input?.agencyId === null
         ? undefined
-        : (input?.schoolId ?? await db.getAdminSchoolContext(ctx.user.id));
-      return await db.getAffiliateDashboardStats(affiliate.id, schoolId);
+        : (input?.agencyId ?? await db.getAdminAgencyContext(ctx.user.id));
+      return await db.getAffiliateDashboardStats(affiliate.id, agencyId);
     }),
 
-  // Get candidates from affiliate's region (optionally filtered by school)
+  // Get candidates from admin's region (optionally filtered by agency)
   getCandidates: protectedProcedure
-    .input(z.object({ schoolId: z.string().uuid().nullable().optional() }).optional())
+    .input(z.object({ agencyId: z.string().uuid().nullable().optional() }).optional())
     .query(async ({ ctx, input }) => {
       const affiliate = await db.getAffiliateByUserId(ctx.user.id);
       if (!affiliate) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Affiliate not found' });
       }
-      // null = explicitly "all schools" mode, undefined = use stored context
-      const schoolId = input?.schoolId === null
+      // null = explicitly "all agencies" mode, undefined = use stored context
+      const agencyId = input?.agencyId === null
         ? undefined
-        : (input?.schoolId ?? await db.getAdminSchoolContext(ctx.user.id));
-      return await db.getCandidatesByAffiliateId(affiliate.id, schoolId);
+        : (input?.agencyId ?? await db.getAdminAgencyContext(ctx.user.id));
+      return await db.getCandidatesByAffiliateId(affiliate.id, agencyId);
     }),
 
-  // Get jobs from affiliate's region (optionally filtered by school)
+  // Get jobs from admin's region (optionally filtered by agency)
   getJobs: protectedProcedure
-    .input(z.object({ schoolId: z.string().uuid().nullable().optional() }).optional())
+    .input(z.object({ agencyId: z.string().uuid().nullable().optional() }).optional())
     .query(async ({ ctx, input }) => {
       const affiliate = await db.getAffiliateByUserId(ctx.user.id);
       if (!affiliate) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Affiliate not found' });
       }
-      // null = explicitly "all schools" mode, undefined = use stored context
-      const schoolId = input?.schoolId === null
+      // null = explicitly "all agencies" mode, undefined = use stored context
+      const agencyId = input?.agencyId === null
         ? undefined
-        : (input?.schoolId ?? await db.getAdminSchoolContext(ctx.user.id));
-      return await db.getJobsByAffiliateId(affiliate.id, schoolId);
+        : (input?.agencyId ?? await db.getAdminAgencyContext(ctx.user.id));
+      return await db.getJobsByAffiliateId(affiliate.id, agencyId);
     }),
 
-  // Get applications from affiliate's region (optionally filtered by school)
+  // Get applications from admin's region (optionally filtered by agency)
   getApplications: protectedProcedure
-    .input(z.object({ schoolId: z.string().uuid().nullable().optional() }).optional())
+    .input(z.object({ agencyId: z.string().uuid().nullable().optional() }).optional())
     .query(async ({ ctx, input }) => {
       const affiliate = await db.getAffiliateByUserId(ctx.user.id);
       if (!affiliate) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Affiliate not found' });
       }
-      // null = explicitly "all schools" mode, undefined = use stored context
-      const schoolId = input?.schoolId === null
+      // null = explicitly "all agencies" mode, undefined = use stored context
+      const agencyId = input?.agencyId === null
         ? undefined
-        : (input?.schoolId ?? await db.getAdminSchoolContext(ctx.user.id));
-      return await db.getApplicationsByAffiliateId(affiliate.id, schoolId);
+        : (input?.agencyId ?? await db.getAdminAgencyContext(ctx.user.id));
+      return await db.getApplicationsByAffiliateId(affiliate.id, agencyId);
     }),
 
-  // Get contracts from affiliate's region (optionally filtered by school)
+  // Get contracts from admin's region (optionally filtered by agency)
   getContracts: protectedProcedure
-    .input(z.object({ schoolId: z.string().uuid().nullable().optional() }).optional())
+    .input(z.object({ agencyId: z.string().uuid().nullable().optional() }).optional())
     .query(async ({ ctx, input }) => {
       const affiliate = await db.getAffiliateByUserId(ctx.user.id);
       if (!affiliate) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Affiliate not found' });
       }
-      // null = explicitly "all schools" mode, undefined = use stored context
-      const schoolId = input?.schoolId === null
+      // null = explicitly "all agencies" mode, undefined = use stored context
+      const agencyId = input?.agencyId === null
         ? undefined
-        : (input?.schoolId ?? await db.getAdminSchoolContext(ctx.user.id));
-      return await db.getContractsByAffiliateId(affiliate.id, schoolId);
+        : (input?.agencyId ?? await db.getAdminAgencyContext(ctx.user.id));
+      return await db.getContractsByAffiliateId(affiliate.id, agencyId);
     }),
 
-  // Get payments from affiliate's region (optionally filtered by school)
+  // Get payments from admin's region (optionally filtered by agency)
   getPayments: protectedProcedure
-    .input(z.object({ schoolId: z.string().uuid().nullable().optional() }).optional())
+    .input(z.object({ agencyId: z.string().uuid().nullable().optional() }).optional())
     .query(async ({ ctx, input }) => {
       const affiliate = await db.getAffiliateByUserId(ctx.user.id);
       if (!affiliate) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Affiliate not found' });
       }
-      // null = explicitly "all schools" mode, undefined = use stored context
-      const schoolId = input?.schoolId === null
+      // null = explicitly "all agencies" mode, undefined = use stored context
+      const agencyId = input?.agencyId === null
         ? undefined
-        : (input?.schoolId ?? await db.getAdminSchoolContext(ctx.user.id));
-      return await db.getPaymentsByAffiliateId(affiliate.id, schoolId);
+        : (input?.agencyId ?? await db.getAdminAgencyContext(ctx.user.id));
+      return await db.getPaymentsByAffiliateId(affiliate.id, agencyId);
     }),
 
   // Bulk import companies from Excel/CSV
   bulkImportCompanies: protectedProcedure
     .input(z.object({
-      schoolId: z.string().uuid(),
+      agencyId: z.string().uuid(),
       companies: z.array(z.object({
         company_name: z.string().min(1),
         email: z.string().email(),
@@ -340,14 +348,14 @@ export const affiliateRouter = router({
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Affiliate not found' });
       }
 
-      // Verify the school belongs to this affiliate
-      const school = await db.getSchoolById(input.schoolId);
-      if (!school || school.affiliate_id !== affiliate.id) {
-        throw new TRPCError({ code: 'FORBIDDEN', message: 'School does not belong to this affiliate' });
+      // Verify the agency belongs to this admin
+      const agency = await db.getAgencyById(input.agencyId);
+      if (!agency || agency.affiliate_id !== affiliate.id) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Agency does not belong to this admin' });
       }
 
-      // Bulk create companies linked to both affiliate and school
-      const result = await db.bulkCreateCompanies(input.companies, affiliate.id, input.schoolId);
+      // Bulk create companies linked to both affiliate and agency
+      const result = await db.bulkCreateCompanies(input.companies, affiliate.id, input.agencyId);
 
       return {
         created: result.created.length,
@@ -389,10 +397,27 @@ export const affiliateRouter = router({
       return result;
     }),
 
+  // AI-powered column mapping for COMPANY imports
+  analyzeCompanyColumns: protectedProcedure
+    .input(z.object({
+      headers: z.array(z.string()),
+      sampleRows: z.array(z.record(z.string())),
+    }))
+    .mutation(async ({ input }) => {
+      const result = await suggestCompanyColumnMappings(input.headers, input.sampleRows);
+      return result;
+    }),
+
+  // Get available company fields for manual mapping
+  getCompanyFields: protectedProcedure
+    .query(async () => {
+      return getCompanyFieldsList();
+    }),
+
   // Bulk import candidates from Excel/CSV (affiliate)
   bulkImportCandidates: protectedProcedure
     .input(z.object({
-      schoolId: z.string().uuid(),
+      agencyId: z.string().uuid(),
       candidates: z.array(z.object({
         full_name: z.string().min(1),
         cpf: z.string().min(11).max(14).optional(),
@@ -434,14 +459,14 @@ export const affiliateRouter = router({
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Affiliate not found' });
       }
 
-      // Verify the school belongs to this affiliate
-      const school = await db.getSchoolById(input.schoolId);
-      if (!school || school.affiliate_id !== affiliate.id) {
-        throw new TRPCError({ code: 'FORBIDDEN', message: 'School does not belong to this affiliate' });
+      // Verify the agency belongs to this admin
+      const agency = await db.getAgencyById(input.agencyId);
+      if (!agency || agency.affiliate_id !== affiliate.id) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Agency does not belong to this admin' });
       }
 
-      // Bulk create candidates linked to the school
-      const result = await db.bulkCreateCandidates(input.candidates, input.schoolId);
+      // Bulk create candidates linked to the agency
+      const result = await db.bulkCreateCandidates(input.candidates, input.agencyId);
 
       return {
         created: result.created.length,

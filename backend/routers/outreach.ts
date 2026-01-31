@@ -3,7 +3,7 @@
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { publicProcedure, router } from "../_core/trpc";
-import { adminProcedure, schoolProcedure } from "./procedures";
+import { adminProcedure, agencyProcedure } from "./procedures";
 import { sendEmail } from "./email";
 import * as db from "../db";
 import { createZoomMeeting, isZoomConfigured } from "../integrations/zoom";
@@ -12,8 +12,8 @@ import { ENV } from "../_core/env";
 import { generateCompanySummary } from "../services/ai/summarizer";
 
 export const outreachRouter = router({
-  // Send outreach email (available to schools and affiliates)
-  sendEmail: schoolProcedure
+  // Send outreach email (available to agencies and admins)
+  sendEmail: agencyProcedure
     .input(
       z.object({
         recipientEmail: z.string().email(),
@@ -27,13 +27,13 @@ export const outreachRouter = router({
     .mutation(async ({ ctx, input }) => {
       const baseUrl = ENV.appUrl;
 
-      // Get school context for booking links
-      let schoolId: string | undefined;
-      if (ctx.user.role === "school") {
-        const school = await db.getSchoolByUserId(ctx.user.id);
-        schoolId = school?.id;
-      } else if (ctx.user.role === "affiliate") {
-        schoolId = (await db.getAdminSchoolContext(ctx.user.id)) || undefined;
+      // Get agency context for booking links
+      let agencyId: string | undefined;
+      if (ctx.user.role === "agency") {
+        const agency = await db.getAgencyByUserId(ctx.user.id);
+        agencyId = agency?.id;
+      } else if (ctx.user.role === "admin") {
+        agencyId = (await db.getAdminAgencyContext(ctx.user.id)) || undefined;
       }
 
       let htmlBody = `<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">`;
@@ -41,14 +41,14 @@ export const outreachRouter = router({
 
       if (input.includeFormLink || input.includeBookingLink) {
         const encodedEmail = encodeURIComponent(input.recipientEmail);
-        const schoolParam = schoolId ? `&school=${schoolId}` : "";
+        const agencyParam = agencyId ? `&agency=${agencyId}` : "";
         htmlBody += `<hr style="margin: 20px 0; border: none; border-top: 1px solid #eee;">`;
         htmlBody += `<p><strong>Interessado? Escolha uma opção:</strong></p>`;
         if (input.includeFormLink) {
-          htmlBody += `<p>📋 <a href="${baseUrl}/form/${ctx.user.id}?email=${encodedEmail}${schoolParam}" style="color: #2563eb;">Preencher formulário</a></p>`;
+          htmlBody += `<p>📋 <a href="${baseUrl}/form/${ctx.user.id}?email=${encodedEmail}${agencyParam}" style="color: #2563eb;">Preencher formulário</a></p>`;
         }
         if (input.includeBookingLink) {
-          htmlBody += `<p>📅 <a href="${baseUrl}/book/${ctx.user.id}?email=${encodedEmail}${schoolParam}" style="color: #2563eb;">Agendar uma reunião</a></p>`;
+          htmlBody += `<p>📅 <a href="${baseUrl}/book/${ctx.user.id}?email=${encodedEmail}${agencyParam}" style="color: #2563eb;">Agendar uma reunião</a></p>`;
         }
       }
       htmlBody += `</div>`;
@@ -89,25 +89,25 @@ export const outreachRouter = router({
       return await db.getEmailOutreachHistory(ctx.user.id, input?.companyId);
     }),
 
-  // Get availability (schools and affiliates can access)
-  getAvailability: schoolProcedure
+  // Get availability (agencies and admins can access)
+  getAvailability: agencyProcedure
     .input(
       z
         .object({
-          schoolId: z.string().uuid().optional(),
+          agencyId: z.string().uuid().optional(),
         })
         .optional()
     )
     .query(async ({ ctx, input }) => {
-      const schoolId = input?.schoolId || (await db.getAdminSchoolContext(ctx.user.id)) || undefined;
-      return await db.getAdminAvailability(ctx.user.id, schoolId);
+      const agencyId = input?.agencyId || (await db.getAdminAgencyContext(ctx.user.id)) || undefined;
+      return await db.getAdminAvailability(ctx.user.id, agencyId);
     }),
 
-  // Save availability (schools and affiliates can access)
-  saveAvailability: schoolProcedure
+  // Save availability (agencies and admins can access)
+  saveAvailability: agencyProcedure
     .input(
       z.object({
-        schoolId: z.string().uuid().optional(),
+        agencyId: z.string().uuid().optional(),
         dayOfWeek: z.number().min(0).max(6).optional(),
         specificDate: z.string().optional(),
         startTime: z.string(),
@@ -117,51 +117,51 @@ export const outreachRouter = router({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const schoolId = input.schoolId || (await db.getAdminSchoolContext(ctx.user.id)) || undefined;
+      const agencyId = input.agencyId || (await db.getAdminAgencyContext(ctx.user.id)) || undefined;
       return await db.createAdminAvailability({
         adminId: ctx.user.id,
-        schoolId,
+        agencyId,
         ...input,
       });
     }),
 
-  // Delete availability (schools and affiliates can access)
-  deleteAvailability: schoolProcedure
+  // Delete availability (agencies and admins can access)
+  deleteAvailability: agencyProcedure
     .input(z.object({ id: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
       await db.deleteAdminAvailability(input.id, ctx.user.id);
       return { success: true };
     }),
 
-  // Get settings (schools and affiliates can access)
-  getAdminSettings: schoolProcedure
+  // Get settings (agencies and admins can access)
+  getAdminSettings: agencyProcedure
     .input(
       z
         .object({
-          schoolId: z.string().uuid().optional(),
+          agencyId: z.string().uuid().optional(),
         })
         .optional()
     )
     .query(async ({ ctx, input }) => {
-      const schoolId = input?.schoolId || (await db.getAdminSchoolContext(ctx.user.id)) || undefined;
-      const settings = await db.getAdminSettings(ctx.user.id, schoolId);
+      const agencyId = input?.agencyId || (await db.getAdminAgencyContext(ctx.user.id)) || undefined;
+      const settings = await db.getAdminSettings(ctx.user.id, agencyId);
       return settings || { meeting_duration_minutes: 30 };
     }),
 
-  // Save settings (schools and affiliates can access)
-  saveAdminSettings: schoolProcedure
+  // Save settings (agencies and admins can access)
+  saveAdminSettings: agencyProcedure
     .input(
       z.object({
-        schoolId: z.string().uuid().optional(),
+        agencyId: z.string().uuid().optional(),
         meeting_duration_minutes: z.number().min(5).max(180),
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const schoolId = input.schoolId || (await db.getAdminSchoolContext(ctx.user.id)) || undefined;
+      const agencyId = input.agencyId || (await db.getAdminAgencyContext(ctx.user.id)) || undefined;
       await db.saveAdminSettings(
         ctx.user.id,
         { meeting_duration_minutes: input.meeting_duration_minutes },
-        schoolId
+        agencyId
       );
       return { success: true };
     }),
@@ -170,8 +170,8 @@ export const outreachRouter = router({
   getBlockedSlots: adminProcedure
     .input(z.object({ date: z.string() }))
     .query(async ({ ctx, input }) => {
-      const schoolId = await db.getAdminSchoolContext(ctx.user.id);
-      return await db.getBlockedSlots(ctx.user.id, input.date, schoolId || undefined);
+      const agencyId = await db.getAdminAgencyContext(ctx.user.id);
+      return await db.getBlockedSlots(ctx.user.id, input.date, agencyId || undefined);
     }),
 
   // Get ALL slots for a date (for admin blocking UI - includes past times)
@@ -179,12 +179,12 @@ export const outreachRouter = router({
     .input(
       z.object({
         date: z.string(),
-        schoolId: z.string().uuid().optional(),
+        agencyId: z.string().uuid().optional(),
       })
     )
     .query(async ({ ctx, input }) => {
-      const schoolId = input.schoolId || (await db.getAdminSchoolContext(ctx.user.id)) || undefined;
-      return await db.getAllSlotsForDate(ctx.user.id, input.date, schoolId);
+      const agencyId = input.agencyId || (await db.getAdminAgencyContext(ctx.user.id)) || undefined;
+      return await db.getAllSlotsForDate(ctx.user.id, input.date, agencyId);
     }),
 
   // Block a time slot
@@ -198,10 +198,10 @@ export const outreachRouter = router({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const schoolId = await db.getAdminSchoolContext(ctx.user.id);
+      const agencyId = await db.getAdminAgencyContext(ctx.user.id);
       return await db.blockTimeSlot({
         adminId: ctx.user.id,
-        schoolId: schoolId || undefined,
+        agencyId: agencyId || undefined,
         ...input,
       });
     }),
@@ -210,8 +210,8 @@ export const outreachRouter = router({
   unblockTimeSlot: adminProcedure
     .input(z.object({ id: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
-      const schoolId = await db.getAdminSchoolContext(ctx.user.id);
-      await db.unblockTimeSlot(input.id, ctx.user.id, schoolId || undefined);
+      const agencyId = await db.getAdminAgencyContext(ctx.user.id);
+      await db.unblockTimeSlot(input.id, ctx.user.id, agencyId || undefined);
       return { success: true };
     }),
 
@@ -221,20 +221,20 @@ export const outreachRouter = router({
       z
         .object({
           status: z.enum(["pending", "confirmed", "cancelled", "completed", "no_show"]).optional(),
-          schoolId: z.string().uuid().nullable().optional(),
+          agencyId: z.string().uuid().nullable().optional(),
         })
         .optional()
     )
     .query(async ({ ctx, input }) => {
-      const schoolId =
-        input?.schoolId === null
+      const agencyId =
+        input?.agencyId === null
           ? undefined
-          : input?.schoolId || (await db.getAdminSchoolContext(ctx.user.id)) || undefined;
-      return await db.getScheduledMeetings(ctx.user.id, input?.status, schoolId);
+          : input?.agencyId || (await db.getAdminAgencyContext(ctx.user.id)) || undefined;
+      return await db.getScheduledMeetings(ctx.user.id, input?.status, agencyId);
     }),
 
   // Update meeting status (with email notifications)
-  updateMeetingStatus: schoolProcedure
+  updateMeetingStatus: agencyProcedure
     .input(
       z.object({
         id: z.string().uuid(),
@@ -244,21 +244,21 @@ export const outreachRouter = router({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      let schoolId: string | undefined;
-      if (ctx.user.role === "affiliate") {
-        schoolId = (await db.getAdminSchoolContext(ctx.user.id)) || undefined;
-      } else if (ctx.user.role === "school") {
-        const school = await db.getSchoolByUserId(ctx.user.id);
-        schoolId = school?.id;
+      let agencyId: string | undefined;
+      if (ctx.user.role === "admin") {
+        agencyId = (await db.getAdminAgencyContext(ctx.user.id)) || undefined;
+      } else if (ctx.user.role === "agency") {
+        const agency = await db.getAgencyByUserId(ctx.user.id);
+        agencyId = agency?.id;
       }
 
-      const meeting = await db.getMeetingById(input.id, ctx.user.id, schoolId);
+      const meeting = await db.getMeetingById(input.id, ctx.user.id, agencyId);
       await db.updateMeetingStatus(
         input.id,
         ctx.user.id,
         input.status,
         input.cancellationReason,
-        schoolId
+        agencyId
       );
 
       if (input.sendEmail && meeting) {
@@ -290,7 +290,7 @@ export const outreachRouter = router({
           `;
         } else if (input.status === "cancelled") {
           subject = "Reunião Cancelada";
-          const schoolParam = meeting.school_id ? `&school=${meeting.school_id}` : "";
+          const agencyParam = meeting.agency_id ? `&agency=${meeting.agency_id}` : "";
           htmlBody = `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
               <h2>Reunião Cancelada</h2>
@@ -298,7 +298,7 @@ export const outreachRouter = router({
               <p>Infelizmente sua reunião foi cancelada.</p>
               ${input.cancellationReason ? `<p><strong>Motivo:</strong> ${input.cancellationReason}</p>` : ""}
               <p>Caso deseje reagendar, acesse:</p>
-              <p><a href="${baseUrl}/book/${ctx.user.id}?email=${encodeURIComponent(meeting.company_email)}${schoolParam}" style="color: #2563eb;">Agendar nova reunião</a></p>
+              <p><a href="${baseUrl}/book/${ctx.user.id}?email=${encodeURIComponent(meeting.company_email)}${agencyParam}" style="color: #2563eb;">Agendar nova reunião</a></p>
             </div>
           `;
         }
@@ -316,7 +316,7 @@ export const outreachRouter = router({
     }),
 
   // Reschedule meeting
-  rescheduleMeeting: schoolProcedure
+  rescheduleMeeting: agencyProcedure
     .input(
       z.object({
         id: z.string().uuid(),
@@ -325,20 +325,20 @@ export const outreachRouter = router({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      let schoolId: string | undefined;
-      if (ctx.user.role === "affiliate") {
-        schoolId = (await db.getAdminSchoolContext(ctx.user.id)) || undefined;
-      } else if (ctx.user.role === "school") {
-        const school = await db.getSchoolByUserId(ctx.user.id);
-        schoolId = school?.id;
+      let agencyId: string | undefined;
+      if (ctx.user.role === "admin") {
+        agencyId = (await db.getAdminAgencyContext(ctx.user.id)) || undefined;
+      } else if (ctx.user.role === "agency") {
+        const agency = await db.getAgencyByUserId(ctx.user.id);
+        agencyId = agency?.id;
       }
 
-      const meeting = await db.getMeetingById(input.id, ctx.user.id, schoolId);
+      const meeting = await db.getMeetingById(input.id, ctx.user.id, agencyId);
       if (!meeting) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Reunião não encontrada" });
       }
 
-      await db.rescheduleMeeting(input.id, ctx.user.id, input.newScheduledAt, schoolId);
+      await db.rescheduleMeeting(input.id, ctx.user.id, input.newScheduledAt, agencyId);
 
       if (input.sendEmail) {
         const baseUrl = ENV.appUrl;
@@ -385,12 +385,12 @@ export const outreachRouter = router({
     .input(
       z.object({
         adminId: z.string().uuid(),
-        schoolId: z.string().uuid().optional(),
+        agencyId: z.string().uuid().optional(),
         date: z.string(),
       })
     )
     .query(async ({ input }) => {
-      return await db.getAvailableSlots(input.adminId, input.date, input.schoolId);
+      return await db.getAvailableSlots(input.adminId, input.date, input.agencyId);
     }),
 
   // PUBLIC: Create a booking
@@ -398,7 +398,7 @@ export const outreachRouter = router({
     .input(
       z.object({
         adminId: z.string().uuid(),
-        schoolId: z.string().uuid().optional(),
+        agencyId: z.string().uuid().optional(),
         scheduledAt: z.string(),
         companyEmail: z.string().email(),
         companyName: z.string().optional(),
@@ -410,7 +410,7 @@ export const outreachRouter = router({
     .mutation(async ({ input }) => {
       const meeting = await db.createScheduledMeeting({
         adminId: input.adminId,
-        schoolId: input.schoolId,
+        agencyId: input.agencyId,
         scheduledAt: input.scheduledAt,
         companyEmail: input.companyEmail,
         companyName: input.companyName,
@@ -450,18 +450,18 @@ export const outreachRouter = router({
     }),
 
   // Create Zoom meeting and send link to company
-  createZoomMeeting: schoolProcedure
+  createZoomMeeting: agencyProcedure
     .input(z.object({ meetingId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
-      let schoolId: string | undefined;
-      if (ctx.user.role === "affiliate") {
-        schoolId = (await db.getAdminSchoolContext(ctx.user.id)) || undefined;
-      } else if (ctx.user.role === "school") {
-        const school = await db.getSchoolByUserId(ctx.user.id);
-        schoolId = school?.id;
+      let agencyId: string | undefined;
+      if (ctx.user.role === "admin") {
+        agencyId = (await db.getAdminAgencyContext(ctx.user.id)) || undefined;
+      } else if (ctx.user.role === "agency") {
+        const agency = await db.getAgencyByUserId(ctx.user.id);
+        agencyId = agency?.id;
       }
 
-      const meeting = await db.getMeetingById(input.meetingId, ctx.user.id, schoolId);
+      const meeting = await db.getMeetingById(input.meetingId, ctx.user.id, agencyId);
       if (!meeting) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Reunião não encontrada" });
       }
@@ -490,7 +490,7 @@ export const outreachRouter = router({
             meetingPlatform: "zoom",
             meetingId: zoomMeeting.meetingId,
           },
-          schoolId
+          agencyId
         );
 
         const dateStr = scheduledAt.toLocaleDateString("pt-BR", {
@@ -531,18 +531,18 @@ export const outreachRouter = router({
     }),
 
   // Create Google Meet and send link to company
-  createGoogleMeeting: schoolProcedure
+  createGoogleMeeting: agencyProcedure
     .input(z.object({ meetingId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
-      let schoolId: string | undefined;
-      if (ctx.user.role === "affiliate") {
-        schoolId = (await db.getAdminSchoolContext(ctx.user.id)) || undefined;
-      } else if (ctx.user.role === "school") {
-        const school = await db.getSchoolByUserId(ctx.user.id);
-        schoolId = school?.id;
+      let agencyId: string | undefined;
+      if (ctx.user.role === "admin") {
+        agencyId = (await db.getAdminAgencyContext(ctx.user.id)) || undefined;
+      } else if (ctx.user.role === "agency") {
+        const agency = await db.getAgencyByUserId(ctx.user.id);
+        agencyId = agency?.id;
       }
 
-      const meeting = await db.getMeetingById(input.meetingId, ctx.user.id, schoolId);
+      const meeting = await db.getMeetingById(input.meetingId, ctx.user.id, agencyId);
       if (!meeting) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Reunião não encontrada" });
       }
@@ -575,7 +575,7 @@ export const outreachRouter = router({
             meetingPlatform: "google_meet",
             meetingId: googleMeeting.meetingId,
           },
-          schoolId
+          agencyId
         );
 
         const dateStr = scheduledAt.toLocaleDateString("pt-BR", {
@@ -649,17 +649,17 @@ export const outreachRouter = router({
         throw new TRPCError({ code: "NOT_FOUND", message: "Meeting not found" });
       }
 
-      let schoolId: string | undefined = meeting.school_id;
-      if (!schoolId) {
-        if (ctx.user.role === "school") {
-          const school = await db.getSchoolByUserId(ctx.user.id);
-          schoolId = school?.id;
-        } else if (ctx.user.role === "affiliate") {
-          schoolId = (await db.getAdminSchoolContext(ctx.user.id)) || undefined;
+      let agencyId: string | undefined = meeting.agency_id;
+      if (!agencyId) {
+        if (ctx.user.role === "agency") {
+          const agency = await db.getAgencyByUserId(ctx.user.id);
+          agencyId = agency?.id;
+        } else if (ctx.user.role === "admin") {
+          agencyId = (await db.getAdminAgencyContext(ctx.user.id)) || undefined;
         }
       }
 
-      const contractToken = await db.sendContractToMeeting(input.meetingId, schoolId);
+      const contractToken = await db.sendContractToMeeting(input.meetingId, agencyId);
       const baseUrl = ENV.appUrl;
       const contractLink = `${baseUrl}/contract/${contractToken}`;
 
@@ -698,14 +698,14 @@ export const outreachRouter = router({
         formData = await db.getCompanyFormByEmail(meeting.admin_id, meeting.company_email);
       }
 
-      let schoolContract = null;
-      if (meeting.school_id) {
-        const school = await db.getSchoolById(meeting.school_id);
-        if (school && school.contract_type) {
-          schoolContract = {
-            type: school.contract_type,
-            pdfUrl: school.contract_pdf_url,
-            html: school.contract_html,
+      let agencyContract = null;
+      if (meeting.agency_id) {
+        const agency = await db.getAgencyById(meeting.agency_id);
+        if (agency && agency.contract_type) {
+          agencyContract = {
+            type: agency.contract_type,
+            pdfUrl: agency.contract_pdf_url,
+            html: agency.contract_html,
           };
         }
       }
@@ -743,7 +743,7 @@ export const outreachRouter = router({
               landline_phone: formData.landline_phone,
             }
           : null,
-        schoolContract,
+        agencyContract,
       };
     }),
 
@@ -935,9 +935,9 @@ export const outreachRouter = router({
         address: formData?.address,
       });
 
-      if (formData?.job_title && meeting.school_id && result.companyId) {
+      if (formData?.job_title && meeting.agency_id && result.companyId) {
         try {
-          await db.createJobFromCompanyForm(result.companyId, meeting.school_id, formData);
+          await db.createJobFromCompanyForm(result.companyId, meeting.agency_id, formData);
         } catch (jobError) {
           console.error("Failed to create job from form data:", jobError);
         }
@@ -1034,8 +1034,8 @@ export const outreachRouter = router({
       return { exists: !!form };
     }),
 
-  // Get company form by email (affiliates and schools)
-  getCompanyForm: schoolProcedure
+  // Get company form by email (admins and agencies)
+  getCompanyForm: agencyProcedure
     .input(z.object({ email: z.string().email() }))
     .query(async ({ ctx, input }) => {
       const form = await db.getCompanyFormByEmail(ctx.user.id, input.email);
@@ -1043,40 +1043,40 @@ export const outreachRouter = router({
     }),
 
   // Get full company history (forms, contracts, emails, timeline)
-  getCompanyFullHistory: schoolProcedure
+  getCompanyFullHistory: agencyProcedure
     .input(z.object({ companyEmail: z.string().email() }))
     .query(async ({ ctx, input }) => {
-      let schoolId: string | undefined;
-      if (ctx.user.role === "school") {
-        const school = await db.getSchoolByUserId(ctx.user.id);
-        schoolId = school?.id;
-      } else if (ctx.user.role === "affiliate") {
-        schoolId = (await db.getAdminSchoolContext(ctx.user.id)) || undefined;
+      let agencyId: string | undefined;
+      if (ctx.user.role === "agency") {
+        const agency = await db.getAgencyByUserId(ctx.user.id);
+        agencyId = agency?.id;
+      } else if (ctx.user.role === "admin") {
+        agencyId = (await db.getAdminAgencyContext(ctx.user.id)) || undefined;
       }
-      return await db.getCompanyFullHistory(ctx.user.id, input.companyEmail, schoolId);
+      return await db.getCompanyFullHistory(ctx.user.id, input.companyEmail, agencyId);
     }),
 
-  // Get all company forms (affiliates and schools)
-  getAllCompanyForms: schoolProcedure
-    .input(z.object({ schoolId: z.string().uuid().nullable().optional() }).optional())
+  // Get all company forms (admins and agencies)
+  getAllCompanyForms: agencyProcedure
+    .input(z.object({ agencyId: z.string().uuid().nullable().optional() }).optional())
     .query(async ({ ctx, input }) => {
-      let schoolId: string | undefined;
+      let agencyId: string | undefined;
 
-      if (input?.schoolId === null) {
-        schoolId = undefined;
-      } else if (input?.schoolId) {
-        schoolId = input.schoolId;
-      } else if (ctx.user.role === "school") {
-        const school = await db.getSchoolByUserId(ctx.user.id);
-        schoolId = school?.id;
-      } else if (ctx.user.role === "affiliate") {
-        schoolId = (await db.getAdminSchoolContext(ctx.user.id)) || undefined;
+      if (input?.agencyId === null) {
+        agencyId = undefined;
+      } else if (input?.agencyId) {
+        agencyId = input.agencyId;
+      } else if (ctx.user.role === "agency") {
+        const agency = await db.getAgencyByUserId(ctx.user.id);
+        agencyId = agency?.id;
+      } else if (ctx.user.role === "admin") {
+        agencyId = (await db.getAdminAgencyContext(ctx.user.id)) || undefined;
       }
-      return await db.getCompanyFormsByAdmin(ctx.user.id, schoolId);
+      return await db.getCompanyFormsByAdmin(ctx.user.id, agencyId);
     }),
 
-  // Accept company (send contract) - affiliates and schools
-  acceptCompany: schoolProcedure
+  // Accept company (send contract) - admins and agencies
+  acceptCompany: agencyProcedure
     .input(z.object({ meetingId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
       const meeting = await db.getScheduledMeetingById(input.meetingId);
@@ -1084,22 +1084,22 @@ export const outreachRouter = router({
         throw new TRPCError({ code: "NOT_FOUND", message: "Meeting not found" });
       }
 
-      let school = null;
-      let schoolId: string | undefined;
-      if (meeting.school_id) {
-        school = await db.getSchoolById(meeting.school_id);
-        schoolId = meeting.school_id;
-      } else if (ctx.user.role === "school") {
-        school = await db.getSchoolByUserId(ctx.user.id);
-        schoolId = school?.id;
-      } else if (ctx.user.role === "affiliate") {
-        schoolId = (await db.getAdminSchoolContext(ctx.user.id)) || undefined;
-        if (schoolId) {
-          school = await db.getSchoolById(schoolId);
+      let agency = null;
+      let agencyId: string | undefined;
+      if (meeting.agency_id) {
+        agency = await db.getAgencyById(meeting.agency_id);
+        agencyId = meeting.agency_id;
+      } else if (ctx.user.role === "agency") {
+        agency = await db.getAgencyByUserId(ctx.user.id);
+        agencyId = agency?.id;
+      } else if (ctx.user.role === "admin") {
+        agencyId = (await db.getAdminAgencyContext(ctx.user.id)) || undefined;
+        if (agencyId) {
+          agency = await db.getAgencyById(agencyId);
         }
       }
 
-      if (school && !school.contract_type) {
+      if (agency && !agency.contract_type) {
         throw new TRPCError({
           code: "BAD_REQUEST",
           message: "Configure um contrato nas Configuracoes antes de enviar para empresas",
@@ -1107,7 +1107,7 @@ export const outreachRouter = router({
       }
 
       const form = await db.getCompanyFormByEmail(ctx.user.id, meeting.company_email);
-      const contractToken = await db.sendContractToMeeting(input.meetingId, schoolId);
+      const contractToken = await db.sendContractToMeeting(input.meetingId, agencyId);
 
       if (form) {
         await db.updateCompanyFormStatus(form.id, "accepted");
@@ -1180,7 +1180,7 @@ export const outreachRouter = router({
     }),
 
   // Upload signed contract PDF for a company
-  uploadSignedContract: schoolProcedure
+  uploadSignedContract: agencyProcedure
     .input(z.object({
       companyEmail: z.string().email(),
       fileBase64: z.string(),

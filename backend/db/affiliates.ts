@@ -2,6 +2,144 @@
 // Affiliate database operations
 import { supabaseAdmin } from "../supabase";
 
+export async function createAgencyInvitation(
+  email: string,
+  affiliateId: string,
+  createdBy: string,
+  notes?: string
+): Promise<{ id: string; token: string }> {
+  const { data, error } = await supabaseAdmin
+    .from("agency_invitations")
+    .insert({
+      email,
+      affiliate_id: affiliateId,
+      created_by: createdBy,
+      notes: notes || null,
+      status: 'pending',
+    })
+    .select("id, token")
+    .single();
+
+  if (error) {
+    console.error("[Database] Failed to create agency invitation:", error);
+    throw error;
+  }
+
+  return data;
+}
+
+export async function getAgencyInvitationByToken(token: string): Promise<any | null> {
+  const { data, error } = await supabaseAdmin
+    .from("agency_invitations")
+    .select("*, affiliates(id, name)")
+    .eq("token", token)
+    .single();
+
+  if (error && error.code !== "PGRST116") {
+    console.error("[Database] Failed to get agency invitation:", error);
+    return null;
+  }
+
+  return data;
+}
+
+export async function acceptAgencyInvitation(
+  token: string,
+  password: string,
+  agencyData: {
+    agency_name: string;
+    cnpj: string;
+    email: string;
+    phone?: string;
+    city?: string;
+    state?: string;
+    address?: string;
+  },
+  contractUrl?: string
+): Promise<{ agency: any; user: any }> {
+  // Get the invitation
+  const invitation = await getAgencyInvitationByToken(token);
+  if (!invitation) {
+    throw new Error("Invitation not found");
+  }
+  if (invitation.status !== "pending") {
+    throw new Error("Invitation already used");
+  }
+  if (new Date(invitation.expires_at) < new Date()) {
+    throw new Error("Invitation expired");
+  }
+
+  // Create user account in Supabase Auth
+  const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
+    email: invitation.email,
+    password: password,
+    email_confirm: true,
+    user_metadata: {
+      role: "agency",
+    },
+  });
+
+  if (authError) {
+    console.error("[Database] Failed to create auth user:", authError);
+    throw authError;
+  }
+
+  const userId = authData.user.id;
+
+  // Create user profile
+  const { error: userError } = await supabaseAdmin
+    .from("users")
+    .insert({
+      id: userId,
+      email: invitation.email,
+      role: "agency",
+      name: agencyData.agency_name,
+    });
+
+  if (userError) {
+    console.error("[Database] Failed to create user profile:", userError);
+    throw userError;
+  }
+
+  // Create agency record
+  // Note: Database may still use franchise_id instead of affiliate_id
+  const { data: agency, error: agencyError } = await supabaseAdmin
+    .from("agencies")
+    .insert({
+      user_id: userId,
+      affiliate_id: invitation.affiliate_id,
+      franchise_id: invitation.affiliate_id, // Legacy column name
+      agency_name: agencyData.agency_name,
+      cnpj: agencyData.cnpj,
+      email: agencyData.email,
+      phone: agencyData.phone || null,
+      city: agencyData.city || null,
+      state: agencyData.state || null,
+      address: agencyData.address || null,
+      status: "active",
+      contract_pdf_url: contractUrl || null,
+    })
+    .select()
+    .single();
+
+  if (agencyError) {
+    console.error("[Database] Failed to create agency:", agencyError);
+    throw agencyError;
+  }
+
+  // Update invitation status
+  await supabaseAdmin
+    .from("agency_invitations")
+    .update({
+      status: "accepted",
+      accepted_at: new Date().toISOString(),
+      agency_id: agency.id,
+    })
+    .eq("token", token);
+
+  return { agency, user: authData.user };
+}
+
 export async function getAllAffiliates(): Promise<any[]> {
   const { data, error } = await supabaseAdmin
     .from("affiliates")
@@ -58,15 +196,15 @@ export async function updateAffiliateStatus(id: string, isActive: boolean): Prom
   }
 }
 
-export async function getSchoolsByAffiliateId(affiliateId: string): Promise<any[]> {
+export async function getAgenciesByAffiliateId(affiliateId: string): Promise<any[]> {
   const { data, error } = await supabaseAdmin
-    .from("schools")
+    .from("agencies")
     .select("*")
     .eq("affiliate_id", affiliateId)
     .order("created_at", { ascending: false });
 
   if (error) {
-    console.error("[Database] Failed to get schools by affiliate:", error);
+    console.error("[Database] Failed to get agencies by affiliate:", error);
     throw error;
   }
 
@@ -75,30 +213,30 @@ export async function getSchoolsByAffiliateId(affiliateId: string): Promise<any[
 
 export async function getCompaniesByAffiliateId(
   affiliateId: string,
-  schoolId?: string | null
+  agencyId?: string | null
 ): Promise<any[]> {
-  console.log("[getCompaniesByAffiliateId] affiliateId:", affiliateId, "schoolId:", schoolId);
+  console.log("[getCompaniesByAffiliateId] affiliateId:", affiliateId, "agencyId:", agencyId);
 
-  // If a specific school is selected, filter by school_id
-  if (schoolId) {
+  // If a specific agency is selected, filter by agency_id
+  if (agencyId) {
     const { data, error } = await supabaseAdmin
       .from("companies")
       .select("*")
       .eq("affiliate_id", affiliateId)
-      .eq("school_id", schoolId)
+      .eq("agency_id", agencyId)
       .order("created_at", { ascending: false });
 
-    console.log("[getCompaniesByAffiliateId] filtered by school - result:", data?.length, "companies");
+    console.log("[getCompaniesByAffiliateId] filtered by agency - result:", data?.length, "companies");
 
     if (error) {
-      console.error("[Database] Failed to get companies by affiliate/school:", error);
+      console.error("[Database] Failed to get companies by affiliate/agency:", error);
       throw error;
     }
 
     return data || [];
   }
 
-  // No school selected - get all companies for this affiliate
+  // No agency selected - get all companies for this affiliate
   const { data, error } = await supabaseAdmin
     .from("companies")
     .select("*")
@@ -117,39 +255,39 @@ export async function getCompaniesByAffiliateId(
 
 export async function getAffiliateDashboardStats(
   affiliateId: string,
-  schoolId?: string | null
+  agencyId?: string | null
 ): Promise<any> {
   let targetCity: string | null = null;
-  let schoolInfo: { totalSchools: number; activeSchools: number; pendingSchools: number } | null =
+  let agencyInfo: { totalAgencies: number; activeAgencies: number; pendingAgencies: number } | null =
     null;
 
-  if (schoolId) {
-    const { data: school } = await supabaseAdmin
-      .from("schools")
+  if (agencyId) {
+    const { data: agency } = await supabaseAdmin
+      .from("agencies")
       .select("city, status")
-      .eq("id", schoolId)
+      .eq("id", agencyId)
       .single();
 
-    targetCity = school?.city || null;
-    schoolInfo = {
-      totalSchools: 1,
-      activeSchools: school?.status === "active" ? 1 : 0,
-      pendingSchools: school?.status === "pending" ? 1 : 0,
+    targetCity = agency?.city || null;
+    agencyInfo = {
+      totalAgencies: 1,
+      activeAgencies: agency?.status === "active" ? 1 : 0,
+      pendingAgencies: agency?.status === "pending" ? 1 : 0,
     };
   } else {
-    const { data: schools, error: schoolsError } = await supabaseAdmin
-      .from("schools")
+    const { data: agencies, error: agenciesError } = await supabaseAdmin
+      .from("agencies")
       .select("id, status")
       .eq("affiliate_id", affiliateId);
 
-    if (schoolsError) {
-      console.error("[Database] Failed to get schools for stats:", schoolsError);
+    if (agenciesError) {
+      console.error("[Database] Failed to get agencies for stats:", agenciesError);
     }
 
-    schoolInfo = {
-      totalSchools: schools?.length || 0,
-      activeSchools: schools?.filter((s) => s.status === "active").length || 0,
-      pendingSchools: schools?.filter((s) => s.status === "pending").length || 0,
+    agencyInfo = {
+      totalAgencies: agencies?.length || 0,
+      activeAgencies: agencies?.filter((s) => s.status === "active").length || 0,
+      pendingAgencies: agencies?.filter((s) => s.status === "pending").length || 0,
     };
 
     const { data: affiliate } = await supabaseAdmin
@@ -173,7 +311,7 @@ export async function getAffiliateDashboardStats(
     .select("id")
     .eq("affiliate_id", affiliateId);
 
-  if (schoolId && targetCity) {
+  if (agencyId && targetCity) {
     companiesQuery = companiesQuery.eq("city", targetCity);
   }
 
@@ -205,7 +343,7 @@ export async function getAffiliateDashboardStats(
   }
 
   return {
-    ...schoolInfo,
+    ...agencyInfo,
     totalCandidates,
     totalJobs,
     openJobs,
@@ -216,17 +354,17 @@ export async function getAffiliateDashboardStats(
 
 export async function getCandidatesByAffiliateId(
   affiliateId: string,
-  schoolId?: string | null
+  agencyId?: string | null
 ): Promise<any[]> {
   let targetCity: string | null = null;
 
-  if (schoolId) {
-    const { data: school } = await supabaseAdmin
-      .from("schools")
+  if (agencyId) {
+    const { data: agency } = await supabaseAdmin
+      .from("agencies")
       .select("city")
-      .eq("id", schoolId)
+      .eq("id", agencyId)
       .single();
-    targetCity = school?.city || null;
+    targetCity = agency?.city || null;
   } else {
     const { data: affiliate } = await supabaseAdmin
       .from("affiliates")
@@ -256,16 +394,16 @@ export async function getCandidatesByAffiliateId(
 
 export async function getJobsByAffiliateId(
   affiliateId: string,
-  schoolId?: string | null
+  agencyId?: string | null
 ): Promise<any[]> {
-  if (schoolId) {
-    const { data: school } = await supabaseAdmin
-      .from("schools")
+  if (agencyId) {
+    const { data: agency } = await supabaseAdmin
+      .from("agencies")
       .select("city")
-      .eq("id", schoolId)
+      .eq("id", agencyId)
       .single();
 
-    if (school?.city) {
+    if (agency?.city) {
       const { data, error } = await supabaseAdmin
         .from("jobs")
         .select(
@@ -280,11 +418,11 @@ export async function getJobsByAffiliateId(
         `
         )
         .eq("company.affiliate_id", affiliateId)
-        .eq("company.city", school.city)
+        .eq("company.city", agency.city)
         .order("created_at", { ascending: false });
 
       if (error) {
-        console.error("Error fetching affiliate jobs by school:", error);
+        console.error("Error fetching affiliate jobs by agency:", error);
         return [];
       }
       return data || [];
@@ -316,9 +454,9 @@ export async function getJobsByAffiliateId(
 
 export async function getApplicationsByAffiliateId(
   affiliateId: string,
-  schoolId?: string | null
+  agencyId?: string | null
 ): Promise<any[]> {
-  const jobs = await getJobsByAffiliateId(affiliateId, schoolId);
+  const jobs = await getJobsByAffiliateId(affiliateId, agencyId);
   const jobIds = jobs.map((job) => job.id);
 
   if (jobIds.length === 0) {
@@ -359,9 +497,9 @@ export async function getApplicationsByAffiliateId(
 
 export async function getContractsByAffiliateId(
   affiliateId: string,
-  schoolId?: string | null
+  agencyId?: string | null
 ): Promise<any[]> {
-  const applications = await getApplicationsByAffiliateId(affiliateId, schoolId);
+  const applications = await getApplicationsByAffiliateId(affiliateId, agencyId);
   const applicationIds = applications.map((app) => app.id);
 
   if (applicationIds.length === 0) {
@@ -403,9 +541,9 @@ export async function getContractsByAffiliateId(
 
 export async function getPaymentsByAffiliateId(
   affiliateId: string,
-  schoolId?: string | null
+  agencyId?: string | null
 ): Promise<any[]> {
-  const contracts = await getContractsByAffiliateId(affiliateId, schoolId);
+  const contracts = await getContractsByAffiliateId(affiliateId, agencyId);
   const contractIds = contracts.map((contract) => contract.id);
 
   if (contractIds.length === 0) {

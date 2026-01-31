@@ -1,7 +1,7 @@
 // @ts-nocheck
 import { useAuth } from "@/_core/hooks/useAuth";
 import ClassicLoader from "@/components/ui/ClassicLoader";
-import { useSchoolContext } from "@/contexts/SchoolContext";
+import { useAgencyContext } from "@/contexts/AgencyContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -31,26 +31,26 @@ import { useState } from "react";
 
 export default function ContractPage() {
   const { user, loading: authLoading } = useAuth();
-  const { currentSchool, isAllSchoolsMode } = useSchoolContext();
+  const { currentAgency, isAllAgenciesMode } = useAgencyContext();
   const [searchTerm, setSearchTerm] = useState("");
 
   // Determine role capabilities
-  const isAffiliate = user?.role === 'affiliate';
-  const isSchool = user?.role === 'school';
+  const isAffiliate = user?.role === 'admin';
+  const isAgency = user?.role === 'agency';
   const isAdmin = isAffiliate; // Affiliates have admin-like capabilities
 
   // Conditional tRPC queries based on role
-  // Pass null explicitly for "All Schools" mode (currentSchool is null)
+  // Pass null explicitly for "All Agencies" mode (currentAgency is null)
   const affiliateContractsQuery = trpc.affiliate.getContracts.useQuery(
-    { schoolId: currentSchool?.id ?? null },
+    { agencyId: currentAgency?.id ?? null },
     { enabled: isAffiliate }
   );
-  const schoolContractsQuery = trpc.school.getContracts.useQuery(undefined, { enabled: isSchool });
+  const agencyContractsQuery = trpc.agency.getContracts.useQuery(undefined, { enabled: isAgency });
 
   // Select the right data based on role
-  const contracts = isAffiliate ? affiliateContractsQuery.data : schoolContractsQuery.data;
-  const refetchContracts = isAffiliate ? affiliateContractsQuery.refetch : schoolContractsQuery.refetch;
-  const contractsLoading = affiliateContractsQuery.isLoading || schoolContractsQuery.isLoading;
+  const contracts = isAffiliate ? affiliateContractsQuery.data : agencyContractsQuery.data;
+  const refetchContracts = isAffiliate ? affiliateContractsQuery.refetch : agencyContractsQuery.refetch;
+  const contractsLoading = affiliateContractsQuery.isLoading || agencyContractsQuery.isLoading;
 
   // Mutations (admin only)
   const updateStatusMutation = trpc.admin.updateContractStatus.useMutation({
@@ -67,7 +67,7 @@ export default function ContractPage() {
     );
   }
 
-  if (!user || !['affiliate', 'school'].includes(user.role)) {
+  if (!user || !['admin', 'agency'].includes(user.role)) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Card className="max-w-md">
@@ -242,7 +242,7 @@ export default function ContractPage() {
                     <TableHead>Candidato</TableHead>
                     {!isAdmin && <TableHead>Vaga</TableHead>}
                     <TableHead>Empresa</TableHead>
-                    {isAllSchoolsMode && <TableHead>Escola</TableHead>}
+                    {isAllAgenciesMode && <TableHead>Agência</TableHead>}
                     <TableHead>Salário</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>{isAdmin ? 'Início' : 'Data Início'}</TableHead>
@@ -261,11 +261,11 @@ export default function ContractPage() {
                         <TableCell>{candidateName || 'N/A'}</TableCell>
                         {!isAdmin && <TableCell>{jobTitle || 'N/A'}</TableCell>}
                         <TableCell>{companyName || 'N/A'}</TableCell>
-                        {isAllSchoolsMode && (
+                        {isAllAgenciesMode && (
                           <TableCell>
                             <div className="flex items-center gap-2">
                               <Building className="h-4 w-4 text-slate-400" />
-                              <span className="text-sm">{contract.school?.school_name || 'N/A'}</span>
+                              <span className="text-sm">{contract.agency?.name || 'N/A'}</span>
                             </div>
                           </TableCell>
                         )}

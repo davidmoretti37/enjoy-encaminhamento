@@ -1,13 +1,26 @@
 # Recruitment Platform
 
-A full-stack recruitment platform built with React, tRPC, Express, and Supabase.
+AI-powered B2B2C recruitment platform connecting regional agencies with companies and candidates.
+
+## Architecture Overview
+
+```
+Admin (top-level)
+  └── Agencies (regional recruitment offices)
+        ├── Companies (employers)
+        └── Candidates (job seekers)
+```
 
 ## Tech Stack
 
-- **Frontend**: React 19, Tailwind CSS, Radix UI, React Hook Form
-- **Backend**: Express, tRPC, Supabase
-- **Database**: PostgreSQL (via Supabase)
-- **Testing**: Vitest
+| Layer | Technology |
+|-------|------------|
+| Frontend | React 19, Vite, Tailwind CSS, Radix UI |
+| Backend | Node.js, Express, tRPC 11 |
+| Database | PostgreSQL via Supabase |
+| Auth | Supabase Auth (JWT) |
+| AI/LLM | OpenRouter API |
+| Email | Nodemailer (SMTP) |
 
 ## Quick Start
 
@@ -25,117 +38,114 @@ pnpm dev
 
 The app runs at `http://localhost:5001`
 
-## Scripts
+## User Roles
 
-| Command | Description |
-|---------|-------------|
-| `pnpm dev` | Start development server with hot reload |
-| `pnpm build` | Build for production |
-| `pnpm start` | Run production build |
-| `pnpm check` | TypeScript type checking |
-| `pnpm test` | Run tests |
-| `pnpm format` | Format code with Prettier |
+| Role | Description | Dashboard |
+|------|-------------|-----------|
+| `admin` | Top-level administrators | `/admin/dashboard` |
+| `agency` | Regional recruitment offices | `/agency/dashboard` |
+| `company` | Employers posting jobs | `/company/portal` |
+| `candidate` | Job seekers | `/candidate` |
 
 ## Project Structure
 
 ```
 recruitment-platform/
 ├── backend/
-│   ├── _core/           # Core server setup
-│   │   ├── index.ts     # Express server entry point
-│   │   ├── context.ts   # tRPC context (auth)
-│   │   ├── env.ts       # Environment configuration
-│   │   ├── logger.ts    # Logging & error tracking
-│   │   ├── rateLimit.ts # Rate limiting middleware
-│   │   └── trpc.ts      # tRPC initialization
-│   ├── db/              # Database operations (modular)
-│   │   ├── users.ts
+│   ├── _core/              # Server entry, auth, config
+│   ├── db/                 # Database operations
+│   │   ├── agencies.ts     # Agency (region) operations
 │   │   ├── companies.ts
 │   │   ├── candidates.ts
 │   │   ├── jobs.ts
-│   │   ├── applications.ts
-│   │   ├── contracts.ts
-│   │   ├── schools.ts
-│   │   ├── affiliates.ts
 │   │   └── ...
-│   ├── routers/         # tRPC routers (modular)
-│   │   ├── auth.ts
+│   ├── routers/            # tRPC API routers
+│   │   ├── agency.ts       # Agency management
 │   │   ├── company.ts
 │   │   ├── candidate.ts
 │   │   ├── job.ts
-│   │   ├── school.ts
-│   │   ├── affiliate.ts
+│   │   ├── matching.ts     # AI matching
 │   │   └── ...
-│   ├── services/        # Business logic
-│   │   └── matching.ts  # AI candidate matching
-│   └── __tests__/       # Backend tests
+│   ├── services/
+│   │   └── matching/       # AI matching pipeline
+│   └── supabase/
+│       └── migrations/     # Database schema
+│
 ├── frontend/
 │   └── src/
-│       ├── components/  # React components
-│       ├── lib/         # Utilities & hooks
-│       └── pages/       # Page components
-└── .env.example         # Environment template
+│       ├── pages/          # Page components
+│       ├── components/     # Reusable UI
+│       └── lib/            # Utilities
+│
+└── .env                    # Configuration
 ```
+
+## API Routers
+
+| Router | Purpose |
+|--------|---------|
+| `auth` | Login, signup, session |
+| `agency` | Regional office management |
+| `company` | Employer portal |
+| `candidate` | Job seeker profiles |
+| `job` | Job postings |
+| `application` | Job applications |
+| `matching` | AI candidate matching |
+| `contract` | Employment contracts |
+| `batch` | Candidate batches |
+| `outreach` | Email & scheduling |
+
+## AI Matching System
+
+4-stage pipeline:
+1. **Vector Retrieval** - Semantic similarity search
+2. **Soft Scoring** - 9 weighted factors (skills, location, education, etc.)
+3. **Bidirectional Matching** - Candidate preference alignment
+4. **LLM Re-Ranking** - AI refinement of top candidates
+
+Weight profiles: `balanced`, `technical`, `customer_facing`, `entry_level`, `leadership`
 
 ## Environment Variables
 
-See `.env.example` for all available configuration options.
-
 ### Required
-- `SUPABASE_URL` - Supabase project URL
-- `SUPABASE_ANON_KEY` - Supabase anonymous key
-- `SUPABASE_SERVICE_ROLE_KEY` - Supabase service role key (for admin operations)
-
-### Optional Integrations
-- **SMTP**: Email sending (SMTP_HOST, SMTP_USER, SMTP_PASS)
-- **Zoom**: Video meetings (ZOOM_ACCOUNT_ID, ZOOM_CLIENT_ID, ZOOM_CLIENT_SECRET)
-- **Google**: Calendar/Meet integration (GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REFRESH_TOKEN)
-- **OpenRouter**: AI matching (OPENROUTER_API_KEY)
-
-## User Roles
-
-| Role | Description |
-|------|-------------|
-| `admin` | Platform administrators |
-| `affiliate` | Regional partners who manage schools |
-| `school` | Educational institutions |
-| `company` | Employers posting jobs |
-| `candidate` | Job seekers |
-
-## API
-
-The API uses tRPC with the following routers:
-
-- `auth` - Authentication
-- `company` - Company portal
-- `candidate` - Candidate profiles
-- `job` - Job postings
-- `application` - Job applications
-- `school` - School management
-- `affiliate` - Affiliate management
-- `admin` - Admin dashboard
-- `outreach` - Email & scheduling
-- `contract` - Employment contracts
-
-## Testing
-
-```bash
-# Run all tests
-pnpm test
-
-# Run tests in watch mode
-npx vitest
-
-# Run with coverage
-npx vitest --coverage
+```
+SUPABASE_URL=your-project-url
+SUPABASE_ANON_KEY=your-anon-key
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 ```
 
-## Rate Limiting
+### Optional
+```
+# AI Matching
+OPENROUTER_API_KEY=your-key
 
-The API includes rate limiting:
-- Global: 1000 requests per 15 minutes per IP
-- Auth endpoints: 20 requests per 15 minutes
-- Email sending: 50 per hour
+# Email (SMTP)
+SMTP_HOST=smtp.gmail.com
+SMTP_USER=your-email
+SMTP_PASS=your-app-password
+
+# Meetings
+ZOOM_ACCOUNT_ID=...
+ZOOM_CLIENT_ID=...
+ZOOM_CLIENT_SECRET=...
+```
+
+## Scripts
+
+| Command | Description |
+|---------|-------------|
+| `pnpm dev` | Start development server |
+| `pnpm build` | Build for production |
+| `pnpm start` | Run production build |
+| `pnpm check` | TypeScript type checking |
+| `pnpm test` | Run tests |
+
+## Database Migrations
+
+Migrations are in `backend/supabase/migrations/`. Key migration:
+- `048_school_to_agency_rename.sql` - Renames schools→agencies
+
+Run migrations in Supabase SQL Editor.
 
 ## License
 

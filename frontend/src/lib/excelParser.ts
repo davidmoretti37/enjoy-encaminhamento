@@ -1,7 +1,8 @@
 /**
  * Excel/CSV Parser for Company Import
  *
- * Parses Excel (.xlsx, .xls) and CSV files and maps columns to company fields
+ * Uses FUZZY PATTERN MATCHING to automatically detect columns
+ * Handles verbose Google Form headers, typos, and variations
  */
 
 import * as XLSX from 'xlsx';
@@ -14,8 +15,8 @@ export interface ParsedEmail {
 
 export interface ParsedCompany {
   company_name: string;
-  email: string; // Primary email (first valid one)
-  emails: ParsedEmail[]; // All parsed emails
+  email: string;
+  emails: ParsedEmail[];
   cnpj?: string;
   phone?: string;
   address?: string;
@@ -27,7 +28,7 @@ export interface ParsedCompany {
   website?: string;
   description?: string;
   notes?: string;
-  // Job fields (optional - only if job columns exist in Excel)
+  // Job fields
   job_title?: string;
   job_description?: string;
   job_salary?: string;
@@ -49,310 +50,154 @@ export interface ParsedCompany {
   _warnings: string[];
 }
 
-// Column name mappings (Portuguese and English variants)
-const COLUMN_MAPPINGS: Record<string, keyof Omit<ParsedCompany, '_rowNumber' | '_isValid' | '_errors' | '_warnings' | 'emails'>> = {
+// ==============================================
+// FUZZY PATTERN MATCHING
+// ==============================================
+
+// IMPORTANT: Order matters! First match wins.
+// Patterns with substrings that could match other words must come FIRST.
+// Example: "cidade" contains "idade", so 'cidade' must come BEFORE 'idade'
+
+const FUZZY_PATTERNS: Array<{ patterns: string[]; field: string }> = [
+  // ========== PATTERNS THAT COULD BE SUBSTRINGS - MUST COME FIRST ==========
+
+  // CITY - "cidade" contains "idade", must come before job_age_range!
+  { patterns: ['cidade', 'municipio', 'município'], field: 'city' },
+
+  // SKILLS - "habilidade" contains "idade", must come before job_age_range!
+  { patterns: ['habilidade', 'competencia', 'competência', 'requisito'], field: 'job_required_skills' },
+
+  // COMPANY SIZE - "quantidade de funcionario" must come before other "quantidade" patterns
+  { patterns: ['quantidade de funcionario', 'quantidade de funcionário', 'funcionario', 'funcionário', 'porte'], field: 'company_size' },
+
+  // ========== REST OF PATTERNS ==========
+
   // Company name
-  'nome': 'company_name',
-  'nome da empresa': 'company_name',
-  'empresa': 'company_name',
-  'razao social': 'company_name',
-  'razão social': 'company_name',
-  'company': 'company_name',
-  'company name': 'company_name',
-  'company_name': 'company_name',
-  'name': 'company_name',
+  { patterns: ['nome fantasia', 'razao social', 'razão social'], field: 'company_name' },
 
   // Email
-  'email': 'email',
-  'e-mail': 'email',
-  'email da empresa': 'email',
-  'company email': 'email',
+  { patterns: ['email', 'e-mail'], field: 'email' },
 
-  // CNPJ / CPF
-  'cnpj': 'cnpj',
-  'cpf': 'cnpj',
-  'cnpj/cpf': 'cnpj',
-  'cpf/cnpj': 'cnpj',
-  'cnpj da empresa': 'cnpj',
-  'tax id': 'cnpj',
+  // CNPJ/CPF
+  { patterns: ['cnpj', 'cpf'], field: 'cnpj' },
+
+  // Job title
+  { patterns: ['titulo da vaga', 'título da vaga', 'nome da vaga'], field: 'job_title' },
+
+  // Job description / activities
+  { patterns: ['principais atividades', 'atividades', 'descri'], field: 'job_description' },
+
+  // Job salary
+  { patterns: ['salario', 'salário', 'remuneração', 'remuneracao', 'bolsa'], field: 'job_salary' },
+
+  // Job benefits
+  { patterns: ['beneficio', 'benefício', 'descreva os benef'], field: 'job_benefits' },
+
+  // Job contract type
+  { patterns: ['tipo de contrat', 'tipo de vinculo', 'tipo de vínculo'], field: 'job_contract_type' },
+
+  // Job schedule
+  { patterns: ['dias e horario', 'dias e horário', 'horario', 'horário', 'jornada'], field: 'job_schedule' },
+
+  // Job openings count
+  { patterns: ['quantidade de vaga', 'qtd vaga', 'numero de vaga', 'número de vaga'], field: 'job_openings' },
+
+  // Job urgency
+  { patterns: ['urgencia', 'urgência'], field: 'job_urgency' },
+
+  // Job gender preference
+  { patterns: ['preferencia pelo sexo', 'preferência pelo sexo', 'sexo', 'genero', 'gênero'], field: 'job_gender_preference' },
+
+  // Job age range - 'idade' is a substring of 'cidade' and 'habilidade', so this must come AFTER those
+  { patterns: ['faixa etaria', 'faixa etária', 'idade', 'preferencia'], field: 'job_age_range' },
+
+  // Job education
+  { patterns: ['escolaridade', 'escolariedade', 'formacao', 'formação'], field: 'job_education' },
+
+  // Job notes
+  { patterns: ['observa'], field: 'job_notes' },
 
   // Phone
-  'telefone': 'phone',
-  'tel': 'phone',
-  'phone': 'phone',
-  'celular': 'phone',
-  'contato': 'phone',
+  { patterns: ['telefone fixo'], field: 'phone' },
+  { patterns: ['celular'], field: 'phone' },
+
+  // Contact person
+  { patterns: ['contato', 'responsavel', 'responsável', 'pessoa responsavel', 'pessoa responsável'], field: 'notes' },
 
   // Address
-  'endereco': 'address',
-  'endereço': 'address',
-  'address': 'address',
-  'rua': 'address',
-  'logradouro': 'address',
+  { patterns: ['endereco', 'endereço', 'enderenço', 'logradouro'], field: 'address' },
 
-  // City
-  'cidade': 'city',
-  'city': 'city',
-  'municipio': 'city',
-  'município': 'city',
+  // Neighborhood
+  { patterns: ['bairro'], field: 'address' },
+
+  // ZIP code
+  { patterns: ['cep', 'codigo postal', 'código postal'], field: 'zip_code' },
 
   // State
-  'estado': 'state',
-  'uf': 'state',
-  'state': 'state',
-
-  // Zip code
-  'cep': 'zip_code',
-  'zip': 'zip_code',
-  'zip code': 'zip_code',
-  'zip_code': 'zip_code',
-  'codigo postal': 'zip_code',
-  'código postal': 'zip_code',
-
-  // Industry
-  'setor': 'industry',
-  'industria': 'industry',
-  'indústria': 'industry',
-  'industry': 'industry',
-  'ramo': 'industry',
-  'segmento': 'industry',
-
-  // Company size
-  'tamanho': 'company_size',
-  'porte': 'company_size',
-  'size': 'company_size',
-  'company size': 'company_size',
-  'funcionarios': 'company_size',
-  'funcionários': 'company_size',
-  'employees': 'company_size',
+  { patterns: ['estado', 'uf'], field: 'state' },
 
   // Website
-  'website': 'website',
-  'site': 'website',
-  'url': 'website',
-  'pagina': 'website',
-  'página': 'website',
-
-  // Description
-  'descricao': 'description',
-  'descrição': 'description',
-  'description': 'description',
-  'sobre': 'description',
-  'about': 'description',
-
-  // Notes
-  'notas': 'notes',
-  'observacoes': 'notes',
-  'observações': 'notes',
-  'notes': 'notes',
-  'obs': 'notes',
-
-  // Job Title
-  'titulo': 'job_title',
-  'título': 'job_title',
-  'cargo': 'job_title',
-  'vaga': 'job_title',
-  'job_title': 'job_title',
-  'job title': 'job_title',
-  'titulo da vaga': 'job_title',
-  'título da vaga': 'job_title',
-  'funcao': 'job_title',
-  'função': 'job_title',
-  'posicao': 'job_title',
-  'posição': 'job_title',
-  'oportunidade': 'job_title',
-  'nome da vaga': 'job_title',
-
-  // Job Description / Main Activities
-  'descricao_vaga': 'job_description',
-  'descrição_vaga': 'job_description',
-  'descricao da vaga': 'job_description',
-  'descrição da vaga': 'job_description',
-  'descricao do cargo': 'job_description',
-  'descrição do cargo': 'job_description',
-  'job_description': 'job_description',
-  'job description': 'job_description',
-  'atividades': 'job_description',
-  'principais atividades': 'job_description',
-  'atividades principais': 'job_description',
-
-  // Job Salary
-  'salario': 'job_salary',
-  'salário': 'job_salary',
-  'salary': 'job_salary',
-  'remuneracao': 'job_salary',
-  'remuneração': 'job_salary',
-  'valor': 'job_salary',
-  'bolsa': 'job_salary',
-
-  // Job Schedule
-  'horario': 'job_schedule',
-  'horário': 'job_schedule',
-  'schedule': 'job_schedule',
-  'horario_trabalho': 'job_schedule',
-  'horário de trabalho': 'job_schedule',
-  'jornada': 'job_schedule',
-
-  // Job Benefits
-  'beneficios': 'job_benefits',
-  'benefícios': 'job_benefits',
-  'benefits': 'job_benefits',
-
-  // Contract Type
-  'tipo_contrato': 'job_contract_type',
-  'tipo de contrato': 'job_contract_type',
-  'tipo de vinculo': 'job_contract_type',
-  'tipo de vínculo': 'job_contract_type',
-  'contract_type': 'job_contract_type',
-  'vinculo': 'job_contract_type',
-  'vínculo': 'job_contract_type',
-
-  // Work Type
-  'modalidade': 'job_work_type',
-  'work_type': 'job_work_type',
-  'tipo_trabalho': 'job_work_type',
-  'tipo de trabalho': 'job_work_type',
-  'local de trabalho': 'job_work_type',
-
-  // Job Required Skills (Competências Requeridas)
-  'competencias requeridas': 'job_required_skills',
-  'competências requeridas': 'job_required_skills',
-  'requisitos': 'job_required_skills',
-  'habilidades': 'job_required_skills',
-  'skills': 'job_required_skills',
-  'required_skills': 'job_required_skills',
-
-  // Job Openings Count (Quantidade de Vagas)
-  'quantidade de vagas': 'job_openings',
-  'qtd vagas': 'job_openings',
-  'qtd de vagas': 'job_openings',
-  'numero de vagas': 'job_openings',
-  'número de vagas': 'job_openings',
-  'vagas': 'job_openings',
-  'openings': 'job_openings',
-
-  // Job Urgency (Urgência da Vaga)
-  'urgencia': 'job_urgency',
-  'urgência': 'job_urgency',
-  'urgencia da vaga': 'job_urgency',
-  'urgência da vaga': 'job_urgency',
-
-  // Job Gender Preference (Preferência pelo Sexo)
-  'preferencia pelo sexo': 'job_gender_preference',
-  'preferência pelo sexo': 'job_gender_preference',
-  'sexo': 'job_gender_preference',
-  'genero': 'job_gender_preference',
-  'gênero': 'job_gender_preference',
-
-  // Job Age Range (Faixa Etária)
-  'faixa etaria': 'job_age_range',
-  'faixa etária': 'job_age_range',
-  'idade': 'job_age_range',
-
-  // Job Education (Escolaridade)
-  'escolaridade': 'job_education',
-  'escolaridade exigida': 'job_education',
-  'formacao': 'job_education',
-  'formação': 'job_education',
-
-  // Job Notes (Observações da Vaga)
-  'observacoes gerais': 'job_notes',
-  'observações gerais': 'job_notes',
-};
-
-// Partial match patterns for columns with long descriptive headers
-// These are checked using startsWith or includes when exact match fails
-const PARTIAL_COLUMN_PATTERNS: Array<{ pattern: string; field: keyof Omit<ParsedCompany, '_rowNumber' | '_isValid' | '_errors' | '_warnings' | 'emails'> }> = [
-  // Job fields - partial matches for long Excel headers
-  { pattern: 'título da vaga', field: 'job_title' },
-  { pattern: 'titulo da vaga', field: 'job_title' },
-  { pattern: 'principais atividades', field: 'job_description' },
-  { pattern: 'habilidades', field: 'job_required_skills' },
-  { pattern: 'tipo de contratação', field: 'job_contract_type' },
-  { pattern: 'tipo de contratacao', field: 'job_contract_type' },
-  { pattern: 'dias e horários', field: 'job_schedule' },
-  { pattern: 'dias e horarios', field: 'job_schedule' },
-  { pattern: 'quantidade de vagas', field: 'job_openings' },
-  { pattern: 'descreva os benefícios', field: 'job_benefits' },
-  { pattern: 'descreva os beneficios', field: 'job_benefits' },
-  { pattern: 'remuneração', field: 'job_salary' },
-  { pattern: 'remuneracao', field: 'job_salary' },
-  { pattern: 'observações gerais', field: 'job_notes' },
-  { pattern: 'observacoes gerais', field: 'job_notes' },
-  { pattern: 'urgência da vaga', field: 'job_urgency' },
-  { pattern: 'urgencia da vaga', field: 'job_urgency' },
-  { pattern: 'preferência pelo sexo', field: 'job_gender_preference' },
-  { pattern: 'preferencia pelo sexo', field: 'job_gender_preference' },
-  { pattern: 'faixa etária', field: 'job_age_range' },
-  { pattern: 'faixa etaria', field: 'job_age_range' },
-  { pattern: 'tem uma faixa etária', field: 'job_age_range' },
-  { pattern: 'tem uma faixa etaria', field: 'job_age_range' },
-  { pattern: 'escolaridade exigida', field: 'job_education' },
-  { pattern: 'escolariedade exigida', field: 'job_education' }, // typo variant
-  // Company fields - partial matches
-  { pattern: 'razão social', field: 'company_name' },
-  { pattern: 'razao social', field: 'company_name' },
-  { pattern: 'nome fantasia', field: 'description' }, // Use description for trade name
-  { pattern: 'endereço e número', field: 'address' },
-  { pattern: 'endereco e numero', field: 'address' },
-  { pattern: 'enderenço e número', field: 'address' }, // typo variant
+  { patterns: ['site', 'redes soci', 'website'], field: 'website' },
 ];
 
-/**
- * Find field mapping for a column name using exact match first, then partial match
- */
-function findFieldMapping(normalizedColumn: string): keyof Omit<ParsedCompany, '_rowNumber' | '_isValid' | '_errors' | '_warnings' | 'emails'> | undefined {
-  // First try exact match
-  if (COLUMN_MAPPINGS[normalizedColumn]) {
-    return COLUMN_MAPPINGS[normalizedColumn];
+// Remove accents for better matching
+function normalizeString(str: string): string {
+  return str
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '') // Remove accents
+    .trim();
+}
+
+// Find field mapping using fuzzy pattern matching
+function findFuzzyFieldMapping(columnName: string): string | undefined {
+  const normalized = normalizeString(columnName);
+
+  // Skip timestamp columns
+  if (normalized.match(/^\d{1,2}\/\d{1,2}\/\d{4}/) || normalized === 'coluna 1') {
+    return undefined;
   }
 
-  // Then try partial match (startsWith)
-  for (const { pattern, field } of PARTIAL_COLUMN_PATTERNS) {
-    if (normalizedColumn.startsWith(pattern)) {
-      return field;
+  for (const { patterns, field } of FUZZY_PATTERNS) {
+    for (const pattern of patterns) {
+      const normalizedPattern = normalizeString(pattern);
+      if (normalized.includes(normalizedPattern)) {
+        return field;
+      }
     }
   }
 
   return undefined;
 }
 
-// Valid company sizes
-const VALID_SIZES = ['1-10', '11-50', '51-200', '201-500', '500+'];
-
-// Size mappings for common variations
+// Size mappings
 const SIZE_MAPPINGS: Record<string, '1-10' | '11-50' | '51-200' | '201-500' | '500+'> = {
   '1-10': '1-10',
   '1 a 10': '1-10',
-  '1 to 10': '1-10',
-  'micro': '1-10',
   '11-50': '11-50',
   '11 a 50': '11-50',
-  '11 to 50': '11-50',
-  'pequena': '11-50',
-  'small': '11-50',
   '51-200': '51-200',
   '51 a 200': '51-200',
-  '51 to 200': '51-200',
-  'media': '51-200',
-  'média': '51-200',
-  'medium': '51-200',
   '201-500': '201-500',
   '201 a 500': '201-500',
-  '201 to 500': '201-500',
-  'grande': '201-500',
-  'large': '201-500',
   '500+': '500+',
   '500 ou mais': '500+',
-  '500 or more': '500+',
-  'muito grande': '500+',
-  'enterprise': '500+',
 };
 
 /**
- * Parse an Excel or CSV file and return company data
+ * Result of parsing an Excel file
  */
-export function parseExcelFile(file: File): Promise<ParsedCompany[]> {
+export interface ParseResult {
+  companies: ParsedCompany[];
+  headers: string[];  // Original Excel column names
+  rawRows: Record<string, string>[];  // Raw data for preview
+  mapping: Record<string, string>;  // Excel column → our field
+}
+
+/**
+ * Parse an Excel or CSV file and return company data with headers
+ */
+export function parseExcelFile(file: File): Promise<ParseResult> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
 
@@ -361,12 +206,10 @@ export function parseExcelFile(file: File): Promise<ParsedCompany[]> {
         const data = e.target?.result;
         const workbook = XLSX.read(data, { type: 'array' });
 
-        // Get first sheet
         const sheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[sheetName];
 
-        // Convert to JSON with header row
-        const jsonData = XLSX.utils.sheet_to_json<Record<string, unknown>>(worksheet, {
+        const jsonData = XLSX.utils.sheet_to_json<Record<string, string>>(worksheet, {
           raw: false,
           defval: '',
         });
@@ -376,10 +219,36 @@ export function parseExcelFile(file: File): Promise<ParsedCompany[]> {
           return;
         }
 
-        // Parse and validate each row
-        const companies = jsonData.map((row, index) => parseRow(row, index + 2)); // +2 because row 1 is header
+        // Filter out empty rows
+        const nonEmptyRows = jsonData.filter(row => {
+          const values = Object.values(row);
+          return values.some(v => v && String(v).trim() !== '');
+        });
 
-        resolve(companies);
+        // Build column mapping once
+        const columnMapping: Record<string, string> = {};
+        const headers = Object.keys(nonEmptyRows[0] || {});
+
+        for (const header of headers) {
+          const field = findFuzzyFieldMapping(header);
+          if (field) {
+            columnMapping[header] = field;
+          }
+        }
+
+        console.log('[ExcelParser] Column mapping:', columnMapping);
+
+        // Parse each row
+        const companies = nonEmptyRows.map((row, index) =>
+          parseRowWithFuzzyMapping(row, columnMapping, index + 2)
+        );
+
+        resolve({
+          companies,
+          headers,
+          rawRows: nonEmptyRows,
+          mapping: columnMapping,
+        });
       } catch (error) {
         reject(new Error('Erro ao processar o arquivo. Verifique se é um arquivo Excel ou CSV válido.'));
       }
@@ -394,9 +263,13 @@ export function parseExcelFile(file: File): Promise<ParsedCompany[]> {
 }
 
 /**
- * Parse a single row and map to company fields
+ * Parse a single row using fuzzy column mapping
  */
-function parseRow(row: Record<string, unknown>, rowNumber: number): ParsedCompany {
+function parseRowWithFuzzyMapping(
+  row: Record<string, unknown>,
+  columnMapping: Record<string, string>,
+  rowNumber: number
+): ParsedCompany {
   const company: ParsedCompany = {
     company_name: '',
     email: '',
@@ -407,38 +280,148 @@ function parseRow(row: Record<string, unknown>, rowNumber: number): ParsedCompan
     _warnings: [],
   };
 
-  // Map columns to fields
+  // Temporary storage for combining fields
+  const addressParts: string[] = [];
+  const phoneParts: string[] = [];
+  const notesParts: string[] = [];
+
+  // Apply mappings
   for (const [columnName, value] of Object.entries(row)) {
-    const normalizedColumn = columnName.toLowerCase().trim();
-    const fieldName = findFieldMapping(normalizedColumn);
+    if (!value || String(value).trim() === '') continue;
 
-    if (fieldName && value !== undefined && value !== null && value !== '') {
-      const stringValue = String(value).trim();
+    const field = columnMapping[columnName];
+    if (!field) continue;
 
-      if (fieldName === 'company_size') {
-        // Map size value
-        const normalizedSize = stringValue.toLowerCase();
-        company.company_size = SIZE_MAPPINGS[normalizedSize] || undefined;
-      } else {
-        (company as unknown as Record<string, unknown>)[fieldName] = stringValue;
-      }
+    const stringValue = String(value).trim();
+
+    switch (field) {
+      case 'company_name':
+        // Prefer Nome Fantasia over Razão Social
+        if (!company.company_name || columnName.toLowerCase().includes('fantasia')) {
+          company.company_name = stringValue;
+        }
+        break;
+
+      case 'email':
+        company.email = stringValue;
+        break;
+
+      case 'cnpj':
+        company.cnpj = stringValue.replace(/\D/g, '');
+        break;
+
+      case 'phone':
+        phoneParts.push(stringValue);
+        break;
+
+      case 'address':
+        addressParts.push(stringValue);
+        break;
+
+      case 'city':
+        company.city = stringValue;
+        break;
+
+      case 'state':
+        company.state = stringValue;
+        break;
+
+      case 'zip_code':
+        company.zip_code = stringValue;
+        break;
+
+      case 'website':
+        company.website = stringValue;
+        break;
+
+      case 'company_size':
+        const normalized = stringValue.toLowerCase();
+        // Try to extract a number
+        const numMatch = stringValue.match(/\d+/);
+        if (numMatch) {
+          const num = parseInt(numMatch[0], 10);
+          if (num <= 10) company.company_size = '1-10';
+          else if (num <= 50) company.company_size = '11-50';
+          else if (num <= 200) company.company_size = '51-200';
+          else if (num <= 500) company.company_size = '201-500';
+          else company.company_size = '500+';
+        } else {
+          company.company_size = SIZE_MAPPINGS[normalized] || undefined;
+        }
+        break;
+
+      case 'notes':
+        notesParts.push(`${columnName}: ${stringValue}`);
+        break;
+
+      // Job fields
+      case 'job_title':
+        company.job_title = stringValue;
+        break;
+      case 'job_description':
+        company.job_description = stringValue;
+        break;
+      case 'job_salary':
+        company.job_salary = stringValue;
+        break;
+      case 'job_schedule':
+        company.job_schedule = stringValue;
+        break;
+      case 'job_benefits':
+        company.job_benefits = stringValue;
+        break;
+      case 'job_contract_type':
+        company.job_contract_type = stringValue;
+        break;
+      case 'job_work_type':
+        company.job_work_type = stringValue;
+        break;
+      case 'job_required_skills':
+        company.job_required_skills = stringValue;
+        break;
+      case 'job_openings':
+        company.job_openings = stringValue;
+        break;
+      case 'job_urgency':
+        company.job_urgency = stringValue;
+        break;
+      case 'job_gender_preference':
+        company.job_gender_preference = stringValue;
+        break;
+      case 'job_age_range':
+        company.job_age_range = stringValue;
+        break;
+      case 'job_education':
+        company.job_education = stringValue;
+        break;
+      case 'job_notes':
+        company.job_notes = stringValue;
+        break;
     }
   }
 
-  // Validate required fields - only name is truly required as blocking error
-  if (!company.company_name) {
-    company._isValid = false;
-    company._errors.push('Nome da empresa é obrigatório');
+  // Combine parts
+  if (addressParts.length > 0) {
+    company.address = addressParts.join(', ');
+  }
+  if (phoneParts.length > 0) {
+    company.phone = phoneParts[0]; // Use first phone
+  }
+  if (notesParts.length > 0) {
+    company.notes = notesParts.join('\n');
   }
 
-  // Parse multiple emails from the email field using regex extraction
-  if (company.email) {
-    const rawEmail = company.email;
-    // Extract all email-like patterns from the raw string
-    const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
-    const matches = rawEmail.match(emailRegex) || [];
+  // Validate required fields
+  if (!company.company_name) {
+    company._isValid = false;
+    company._errors.push('Nome da empresa não encontrado');
+  }
 
-    // Build emails array from matches
+  // Parse emails
+  if (company.email) {
+    const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
+    const matches = company.email.match(emailRegex) || [];
+
     const validEmails: ParsedEmail[] = matches.map((email, idx) => ({
       email: email.toLowerCase().trim(),
       label: idx === 0 ? 'Principal' : 'Adicional',
@@ -447,35 +430,27 @@ function parseRow(row: Record<string, unknown>, rowNumber: number): ParsedCompan
 
     company.emails = validEmails;
 
-    // Set primary email to first valid one
     if (validEmails.length > 0) {
       company.email = validEmails[0].email;
     } else {
-      // No valid emails found
       company._isValid = false;
       company._errors.push('Email inválido');
     }
   } else {
     company._isValid = false;
-    company._errors.push('Email é obrigatório');
+    company._errors.push('Email não encontrado');
   }
 
-  // Validate CNPJ/CPF if provided - just a warning, don't block
+  // Warnings for optional fields
   if (company.cnpj) {
-    const cnpjError = validateCNPJ(company.cnpj);
-    if (cnpjError) {
-      company._warnings.push(cnpjError);
+    const digits = company.cnpj.replace(/\D/g, '');
+    if (digits.length !== 11 && digits.length !== 14) {
+      company._warnings.push(`CNPJ/CPF tem ${digits.length} dígitos`);
     }
   } else {
     company._warnings.push('CNPJ/CPF não informado');
   }
 
-  // Validate company_size if provided - just a warning
-  if (company.company_size && !VALID_SIZES.includes(company.company_size)) {
-    company._warnings.push('Tamanho da empresa inválido');
-  }
-
-  // Warn about missing optional but useful fields
   if (!company.phone) {
     company._warnings.push('Telefone não informado');
   }
@@ -484,83 +459,6 @@ function parseRow(row: Record<string, unknown>, rowNumber: number): ParsedCompan
   }
 
   return company;
-}
-
-/**
- * Validate email format
- */
-function isValidEmail(email: string): boolean {
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  return emailRegex.test(email);
-}
-
-/**
- * Validate CNPJ/CPF format
- * CPF = 11 digits (individuals)
- * CNPJ = 14 digits (companies)
- * Returns error message if invalid, null if valid
- */
-function validateCNPJ(cnpj: string): string | null {
-  // Remove non-digits
-  const digits = cnpj.replace(/\D/g, '');
-
-  if (digits.length === 0) {
-    return 'CNPJ/CPF está vazio';
-  }
-
-  // CPF has 11 digits, CNPJ has 14 digits
-  if (digits.length === 11 || digits.length === 14) {
-    return null; // Valid - it's either a CPF or CNPJ
-  }
-
-  if (digits.length < 11) {
-    return `CPF/CNPJ tem ${digits.length} dígitos (CPF precisa ter 11, CNPJ precisa ter 14)`;
-  }
-
-  if (digits.length > 11 && digits.length < 14) {
-    return `CNPJ tem ${digits.length} dígitos (precisa ter 14)`;
-  }
-
-  if (digits.length > 14) {
-    return `CNPJ tem ${digits.length} dígitos (máximo 14)`;
-  }
-
-  return null; // Valid
-}
-
-/**
- * Get the document type label based on number of digits
- * CPF = 11 digits or less, CNPJ = 14 digits
- */
-export function getDocumentTypeLabel(value: string): 'CPF' | 'CNPJ' {
-  const digits = value?.replace(/\D/g, '') || '';
-  return digits.length <= 11 ? 'CPF' : 'CNPJ';
-}
-
-/**
- * Get column headers detected in the file
- */
-export function getDetectedColumns(companies: ParsedCompany[]): string[] {
-  if (companies.length === 0) return [];
-
-  const company = companies[0];
-  const detected: string[] = [];
-
-  if (company.company_name) detected.push('Nome');
-  if (company.email) detected.push('Email');
-  if (company.cnpj) detected.push('CNPJ');
-  if (company.phone) detected.push('Telefone');
-  if (company.address) detected.push('Endereço');
-  if (company.city) detected.push('Cidade');
-  if (company.state) detected.push('Estado');
-  if (company.zip_code) detected.push('CEP');
-  if (company.industry) detected.push('Setor');
-  if (company.company_size) detected.push('Tamanho');
-  if (company.website) detected.push('Website');
-  if (company.description) detected.push('Descrição');
-  if (company.notes) detected.push('Notas');
-
-  return detected;
 }
 
 /**
@@ -587,4 +485,12 @@ export function getValidationSummary(companies: ParsedCompany[]): {
     withWarnings,
     errors,
   };
+}
+
+/**
+ * Get the document type label based on number of digits
+ */
+export function getDocumentTypeLabel(value: string): 'CPF' | 'CNPJ' {
+  const digits = value?.replace(/\D/g, '') || '';
+  return digits.length <= 11 ? 'CPF' : 'CNPJ';
 }

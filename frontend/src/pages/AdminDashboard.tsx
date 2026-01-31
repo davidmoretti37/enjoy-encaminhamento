@@ -43,7 +43,7 @@ export default function AdminDashboard() {
     );
   }
 
-  if (!user || user.role !== 'affiliate') {
+  if (!user || user.role !== 'admin') {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
         <Card className="max-w-md shadow-xl">

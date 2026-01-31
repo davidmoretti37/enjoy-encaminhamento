@@ -41,8 +41,8 @@ export * from "./notifications";
 // Analytics operations
 export * from "./analytics";
 
-// School operations
-export * from "./schools";
+// Agency operations
+export * from "./agencies";
 
 // Affiliate operations
 export * from "./affiliates";
@@ -52,3 +52,6 @@ export * from "./scheduling";
 
 // Batch operations (candidate pre-selection)
 export * from "./batches";
+
+// Company invitation operations
+export * from "./companyInvitations";

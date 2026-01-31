@@ -97,12 +97,12 @@ export default function CandidateOnboarding() {
   // PDP state
   const [pdpResults, setPdpResults] = useState<PDPResultsType | null>(null);
 
-  // Fetch user's linked school for pre-populating city/state
-  const schoolQuery = trpc.candidate.getMySchool.useQuery(undefined, {
+  // Fetch user's linked agency for pre-populating city/state
+  const agencyQuery = trpc.candidate.getMyAgency.useQuery(undefined, {
     enabled: !!user,
   });
 
-  // Pre-populate form with user data and school data when available
+  // Pre-populate form with user data and agency data when available
   useEffect(() => {
     if (user) {
       setFormData(prev => ({
@@ -113,17 +113,17 @@ export default function CandidateOnboarding() {
     }
   }, [user]);
 
-  // Pre-populate city and state from school when available
+  // Pre-populate city and state from agency when available
   useEffect(() => {
-    const school = schoolQuery.data;
-    if (school) {
+    const agency = agencyQuery.data;
+    if (agency) {
       setFormData(prev => ({
         ...prev,
-        city: prev.city || school.city || '',
-        state: prev.state || school.state || '',
+        city: prev.city || agency.city || '',
+        state: prev.state || agency.state || '',
       }));
     }
-  }, [schoolQuery.data]);
+  }, [agencyQuery.data]);
 
   const [newCourse, setNewCourse] = useState('');
   const [newSkill, setNewSkill] = useState('');

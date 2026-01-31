@@ -24,10 +24,10 @@ export interface Database {
       users: {
         Row: {
           id: string
-          role: 'affiliate' | 'school' | 'candidate' | 'company' | null
+          role: 'admin' | 'agency' | 'candidate' | 'company' | null
           name: string | null
           email: string | null
-          school_id: string | null
+          agency_id: string | null
           last_login: string | null
           profile_photo_url: string | null
           created_at: string
@@ -36,10 +36,10 @@ export interface Database {
         }
         Insert: {
           id: string
-          role?: 'super_admin' | 'affiliate' | 'school' | 'candidate' | 'company' | null
+          role?: 'super_admin' | 'admin' | 'agency' | 'candidate' | 'company' | null
           name?: string | null
           email?: string | null
-          school_id?: string | null
+          agency_id?: string | null
           last_login?: string | null
           profile_photo_url?: string | null
           created_at?: string
@@ -48,10 +48,10 @@ export interface Database {
         }
         Update: {
           id?: string
-          role?: 'super_admin' | 'affiliate' | 'school' | 'candidate' | 'company' | null
+          role?: 'super_admin' | 'admin' | 'agency' | 'candidate' | 'company' | null
           name?: string | null
           email?: string | null
-          school_id?: string | null
+          agency_id?: string | null
           last_login?: string | null
           profile_photo_url?: string | null
           created_at?: string
@@ -204,13 +204,13 @@ export interface Database {
           updated_at?: string
         }
       }
-      schools: {
+      agencies: {
         Row: {
           id: string
           user_id: string
           affiliate_id: string | null
           created_by: string | null
-          school_name: string
+          agency_name: string
           cnpj: string
           email: string
           phone: string | null
@@ -219,7 +219,7 @@ export interface Database {
           state: string | null
           zip_code: string | null
           industry: string | null
-          school_size: '1-10' | '11-50' | '51-200' | '201-500' | '500+' | null
+          agency_size: '1-10' | '11-50' | '51-200' | '201-500' | '500+' | null
           website: string | null
           description: string | null
           logo: string | null
@@ -234,7 +234,7 @@ export interface Database {
         Insert: {
           id?: string
           user_id: string
-          school_name: string
+          agency_name: string
           cnpj: string
           email: string
           phone?: string | null
@@ -804,7 +804,7 @@ export interface Database {
         Row: {
           id: string
           admin_id: string
-          school_id: string | null
+          agency_id: string | null
           day_of_week: number | null
           specific_date: string | null
           start_time: string
@@ -817,7 +817,7 @@ export interface Database {
         Insert: {
           id?: string
           admin_id: string
-          school_id?: string | null
+          agency_id?: string | null
           day_of_week?: number | null
           specific_date?: string | null
           start_time: string
@@ -830,7 +830,7 @@ export interface Database {
         Update: {
           id?: string
           admin_id?: string
-          school_id?: string | null
+          agency_id?: string | null
           day_of_week?: number | null
           specific_date?: string | null
           start_time?: string
@@ -845,7 +845,7 @@ export interface Database {
         Row: {
           id: string
           admin_id: string
-          school_id: string | null
+          agency_id: string | null
           company_id: string | null
           company_email: string
           company_name: string | null
@@ -868,7 +868,7 @@ export interface Database {
         Insert: {
           id?: string
           admin_id: string
-          school_id?: string | null
+          agency_id?: string | null
           company_id?: string | null
           company_email: string
           company_name?: string | null
@@ -891,7 +891,7 @@ export interface Database {
         Update: {
           id?: string
           admin_id?: string
-          school_id?: string | null
+          agency_id?: string | null
           company_id?: string | null
           company_email?: string
           company_name?: string | null
@@ -916,7 +916,7 @@ export interface Database {
         Row: {
           id: string
           sender_id: string
-          school_id: string | null
+          agency_id: string | null
           recipient_email: string
           company_id: string | null
           email_type: 'outreach' | 'meeting_invite' | 'reminder' | 'follow_up' | 'confirmation'
@@ -932,7 +932,7 @@ export interface Database {
         Insert: {
           id?: string
           sender_id: string
-          school_id?: string | null
+          agency_id?: string | null
           recipient_email: string
           company_id?: string | null
           email_type: 'outreach' | 'meeting_invite' | 'reminder' | 'follow_up' | 'confirmation'
@@ -948,7 +948,7 @@ export interface Database {
         Update: {
           id?: string
           sender_id?: string
-          school_id?: string | null
+          agency_id?: string | null
           recipient_email?: string
           company_id?: string | null
           email_type?: 'outreach' | 'meeting_invite' | 'reminder' | 'follow_up' | 'confirmation'
@@ -962,23 +962,23 @@ export interface Database {
           created_at?: string
         }
       }
-      admin_school_context: {
+      admin_agency_context: {
         Row: {
           id: string
           admin_id: string
-          current_school_id: string | null
+          current_agency_id: string | null
           updated_at: string
         }
         Insert: {
           id?: string
           admin_id: string
-          current_school_id?: string | null
+          current_agency_id?: string | null
           updated_at?: string
         }
         Update: {
           id?: string
           admin_id?: string
-          current_school_id?: string | null
+          current_agency_id?: string | null
           updated_at?: string
         }
       }
@@ -1122,7 +1122,7 @@ export interface Database {
           id: string
           job_id: string
           candidate_id: string
-          franchise_id: string
+          affiliate_id: string
           match_score: number
           confidence_score: number | null
           match_explanation: string | null
@@ -1140,7 +1140,7 @@ export interface Database {
           id?: string
           job_id: string
           candidate_id: string
-          franchise_id: string
+          affiliate_id: string
           match_score: number
           confidence_score?: number | null
           match_explanation?: string | null
@@ -1158,7 +1158,7 @@ export interface Database {
           id?: string
           job_id?: string
           candidate_id?: string
-          franchise_id?: string
+          affiliate_id?: string
           match_score?: number
           confidence_score?: number | null
           match_explanation?: string | null

@@ -1,6 +1,6 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import ClassicLoader from "@/components/ui/ClassicLoader";
-import { useSchoolContext } from "@/contexts/SchoolContext";
+import { useAgencyContext } from "@/contexts/AgencyContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -23,6 +23,7 @@ import CompanyDetailModal from "@/components/CompanyDetailModal";
 import CompanyDocumentsModal from "@/components/CompanyDocumentsModal";
 import CompanyJobsModal from "@/components/CompanyJobsModal";
 import ImportCompaniesModal from "@/components/ImportCompaniesModal";
+import SendCompanyInviteButton from "@/components/SendCompanyInviteButton";
 
 interface Meeting {
   id: string;
@@ -35,13 +36,13 @@ interface Meeting {
   contract_sent_at: string | null;
   contract_signed_at: string | null;
   contract_signer_name: string | null;
-  school_name?: string | null;
+  agency_name?: string | null;
   _isDirectSignup?: boolean; // Flag for companies that registered directly
 }
 
 export default function CompanyPage() {
   const { user, loading: authLoading } = useAuth();
-  const { currentSchool, isAllSchoolsMode } = useSchoolContext();
+  const { currentAgency, isAllAgenciesMode } = useAgencyContext();
   const [, setLocation] = useLocation();
   const [selectedMeeting, setSelectedMeeting] = useState<Meeting | null>(null);
   const [documentsMeeting, setDocumentsMeeting] = useState<Meeting | null>(null);
@@ -51,61 +52,61 @@ export default function CompanyPage() {
   const [showImportModal, setShowImportModal] = useState(false);
 
   // Detect role
-  const isAffiliate = user?.role === 'affiliate';
-  const isSchool = user?.role === 'school';
+  const isAffiliate = user?.role === 'admin';
+  const isAgency = user?.role === 'agency';
 
   // Separate queries for each role (both called but only one enabled at a time)
-  // Pass null explicitly for "All Schools" mode (currentSchool is null)
+  // Pass null explicitly for "All Agencies" mode (currentAgency is null)
   const affiliateMeetingsQuery = trpc.outreach.getMeetings.useQuery(
-    { status: "completed", schoolId: currentSchool?.id ?? null },
+    { status: "completed", agencyId: currentAgency?.id ?? null },
     { enabled: isAffiliate }
   );
-  const schoolMeetingsQuery = trpc.school.getMeetings.useQuery(
+  const agencyMeetingsQuery = trpc.agency.getMeetings.useQuery(
     undefined,
-    { enabled: isSchool }
+    { enabled: isAgency }
   );
 
   // Also fetch companies that registered directly (not through outreach)
-  // Use different queries for school vs affiliate
-  const schoolDirectCompaniesQuery = trpc.school.getCompanies.useQuery(
+  // Use different queries for agency vs affiliate
+  const agencyDirectCompaniesQuery = trpc.agency.getCompanies.useQuery(
     undefined,
-    { enabled: isSchool }
+    { enabled: isAgency }
   );
   const affiliateDirectCompaniesQuery = trpc.affiliate.getCompanies.useQuery(
-    { schoolId: currentSchool?.id ?? null },
+    { agencyId: currentAgency?.id ?? null },
     { enabled: isAffiliate }
   );
 
   // Combine results based on role
-  const meetings = isAffiliate ? affiliateMeetingsQuery.data : schoolMeetingsQuery.data;
+  const meetings = isAffiliate ? affiliateMeetingsQuery.data : agencyMeetingsQuery.data;
   const directCompanies = isAffiliate
     ? (affiliateDirectCompaniesQuery.data || [])
-    : (schoolDirectCompaniesQuery.data || []);
+    : (agencyDirectCompaniesQuery.data || []);
   const isLoading = isAffiliate
     ? (affiliateMeetingsQuery.isLoading || affiliateDirectCompaniesQuery.isLoading)
-    : (schoolMeetingsQuery.isLoading || schoolDirectCompaniesQuery.isLoading);
+    : (agencyMeetingsQuery.isLoading || agencyDirectCompaniesQuery.isLoading);
   const refetch = () => {
     if (isAffiliate) {
       affiliateMeetingsQuery.refetch();
       affiliateDirectCompaniesQuery.refetch();
     } else {
-      schoolMeetingsQuery.refetch();
-      schoolDirectCompaniesQuery.refetch();
+      agencyMeetingsQuery.refetch();
+      agencyDirectCompaniesQuery.refetch();
     }
   };
 
   // Debug logging
-  console.log('[CompanyPage] Role:', user?.role, 'isSchool:', isSchool, 'isAffiliate:', isAffiliate);
+  console.log('[CompanyPage] Role:', user?.role, 'isAgency:', isAgency, 'isAffiliate:', isAffiliate);
   console.log('[CompanyPage] Meetings:', meetings?.length, meetings);
   console.log('[CompanyPage] Direct companies:', directCompanies?.length, directCompanies);
 
   // Filter to only completed meetings for this page
   const completedMeetingsData = meetings?.filter((m: any) => m.status === 'completed') || meetings;
 
-  // Query all forms for this admin to check form status - filtered by school context
+  // Query all forms for this admin to check form status - filtered by agency context
   const { data: forms } = trpc.outreach.getAllCompanyForms.useQuery(
-    { schoolId: currentSchool?.id ?? null },
-    { enabled: isAffiliate || isSchool }
+    { agencyId: currentAgency?.id ?? null },
+    { enabled: isAffiliate || isAgency }
   );
 
   // Create a map of email -> form for quick lookup
@@ -143,7 +144,7 @@ export default function CompanyPage() {
     );
   }
 
-  if (!user || !user.role || !['affiliate', 'school'].includes(user.role)) {
+  if (!user || !user.role || !['admin', 'agency'].includes(user.role)) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Card className="max-w-md">
@@ -189,7 +190,7 @@ export default function CompanyPage() {
       contract_sent_at: c.created_at, // Mark as completed since they signed up directly
       contract_signed_at: c.created_at, // Mark as completed
       contract_signer_name: c.contact_name || null,
-      school_name: null,
+      agency_name: null,
       _isDirectSignup: true, // Flag to identify direct signups
     }));
 
@@ -217,7 +218,7 @@ export default function CompanyPage() {
               Gerencie contratos das empresas parceiras
             </p>
           </div>
-          {(isAffiliate || isSchool) && (
+          {(isAffiliate || isAgency) && (
             <Button onClick={() => setShowImportModal(true)}>
               <Upload className="h-4 w-4 mr-2" />
               Importar Empresas
@@ -267,12 +268,16 @@ export default function CompanyPage() {
                           {meeting.contact_name && (
                             <p className="text-sm text-gray-500">{meeting.contact_name}</p>
                           )}
-                          {isAllSchoolsMode && meeting.school_name && (
-                            <p className="text-xs text-gray-400">{meeting.school_name}</p>
+                          {isAllAgenciesMode && meeting.agency_name && (
+                            <p className="text-xs text-gray-400">{meeting.agency_name}</p>
                           )}
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
+                        {/* Show invite button for imported companies */}
+                        {meeting._isDirectSignup && (
+                          <SendCompanyInviteButton companyId={meeting.id} />
+                        )}
                         <Button
                           variant="outline"
                           size="sm"
@@ -286,7 +291,7 @@ export default function CompanyPage() {
                           variant="outline"
                           size="sm"
                           className="text-gray-600 border-gray-300 hover:bg-gray-50"
-                          onClick={() => setLocation(`/school/job-descriptions/${meeting.id}`)}
+                          onClick={() => setLocation(`/agency/job-descriptions/${meeting.id}`)}
                         >
                           <Briefcase className="h-4 w-4 mr-1.5" />
                           Descrição da Vaga
@@ -336,8 +341,8 @@ export default function CompanyPage() {
                             </div>
                           </div>
                         </div>
-                        {isAllSchoolsMode && meeting.school_name && (
-                          <p className="text-xs text-gray-400 mt-2 ml-12">{meeting.school_name}</p>
+                        {isAllAgenciesMode && meeting.agency_name && (
+                          <p className="text-xs text-gray-400 mt-2 ml-12">{meeting.agency_name}</p>
                         )}
                       </div>
                     ))}
@@ -378,8 +383,8 @@ export default function CompanyPage() {
                             </div>
                           </div>
                         </div>
-                        {isAllSchoolsMode && meeting.school_name && (
-                          <p className="text-xs text-gray-400 mt-2 ml-12">{meeting.school_name}</p>
+                        {isAllAgenciesMode && meeting.agency_name && (
+                          <p className="text-xs text-gray-400 mt-2 ml-12">{meeting.agency_name}</p>
                         )}
                       </div>
                     ))}

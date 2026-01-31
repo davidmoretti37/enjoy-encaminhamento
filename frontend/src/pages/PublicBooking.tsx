@@ -18,11 +18,11 @@ export default function PublicBooking() {
   const params = useParams<{ adminId: string }>();
   const adminId = params.adminId;
 
-  // Get email and schoolId from URL query params
+  // Get email and agencyId from URL query params
   const searchString = useSearch();
   const urlParams = new URLSearchParams(searchString);
   const emailFromUrl = urlParams.get('email') || "";
-  const schoolIdFromUrl = urlParams.get('school') || undefined;
+  const agencyIdFromUrl = urlParams.get('agency') || undefined;
 
   const [step, setStep] = useState<BookingStep>('date');
   const [selectedDate, setSelectedDate] = useState<Date | undefined>();
@@ -77,7 +77,7 @@ export default function PublicBooking() {
 
     createBookingMutation.mutate({
       adminId: adminId!,
-      schoolId: schoolIdFromUrl,
+      agencyId: agencyIdFromUrl,
       scheduledAt: selectedSlot.start,
       companyEmail: formData.companyEmail,
       companyName: formData.companyName,

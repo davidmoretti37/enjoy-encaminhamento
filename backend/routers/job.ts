@@ -5,8 +5,8 @@
 import { z } from "zod";
 import { router } from "../_core/trpc";
 import { TRPCError } from "@trpc/server";
-import { publicProcedure } from "../_core/trpc";
-import { adminProcedure, companyProcedure, candidateProcedure, schoolProcedure } from "./procedures";
+import { publicProcedure, protectedProcedure } from "../_core/trpc";
+import { adminProcedure, companyProcedure, candidateProcedure, agencyProcedure } from "./procedures";
 import * as db from "../db";
 import { supabaseAdmin } from "../supabase";
 import { generateJobSummary } from "../services/ai/summarizer";
@@ -68,10 +68,253 @@ export const jobRouter = router({
       return { jobId };
     }),
 
+  // Create job for a specific company (admin/agency access)
+  createForCompany: protectedProcedure
+    .input(z.object({
+      companyId: z.string().uuid(),
+      title: z.string().min(1),
+      description: z.string().min(1),
+      contractType: z.enum(["estagio", "clt", "menor-aprendiz"]),
+      workType: z.enum(["presencial", "remoto", "hibrido"]).default("presencial"),
+      workSchedule: z.string().optional(),
+      salaryMin: z.number().optional(),
+      salaryMax: z.number().optional(),
+      requirements: z.string().optional(),
+      openings: z.number().default(1),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      // Allow admin and agency roles
+      if (ctx.user.role !== 'admin' && ctx.user.role !== 'agency') {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'Acesso negado',
+        });
+      }
+
+      // Get agency_id for the job (only for agency users)
+      let agencyId = null;
+      if (ctx.user.role === 'agency') {
+        const agency = await db.getAgencyForUserContext(ctx.user.id, ctx.user.role);
+        agencyId = agency?.id;
+      }
+
+      // Insert job directly
+      const { data, error } = await supabaseAdmin.from('jobs').insert({
+        company_id: input.companyId,
+        agency_id: agencyId,
+        title: input.title,
+        description: input.description,
+        contract_type: input.contractType,
+        work_type: input.workType,
+        work_schedule: input.workSchedule || null,
+        salary_min: input.salaryMin || null,
+        salary_max: input.salaryMax || null,
+        specific_requirements: input.requirements || null,
+        openings: input.openings,
+        status: 'open',
+        published_at: new Date().toISOString(),
+      }).select('id').single();
+
+      if (error) {
+        console.error('[Job.createForCompany] Error creating job:', error);
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: error.message,
+        });
+      }
+
+      // Generate AI summary in background (fire and forget)
+      generateJobSummary({
+        title: input.title,
+        description: input.description,
+        contractType: input.contractType,
+        workType: input.workType,
+        requirements: input.requirements,
+      }).then(async (summary) => {
+        if (summary && data?.id) {
+          await db.updateJob(data.id, {
+            summary,
+            summary_generated_at: new Date().toISOString(),
+          });
+          console.log(`Generated summary for job ${data.id}`);
+          // Generate embedding from summary
+          await generateJobEmbedding(data.id);
+        }
+      }).catch((err) => {
+        console.error('Failed to generate job summary:', err);
+      });
+
+      return { jobId: data.id };
+    }),
+
+  // Trigger matching pipeline for a job (admin/agency access)
+  triggerMatchingForAgency: protectedProcedure
+    .input(z.object({ jobId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      // Allow admin and agency roles
+      if (ctx.user.role !== 'admin' && ctx.user.role !== 'agency') {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'Acesso negado',
+        });
+      }
+
+      try {
+        // Import and run matching pipeline
+        const { runMatchingPipeline, saveMatchResults } = await import('../services/matching/index');
+        const result = await runMatchingPipeline(input.jobId, {});
+        await saveMatchResults(input.jobId, result.results, result.weightProfile);
+
+        return {
+          success: true,
+          matchesFound: result.results.length,
+        };
+      } catch (error: any) {
+        console.error('[Job.triggerMatchingForAgency] Error:', error);
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: error.message || 'Erro ao iniciar busca de candidatos',
+        });
+      }
+    }),
+
+  // Get matching progress/status for a job (admin/agency access)
+  getMatchingProgress: protectedProcedure
+    .input(z.object({ jobId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      if (ctx.user.role !== 'admin' && ctx.user.role !== 'agency') {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'Acesso negado',
+        });
+      }
+
+      // Check if matches exist for this job
+      const { count, error } = await supabaseAdmin
+        .from('job_matches')
+        .select('*', { count: 'exact', head: true })
+        .eq('job_id', input.jobId);
+
+      if (error) {
+        console.error('[Job.getMatchingProgress] Error:', error);
+      }
+
+      if (count && count > 0) {
+        return {
+          status: 'completed',
+          matchesFound: count,
+          percentComplete: 100,
+        };
+      }
+
+      return {
+        status: 'not_started',
+        matchesFound: 0,
+        percentComplete: 0,
+      };
+    }),
+
+  // Get matched candidates for a job (admin/agency access)
+  getMatchesForJob: protectedProcedure
+    .input(z.object({
+      jobId: z.string().uuid(),
+      minScore: z.number().min(0).max(100).default(0),
+      limit: z.number().min(1).max(100).default(50),
+    }))
+    .query(async ({ ctx, input }) => {
+      if (ctx.user.role !== 'admin' && ctx.user.role !== 'agency') {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'Acesso negado',
+        });
+      }
+
+      const { data, error } = await supabaseAdmin
+        .from('job_matches')
+        .select(`
+          id,
+          candidate_id,
+          composite_score,
+          llm_recommendation,
+          explanation_summary,
+          candidates(id, full_name, city, state, education_level)
+        `)
+        .eq('job_id', input.jobId)
+        .gte('composite_score', input.minScore)
+        .order('composite_score', { ascending: false })
+        .limit(input.limit);
+
+      if (error) {
+        console.error('[Job.getMatchesForJob] Error:', error);
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: error.message,
+        });
+      }
+
+      return {
+        matches: (data || []).map((m: any) => ({
+          matchId: m.id,
+          candidateId: m.candidate_id,
+          candidateName: m.candidates?.full_name,
+          candidateProfile: {
+            city: m.candidates?.city,
+            educationLevel: m.candidates?.education_level,
+          },
+          compositeScore: m.composite_score,
+          recommendation: m.llm_recommendation,
+        })),
+        pagination: {
+          totalMatches: data?.length || 0,
+        },
+      };
+    }),
+
+  // Generate missing embeddings for jobs (admin only)
+  generateMissingEmbeddings: protectedProcedure
+    .mutation(async ({ ctx }) => {
+      if (ctx.user.role !== 'admin') {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'Apenas administradores podem executar esta ação',
+        });
+      }
+
+      // Get jobs with summary but no embedding
+      const { data: jobs, error } = await supabaseAdmin
+        .from('jobs')
+        .select('id, title')
+        .not('summary', 'is', null)
+        .is('embedding', null);
+
+      if (error) {
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: error.message,
+        });
+      }
+
+      let generated = 0;
+      for (const job of jobs || []) {
+        try {
+          await generateJobEmbedding(job.id);
+          console.log(`Generated embedding for job ${job.id} (${job.title})`);
+          generated++;
+        } catch (err) {
+          console.error(`Failed to generate embedding for job ${job.id}:`, err);
+        }
+      }
+
+      return {
+        total: jobs?.length || 0,
+        generated,
+      };
+    }),
+
   // Update job
   update: companyProcedure
     .input(z.object({
-      id: z.number(),
+      id: z.string().uuid(),
       title: z.string().optional(),
       description: z.string().optional(),
       status: z.enum(["draft", "open", "closed", "filled"]).optional(),
@@ -86,7 +329,7 @@ export const jobRouter = router({
       }
 
       const company = await db.getCompanyByUserId(ctx.user.id);
-      if (job.companyId !== company?.id && ctx.user.role !== 'affiliate') {
+      if (job.companyId !== company?.id && ctx.user.role !== 'admin') {
         throw new TRPCError({ code: 'FORBIDDEN' });
       }
 
@@ -101,8 +344,8 @@ export const jobRouter = router({
     return await db.getJobsByCompanyId(company.id);
   }),
 
-  // Get all open jobs (public)
-  getAllOpen: publicProcedure.query(async () => {
+  // Get all open jobs (requires login)
+  getAllOpen: protectedProcedure.query(async () => {
     return await db.getAllOpenJobs();
   }),
 
@@ -134,15 +377,15 @@ export const jobRouter = router({
     }));
   }),
 
-  // Get job by ID
-  getById: publicProcedure
-    .input(z.object({ id: z.number() }))
+  // Get job by ID (requires login)
+  getById: protectedProcedure
+    .input(z.object({ id: z.string().uuid() }))
     .query(async ({ input }) => {
       return await db.getJobById(input.id);
     }),
 
-  // Search jobs
-  search: publicProcedure
+  // Search jobs (requires login)
+  search: protectedProcedure
     .input(z.object({
       contractType: z.string().optional(),
       workType: z.string().optional(),
@@ -167,28 +410,28 @@ export const jobRouter = router({
       return { success: true };
     }),
 
-  // Get jobs for a school (all jobs from companies linked to this school)
-  getBySchool: schoolProcedure.query(async ({ ctx }) => {
-    const school = await db.getSchoolForUserContext(ctx.user.id, ctx.user.role);
-    if (!school) {
+  // Get jobs for an agency (all jobs from companies linked to this agency)
+  getByAgency: agencyProcedure.query(async ({ ctx }) => {
+    const agency = await db.getAgencyForUserContext(ctx.user.id, ctx.user.role);
+    if (!agency) {
       throw new TRPCError({
         code: 'NOT_FOUND',
-        message: 'Escola não encontrada',
+        message: 'Agência não encontrada',
       });
     }
 
-    // Get all jobs where school_id matches
+    // Get all jobs where agency_id matches
     const { data, error } = await supabaseAdmin
       .from('jobs')
       .select(`
         *,
         company:companies(id, company_name, email)
       `)
-      .eq('school_id', school.id)
+      .eq('agency_id', agency.id)
       .order('created_at', { ascending: false });
 
     if (error) {
-      console.error('[Job.getBySchool] Error fetching jobs:', error);
+      console.error('[Job.getByAgency] Error fetching jobs:', error);
       throw new TRPCError({
         code: 'INTERNAL_SERVER_ERROR',
         message: 'Erro ao buscar vagas',
@@ -198,21 +441,32 @@ export const jobRouter = router({
     return data || [];
   }),
 
-  // Get jobs for a specific company (school/affiliate access)
-  getByCompanyId: schoolProcedure
+  // Get jobs for a specific company (agency/admin access)
+  getByCompanyId: protectedProcedure
     .input(z.object({
       companyId: z.string(),
     }))
     .query(async ({ ctx, input }) => {
-      const school = await db.getSchoolForUserContext(ctx.user.id, ctx.user.role);
-      if (!school) {
+      // Allow admin and agency roles to access this endpoint
+      if (ctx.user.role !== 'admin' && ctx.user.role !== 'agency') {
         throw new TRPCError({
-          code: 'NOT_FOUND',
-          message: 'Escola não encontrada',
+          code: 'FORBIDDEN',
+          message: 'Acesso negado',
         });
       }
 
-      // Get jobs for company - school already verified company belongs to them via affiliate
+      // For agency users, verify they have a valid agency
+      if (ctx.user.role === 'agency') {
+        const agency = await db.getAgencyForUserContext(ctx.user.id, ctx.user.role);
+        if (!agency) {
+          throw new TRPCError({
+            code: 'NOT_FOUND',
+            message: 'Agência não encontrada',
+          });
+        }
+      }
+
+      // Get jobs for company
       const { data, error } = await supabaseAdmin
         .from('jobs')
         .select(`
@@ -260,27 +514,27 @@ export const jobRouter = router({
       return matches;
     }),
 
-  // Get matching candidates for a job (school/affiliate access)
-  getMatchingCandidatesForSchool: schoolProcedure
+  // Get matching candidates for a job (agency/admin access)
+  getMatchingCandidatesForAgency: agencyProcedure
     .input(z.object({
       jobId: z.string().uuid(),
       threshold: z.number().min(0).max(1).default(0.5),
       limit: z.number().min(1).max(100).default(50),
     }))
     .query(async ({ ctx, input }) => {
-      const school = await db.getSchoolForUserContext(ctx.user.id, ctx.user.role);
-      if (!school) {
-        throw new TRPCError({ code: 'NOT_FOUND', message: 'School not found' });
+      const agency = await db.getAgencyForUserContext(ctx.user.id, ctx.user.role);
+      if (!agency) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Agency not found' });
       }
 
-      // Verify job belongs to a company linked to this school
+      // Verify job belongs to a company linked to this agency
       const { data: job, error } = await supabaseAdmin
         .from('jobs')
-        .select('id, school_id')
+        .select('id, agency_id')
         .eq('id', input.jobId)
         .single();
 
-      if (error || !job || job.school_id !== school.id) {
+      if (error || !job || job.agency_id !== agency.id) {
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Job not found or access denied' });
       }
 

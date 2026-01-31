@@ -11,9 +11,9 @@ export const contractRouter = router({
   // Create contract
   create: companyProcedure
     .input(z.object({
-      candidateId: z.number(),
-      jobId: z.number(),
-      applicationId: z.number(),
+      candidateId: z.string().uuid(),
+      jobId: z.string().uuid(),
+      applicationId: z.string().uuid(),
       contractType: z.enum(["estagio", "clt", "menor-aprendiz"]),
       contractNumber: z.string(),
       monthlySalary: z.number(),
@@ -58,7 +58,7 @@ export const contractRouter = router({
   // Update contract
   update: protectedProcedure
     .input(z.object({
-      id: z.number(),
+      id: z.string().uuid(),
       status: z.enum(["pending-signature", "active", "suspended", "terminated", "completed"]).optional(),
       terminationReason: z.string().optional(),
     }))

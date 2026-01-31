@@ -5,30 +5,30 @@ import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
 import { Button } from "./ui/button";
 import LumaBar from "./ui/LumaBar";
-import SchoolFilterHeader from "./SchoolFilterHeader";
+import AgencyFilterHeader from "./AgencyFilterHeader";
 import { trpc } from "@/lib/trpc";
 import { useEffect } from "react";
 
 const getMenuItems = (userRole: string | undefined) => {
-  // Affiliate menu
-  if (userRole === 'affiliate') {
+  // Admin menu
+  if (userRole === 'admin') {
     return {
-      homeHref: "/affiliate/dashboard",
+      homeHref: "/admin/dashboard",
       profileHref: "/settings",
       items: [
         { icon: Calendar, label: "Agenda", path: "/calendar" },
         { icon: Building, label: "Empresas", path: "/companies" },
         { icon: Users, label: "Candidatos", path: "/candidates" },
         { icon: DollarSign, label: "Pagamentos", path: "/payments" },
-        { icon: MapPin, label: "Escolas", path: "/affiliate/schools" },
+        { icon: MapPin, label: "Agências", path: "/admin/agencies" },
       ]
     };
   }
 
-  // School menu
-  if (userRole === 'school') {
+  // Agency menu
+  if (userRole === 'agency') {
     return {
-      homeHref: "/school/dashboard",
+      homeHref: "/agency/dashboard",
       profileHref: "/settings",
       items: [
         { icon: Calendar, label: "Agenda", path: "/calendar" },
@@ -158,8 +158,8 @@ export default function DashboardLayout({
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_100%_100%,rgba(59,130,246,0.12),transparent_50%)]"></div>
       </div>
 
-      {/* School filter dropdown for affiliates - floats top-right */}
-      <SchoolFilterHeader />
+      {/* Agency filter dropdown for admins - floats top-left */}
+      <AgencyFilterHeader />
 
       <main className="pt-6 pl-20 pr-4 pb-6 max-w-7xl mx-auto">
         {children}

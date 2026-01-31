@@ -1,10 +1,10 @@
 // @ts-nocheck
 // Candidate batch database operations
 import { supabase, supabaseAdmin } from "../supabase";
-import type { CandidateBatch, InsertCandidateBatch, SchoolEmployeeTypeSetting, InsertSchoolEmployeeTypeSetting } from "./types";
+import type { CandidateBatch, InsertCandidateBatch, AgencyEmployeeTypeSetting, InsertAgencyEmployeeTypeSetting } from "./types";
 import { getCandidatesByIds } from "./candidates";
 import { getJobById } from "./jobs";
-import { getSchoolById } from "./schools";
+import { getAgencyById } from "./agencies";
 import { getCompanyById } from "./companies";
 import { createPayment } from "./payments";
 
@@ -14,7 +14,7 @@ import { createPayment } from "./payments";
 
 /**
  * Get top N AI-matched candidates for a job
- * Used by schools to create pre-selection batches
+ * Used by agencies to create pre-selection batches
  */
 export async function getTopMatchesForJob(
   jobId: string,
@@ -42,11 +42,11 @@ export async function getTopMatchesForJob(
 
 /**
  * Create a draft batch
- * Schools use this to save a batch before sending to company
+ * Agencies use this to save a batch before sending to company
  */
 export async function createBatch(params: {
   jobId: string;
-  schoolId: string;
+  agencyId: string;
   companyId: string;
   candidateIds: string[];
   unlockFee?: number;
@@ -56,7 +56,7 @@ export async function createBatch(params: {
     .from("candidate_batches")
     .insert({
       job_id: params.jobId,
-      school_id: params.schoolId,
+      agency_id: params.agencyId,
       company_id: params.companyId,
       candidate_ids: params.candidateIds,
       batch_size: params.candidateIds.length,
@@ -85,7 +85,7 @@ export async function getBatchById(batchId: string): Promise<any | null> {
     .select(`
       *,
       job:jobs(*),
-      school:schools(*),
+      agency:agencies(*),
       company:companies(*),
       payment:payments(*)
     `)
@@ -165,7 +165,7 @@ export async function getLockedBatchesForCompany(companyId: string): Promise<any
     .select(`
       *,
       job:jobs(id, title, description, contract_type, work_type, salary),
-      school:schools(id, name)
+      agency:agencies(id, name)
     `)
     .eq("company_id", companyId)
     .eq("unlocked", false)
@@ -195,7 +195,7 @@ export async function getUnlockedBatchesForCompany(companyId: string): Promise<a
     .select(`
       *,
       job:jobs(*),
-      school:schools(*)
+      agency:agencies(*)
     `)
     .eq("company_id", companyId)
     .eq("unlocked", true)
@@ -221,10 +221,10 @@ export async function getUnlockedBatchesForCompany(companyId: string): Promise<a
 }
 
 /**
- * Get batches for a school
+ * Get batches for an agency
  */
-export async function getBatchesBySchoolId(
-  schoolId: string,
+export async function getBatchesByAgencyId(
+  agencyId: string,
   status?: string
 ): Promise<any[]> {
   let query = supabase
@@ -234,7 +234,7 @@ export async function getBatchesBySchoolId(
       job:jobs(id, title, contract_type, status),
       company:companies(id, company_name, email)
     `)
-    .eq("school_id", schoolId);
+    .eq("agency_id", agencyId);
 
   if (status) {
     query = query.eq("status", status);
@@ -243,7 +243,7 @@ export async function getBatchesBySchoolId(
   const { data, error } = await query.order("created_at", { ascending: false });
 
   if (error) {
-    console.error("[Database] Failed to get school batches:", error);
+    console.error("[Database] Failed to get agency batches:", error);
     return [];
   }
 
@@ -305,23 +305,23 @@ export async function cancelBatch(batchId: string, reason?: string): Promise<voi
 }
 
 // ============================================
-// SCHOOL EMPLOYEE TYPE SETTINGS
+// AGENCY EMPLOYEE TYPE SETTINGS
 // ============================================
 
 /**
- * Get all employee type settings for a school
+ * Get all employee type settings for an agency
  */
-export async function getSchoolEmployeeTypeSettings(
-  schoolId: string
-): Promise<SchoolEmployeeTypeSetting[]> {
+export async function getAgencyEmployeeTypeSettings(
+  agencyId: string
+): Promise<AgencyEmployeeTypeSetting[]> {
   const { data, error } = await supabase
-    .from("school_employee_type_settings")
+    .from("agency_employee_type_settings")
     .select("*")
-    .eq("school_id", schoolId)
+    .eq("agency_id", agencyId)
     .order("employee_type");
 
   if (error) {
-    console.error("[Database] Failed to get school employee type settings:", error);
+    console.error("[Database] Failed to get agency employee type settings:", error);
     return [];
   }
 
@@ -331,20 +331,20 @@ export async function getSchoolEmployeeTypeSettings(
 /**
  * Get specific employee type setting
  */
-export async function getSchoolEmployeeTypeSetting(
-  schoolId: string,
+export async function getAgencyEmployeeTypeSetting(
+  agencyId: string,
   employeeType: "estagio" | "clt" | "menor-aprendiz"
-): Promise<SchoolEmployeeTypeSetting | null> {
+): Promise<AgencyEmployeeTypeSetting | null> {
   const { data, error } = await supabase
-    .from("school_employee_type_settings")
+    .from("agency_employee_type_settings")
     .select("*")
-    .eq("school_id", schoolId)
+    .eq("agency_id", agencyId)
     .eq("employee_type", employeeType)
     .single();
 
   if (error) {
     if (error.code === "PGRST116") return null;
-    console.error("[Database] Failed to get school employee type setting:", error);
+    console.error("[Database] Failed to get agency employee type setting:", error);
     return null;
   }
 
@@ -354,8 +354,8 @@ export async function getSchoolEmployeeTypeSetting(
 /**
  * Upsert (insert or update) employee type setting
  */
-export async function upsertSchoolEmployeeTypeSetting(
-  schoolId: string,
+export async function upsertAgencyEmployeeTypeSetting(
+  agencyId: string,
   setting: {
     employeeType: "estagio" | "clt" | "menor-aprendiz";
     contractTemplateType?: "pdf" | "html";
@@ -368,10 +368,10 @@ export async function upsertSchoolEmployeeTypeSetting(
   }
 ): Promise<string> {
   const { data, error } = await supabase
-    .from("school_employee_type_settings")
+    .from("agency_employee_type_settings")
     .upsert(
       {
-        school_id: schoolId,
+        agency_id: agencyId,
         employee_type: setting.employeeType,
         contract_template_type: setting.contractTemplateType,
         contract_pdf_url: setting.contractPdfUrl,
@@ -382,14 +382,14 @@ export async function upsertSchoolEmployeeTypeSetting(
         monthly_fee: setting.monthlyFee,
       },
       {
-        onConflict: "school_id,employee_type",
+        onConflict: "agency_id,employee_type",
       }
     )
     .select("id")
     .single();
 
   if (error) {
-    console.error("[Database] Failed to upsert school employee type setting:", error);
+    console.error("[Database] Failed to upsert agency employee type setting:", error);
     throw error;
   }
 
@@ -399,18 +399,18 @@ export async function upsertSchoolEmployeeTypeSetting(
 /**
  * Delete employee type setting
  */
-export async function deleteSchoolEmployeeTypeSetting(
-  schoolId: string,
+export async function deleteAgencyEmployeeTypeSetting(
+  agencyId: string,
   employeeType: "estagio" | "clt" | "menor-aprendiz"
 ): Promise<void> {
   const { error } = await supabase
-    .from("school_employee_type_settings")
+    .from("agency_employee_type_settings")
     .delete()
-    .eq("school_id", schoolId)
+    .eq("agency_id", agencyId)
     .eq("employee_type", employeeType);
 
   if (error) {
-    console.error("[Database] Failed to delete school employee type setting:", error);
+    console.error("[Database] Failed to delete agency employee type setting:", error);
     throw error;
   }
 }
@@ -419,18 +419,18 @@ export async function deleteSchoolEmployeeTypeSetting(
  * Get contract templates for specific employee types
  * Used when company unlocks a batch to show relevant contract templates
  */
-export async function getSchoolContractsByTypes(
-  schoolId: string,
+export async function getAgencyContractsByTypes(
+  agencyId: string,
   employeeTypes: string[]
-): Promise<SchoolEmployeeTypeSetting[]> {
+): Promise<AgencyEmployeeTypeSetting[]> {
   const { data, error } = await supabase
-    .from("school_employee_type_settings")
+    .from("agency_employee_type_settings")
     .select("*")
-    .eq("school_id", schoolId)
+    .eq("agency_id", agencyId)
     .in("employee_type", employeeTypes);
 
   if (error) {
-    console.error("[Database] Failed to get school contracts by types:", error);
+    console.error("[Database] Failed to get agency contracts by types:", error);
     return [];
   }
 
@@ -483,9 +483,9 @@ export async function getCompanyBatchStats(companyId: string): Promise<{
 }
 
 /**
- * Get batch statistics for a school
+ * Get batch statistics for an agency
  */
-export async function getSchoolBatchStats(schoolId: string): Promise<{
+export async function getAgencyBatchStats(agencyId: string): Promise<{
   draft: number;
   sent: number;
   unlocked: number;
@@ -495,10 +495,10 @@ export async function getSchoolBatchStats(schoolId: string): Promise<{
   const { data, error } = await supabase
     .from("candidate_batches")
     .select("status, unlocked, unlock_fee")
-    .eq("school_id", schoolId);
+    .eq("agency_id", agencyId);
 
   if (error) {
-    console.error("[Database] Failed to get school batch stats:", error);
+    console.error("[Database] Failed to get agency batch stats:", error);
     return {
       draft: 0,
       sent: 0,

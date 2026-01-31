@@ -31,7 +31,7 @@ export const authRouter = router({
         email: z.string().email(),
         name: z.string().optional(),
         role: z.enum(["company", "candidate"]),
-        school_id: z.string().uuid().optional().nullable(),
+        agency_id: z.string().uuid().optional().nullable(),
       })
     )
     .mutation(async ({ input }) => {
@@ -41,7 +41,7 @@ export const authRouter = router({
         email: input.email,
         name: input.name || null,
         role: input.role,
-        school_id: input.school_id || null,
+        agency_id: input.agency_id || null,
       });
 
       if (error) {

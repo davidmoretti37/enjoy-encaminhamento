@@ -3,6 +3,7 @@
 import { supabase, supabaseAdmin } from "../supabase";
 import type { Job, InsertJob } from "./types";
 import { generateJobSummary } from "../services/ai/summarizer";
+import { generateJobEmbedding } from "../services/matching";
 
 export async function createJob(job: InsertJob): Promise<string> {
   const { data, error } = await supabase
@@ -143,14 +144,14 @@ export async function createJobForOnboarding(
     openings?: number;
     status?: "draft" | "open" | "closed" | "filled";
     published_at?: string;
-    school_id: string;
+    agency_id: string;
   }
 ): Promise<string> {
   const { data: job, error } = await supabaseAdmin
     .from("jobs")
     .insert({
       company_id: companyId,
-      school_id: data.school_id,
+      agency_id: data.agency_id,
       title: data.title,
       description: data.description,
       contract_type: data.contract_type,
@@ -196,9 +197,12 @@ export async function createJobForOnboarding(
         })
         .eq("id", job.id);
       console.log(`Generated summary for job ${job.id}`);
+      // Generate embedding from summary
+      await generateJobEmbedding(job.id);
+      console.log(`Generated embedding for job ${job.id}`);
     }
   }).catch((err) => {
-    console.error('Failed to generate job summary:', err);
+    console.error('Failed to generate job summary/embedding:', err);
   });
 
   return job.id;
@@ -206,7 +210,7 @@ export async function createJobForOnboarding(
 
 export async function createJobFromCompanyForm(
   companyId: string,
-  schoolId: string,
+  agencyId: string,
   formData: any
 ): Promise<string | null> {
   if (!formData?.job_title) {
@@ -284,7 +288,7 @@ export async function createJobFromCompanyForm(
     openings,
     status: "open",
     published_at: new Date().toISOString(),
-    school_id: schoolId,
+    agency_id: agencyId,
   });
 }
 

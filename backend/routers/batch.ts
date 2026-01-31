@@ -3,40 +3,40 @@
 import { z } from "zod";
 import { router } from "../_core/trpc";
 import { TRPCError } from "@trpc/server";
-import { schoolProcedure, companyProcedure } from "./procedures";
+import { agencyProcedure, companyProcedure } from "./procedures";
 import * as db from "../db";
 import * as batchDb from "../db/batches";
 
 export const batchRouter = router({
   // ============================================
-  // SCHOOL ENDPOINTS
+  // AGENCY ENDPOINTS
   // ============================================
 
   /**
    * Get top AI-matched candidates for a job
-   * Schools use this to review candidates before creating a batch
+   * Agencies use this to review candidates before creating a batch
    */
-  getTopCandidatesForJob: schoolProcedure
+  getTopCandidatesForJob: agencyProcedure
     .input(z.object({
       jobId: z.string().uuid(),
       limit: z.number().int().min(5).max(50).optional().default(15),
       minScore: z.number().min(0).max(100).optional().default(50),
     }))
     .query(async ({ ctx, input }) => {
-      // Verify school has access to this job
+      // Verify agency has access to this job
       const job = await db.getJobById(input.jobId);
       if (!job) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Job not found" });
       }
 
-      // Get school for current user
-      const school = await db.getSchoolByUserId(ctx.user.id);
-      if (!school) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "School not found" });
+      // Get agency for current user
+      const agency = await db.getAgencyByUserId(ctx.user.id);
+      if (!agency) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Agency not found" });
       }
 
-      // Verify school owns this job
-      if (job.school_id !== school.id && ctx.user.role !== "affiliate") {
+      // Verify agency owns this job
+      if (job.agency_id !== agency.id && ctx.user.role !== "admin") {
         throw new TRPCError({ code: "FORBIDDEN", message: "Not authorized to access this job" });
       }
 
@@ -56,9 +56,9 @@ export const batchRouter = router({
 
   /**
    * Create a draft batch
-   * Schools can create and save a batch without sending it
+   * Agencies can create and save a batch without sending it
    */
-  createDraftBatch: schoolProcedure
+  createDraftBatch: agencyProcedure
     .input(z.object({
       jobId: z.string().uuid(),
       candidateIds: z.array(z.string().uuid()).min(5).max(15),
@@ -71,19 +71,19 @@ export const batchRouter = router({
         throw new TRPCError({ code: "NOT_FOUND", message: "Job not found" });
       }
 
-      const school = await db.getSchoolByUserId(ctx.user.id);
-      if (!school) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "School not found" });
+      const agency = await db.getAgencyByUserId(ctx.user.id);
+      if (!agency) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Agency not found" });
       }
 
-      if (job.school_id !== school.id && ctx.user.role !== "affiliate") {
+      if (job.agency_id !== agency.id && ctx.user.role !== "admin") {
         throw new TRPCError({ code: "FORBIDDEN" });
       }
 
       // Create batch
       const batchId = await batchDb.createBatch({
         jobId: input.jobId,
-        schoolId: school.id,
+        agencyId: agency.id,
         companyId: job.company_id,
         candidateIds: input.candidateIds,
         unlockFee: input.unlockFee || 0,
@@ -97,7 +97,7 @@ export const batchRouter = router({
    * Send batch to company
    * Creates payment requirement and updates batch status
    */
-  sendBatchToCompany: schoolProcedure
+  sendBatchToCompany: agencyProcedure
     .input(z.object({
       batchId: z.string().uuid().optional(),
       jobId: z.string().uuid().optional(),
@@ -105,9 +105,9 @@ export const batchRouter = router({
       unlockFee: z.number().positive(),
     }))
     .mutation(async ({ ctx, input }) => {
-      const school = await db.getSchoolByUserId(ctx.user.id);
-      if (!school) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "School not found" });
+      const agency = await db.getAgencyByUserId(ctx.user.id);
+      if (!agency) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Agency not found" });
       }
 
       let batchId = input.batchId;
@@ -119,14 +119,14 @@ export const batchRouter = router({
           throw new TRPCError({ code: "NOT_FOUND", message: "Job not found" });
         }
 
-        if (job.school_id !== school.id && ctx.user.role !== "affiliate") {
+        if (job.agency_id !== agency.id && ctx.user.role !== "admin") {
           throw new TRPCError({ code: "FORBIDDEN" });
         }
 
         // Create batch first
         batchId = await batchDb.createBatch({
           jobId: input.jobId,
-          schoolId: school.id,
+          agencyId: agency.id,
           companyId: job.company_id,
           candidateIds: input.candidateIds,
           unlockFee: input.unlockFee,
@@ -141,13 +141,13 @@ export const batchRouter = router({
         });
       }
 
-      // Verify batch belongs to school
+      // Verify batch belongs to agency
       const batch = await batchDb.getBatchById(batchId);
       if (!batch) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Batch not found" });
       }
 
-      if (batch.school_id !== school.id && ctx.user.role !== "affiliate") {
+      if (batch.agency_id !== agency.id && ctx.user.role !== "admin") {
         throw new TRPCError({ code: "FORBIDDEN" });
       }
 
@@ -170,7 +170,7 @@ export const batchRouter = router({
   /**
    * Schedule meeting for a batch
    */
-  scheduleBatchMeeting: schoolProcedure
+  scheduleBatchMeeting: agencyProcedure
     .input(z.object({
       batchId: z.string().uuid(),
       scheduledAt: z.string().datetime(),
@@ -178,14 +178,14 @@ export const batchRouter = router({
       notes: z.string().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
-      const school = await db.getSchoolByUserId(ctx.user.id);
-      if (!school) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "School not found" });
+      const agency = await db.getAgencyByUserId(ctx.user.id);
+      if (!agency) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Agency not found" });
       }
 
-      // Verify batch belongs to school
+      // Verify batch belongs to agency
       const batch = await batchDb.getBatchById(input.batchId);
-      if (!batch || (batch.school_id !== school.id && ctx.user.role !== "affiliate")) {
+      if (!batch || (batch.agency_id !== agency.id && ctx.user.role !== "admin")) {
         throw new TRPCError({ code: "FORBIDDEN" });
       }
 
@@ -218,52 +218,52 @@ export const batchRouter = router({
     }),
 
   /**
-   * Get all batches for school
+   * Get all batches for agency
    */
-  getSchoolBatches: schoolProcedure
+  getAgencyBatches: agencyProcedure
     .input(z.object({
       status: z.enum(["draft", "sent", "unlocked", "meeting_scheduled", "completed", "cancelled"]).optional(),
     }).optional())
     .query(async ({ ctx, input }) => {
-      const school = await db.getSchoolByUserId(ctx.user.id);
-      if (!school) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "School not found" });
+      const agency = await db.getAgencyByUserId(ctx.user.id);
+      if (!agency) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Agency not found" });
       }
 
-      const batches = await batchDb.getBatchesBySchoolId(school.id, input?.status);
+      const batches = await batchDb.getBatchesByAgencyId(agency.id, input?.status);
       return batches;
     }),
 
   /**
-   * Get batch statistics for school
+   * Get batch statistics for agency
    */
-  getSchoolBatchStats: schoolProcedure
+  getAgencyBatchStats: agencyProcedure
     .query(async ({ ctx }) => {
-      const school = await db.getSchoolByUserId(ctx.user.id);
-      if (!school) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "School not found" });
+      const agency = await db.getAgencyByUserId(ctx.user.id);
+      if (!agency) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Agency not found" });
       }
 
-      const stats = await batchDb.getSchoolBatchStats(school.id);
+      const stats = await batchDb.getAgencyBatchStats(agency.id);
       return stats;
     }),
 
   /**
    * Cancel a batch
    */
-  cancelBatch: schoolProcedure
+  cancelBatch: agencyProcedure
     .input(z.object({
       batchId: z.string().uuid(),
       reason: z.string().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
-      const school = await db.getSchoolByUserId(ctx.user.id);
-      if (!school) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "School not found" });
+      const agency = await db.getAgencyByUserId(ctx.user.id);
+      if (!agency) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Agency not found" });
       }
 
       const batch = await batchDb.getBatchById(input.batchId);
-      if (!batch || (batch.school_id !== school.id && ctx.user.role !== "affiliate")) {
+      if (!batch || (batch.agency_id !== agency.id && ctx.user.role !== "admin")) {
         throw new TRPCError({ code: "FORBIDDEN" });
       }
 
@@ -417,8 +417,8 @@ export const batchRouter = router({
       });
 
       // Get contract templates for these employee types
-      const contracts = await batchDb.getSchoolContractsByTypes(
-        batch.school_id,
+      const contracts = await batchDb.getAgencyContractsByTypes(
+        batch.agency_id,
         Array.from(employeeTypes)
       );
 
@@ -468,11 +468,11 @@ export const batchRouter = router({
 
       await batchDb.selectCandidatesForInterview(input.batchId, input.candidateIds);
 
-      // Notify school
-      const school = await db.getSchoolById(batch.school_id);
-      if (school) {
+      // Notify agency
+      const agency2 = await db.getAgencyById(batch.agency_id);
+      if (agency2) {
         await db.createNotification({
-          user_id: school.user_id,
+          user_id: agency2.user_id,
           title: "Empresa selecionou candidatos",
           message: `${input.candidateIds.length} candidatos foram selecionados para entrevistas da vaga "${batch.job.title}"`,
           type: "success",

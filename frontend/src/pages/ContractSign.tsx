@@ -370,13 +370,13 @@ em duas vias de igual teor e forma, na presença de duas testemunhas.
 
             {/* Contract Content */}
             <div className="border rounded-lg bg-white overflow-hidden">
-              {company.schoolContract?.type === "pdf" ? (
+              {company.agencyContract?.type === "pdf" ? (
                 // PDF Contract - Full height viewer
                 <div className="space-y-2">
                   <div className="bg-gray-100 p-2 flex items-center justify-between">
                     <span className="text-sm font-medium text-gray-700">Contrato PDF</span>
                     <a
-                      href={company.schoolContract.pdfUrl || ""}
+                      href={company.agencyContract.pdfUrl || ""}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="inline-flex items-center gap-1 text-sm text-blue-600 hover:underline"
@@ -386,18 +386,18 @@ em duas vias de igual teor e forma, na presença de duas testemunhas.
                     </a>
                   </div>
                   <iframe
-                    src={`${company.schoolContract.pdfUrl}#toolbar=1&navpanes=0&view=FitH`}
+                    src={`${company.agencyContract.pdfUrl}#toolbar=1&navpanes=0&view=FitH`}
                     className="w-full border-0"
                     style={{ height: "70vh", minHeight: "500px" }}
                     title="Contrato PDF"
                   />
                 </div>
-              ) : company.schoolContract?.type === "html" ? (
+              ) : company.agencyContract?.type === "html" ? (
                 // HTML Contract
                 <div className="p-4 max-h-96 overflow-y-auto">
                   <div
                     className="prose prose-sm max-w-none whitespace-pre-wrap"
-                    dangerouslySetInnerHTML={{ __html: company.schoolContract.html || "" }}
+                    dangerouslySetInnerHTML={{ __html: company.agencyContract.html || "" }}
                   />
                 </div>
               ) : (

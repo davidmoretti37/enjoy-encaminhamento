@@ -49,11 +49,11 @@ export default function Login() {
   const [signupPassword, setSignupPassword] = useState('');
   const [signupName, setSignupName] = useState('');
   const [signupRole, setSignupRole] = useState<'company' | 'candidate'>(initialRole);
-  const [signupSchoolId, setSignupSchoolId] = useState('');
+  const [signupAgencyId, setSignupAgencyId] = useState('');
 
-  // Fetch schools for company registration dropdown
-  const { data: schools } = trpc.school.getAllPublic.useQuery() as {
-    data: Array<{ id: string; school_name: string; city: string }> | undefined;
+  // Fetch agencies (regions) for registration dropdown
+  const { data: agencies } = trpc.agency.getAllPublic.useQuery() as {
+    data: Array<{ id: string; agency_name: string; city: string; state: string }> | undefined;
   };
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -84,10 +84,10 @@ export default function Login() {
       toast.success('Login bem-sucedido!');
 
       // Role-based dashboard redirect using window.location for clean navigation
-      if (user?.role === 'affiliate') {
-        window.location.href = '/affiliate/dashboard';
-      } else if (user?.role === 'school') {
-        window.location.href = '/school/dashboard';
+      if (user?.role === 'admin') {
+        window.location.href = '/admin/dashboard';
+      } else if (user?.role === 'agency') {
+        window.location.href = '/agency/dashboard';
       } else if (user?.role === 'company') {
         window.location.href = '/company/portal';
       } else if (user?.role === 'candidate') {
@@ -113,7 +113,7 @@ export default function Login() {
       await signUp(signupEmail, signupPassword, {
         name: signupName,
         role: signupRole,
-        school_id: signupSchoolId,
+        agency_id: signupAgencyId,
       });
       toast.success('Conta criada com sucesso!');
 
@@ -300,16 +300,16 @@ export default function Login() {
 
                   <div className="space-y-2">
                     <Label>Região</Label>
-                    <Select value={signupSchoolId} onValueChange={setSignupSchoolId}>
+                    <Select value={signupAgencyId} onValueChange={setSignupAgencyId}>
                       <SelectTrigger>
                         <SelectValue placeholder="Selecione a região" />
                       </SelectTrigger>
                       <SelectContent>
-                        {schools?.map(school => (
-                          <SelectItem key={school.id} value={school.id}>
+                        {agencies?.map(agency => (
+                          <SelectItem key={agency.id} value={agency.id}>
                             <div className="flex items-center gap-2">
                               <MapPin className="h-4 w-4 text-muted-foreground" />
-                              <span>{school.school_name} - {school.city}</span>
+                              <span>{agency.city} - {agency.state}</span>
                             </div>
                           </SelectItem>
                         ))}
@@ -322,7 +322,7 @@ export default function Login() {
                     </p>
                   </div>
 
-                  <Button type="submit" className="w-full" disabled={loading || !signupSchoolId}>
+                  <Button type="submit" className="w-full" disabled={loading || !signupAgencyId}>
                     {loading ? (
                       <>
                         <ClassicLoader />

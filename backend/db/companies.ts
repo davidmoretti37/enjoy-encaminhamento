@@ -3,6 +3,7 @@
 import { supabaseAdmin } from "../supabase";
 import type { Company, InsertCompany } from "./types";
 import { generateCompanySummary, generateJobSummary } from "../services/ai/summarizer";
+import { generateJobEmbedding } from "../services/matching";
 
 export async function createCompany(company: InsertCompany): Promise<string> {
   // Use admin client to bypass RLS during company creation (e.g., during onboarding)
@@ -402,7 +403,7 @@ function normalizeState(state: string): string {
  * Bulk create companies from Excel/CSV import
  * @param companies Array of company data to insert
  * @param affiliateId The affiliate ID to link companies to
- * @param schoolId Optional school ID that imported these companies
+ * @param agencyId Optional agency ID that imported these companies
  * @returns Object with created company IDs and any errors
  */
 // Helper to parse salary from formatted string to number in cents
@@ -478,6 +479,17 @@ function normalizeWorkType(type?: string): 'presencial' | 'remoto' | 'hibrido' {
   return 'presencial';
 }
 
+// Map education level to valid enum values
+function normalizeEducationLevel(level?: string): 'fundamental' | 'medio' | 'superior' | 'pos-graduacao' | null {
+  if (!level) return null;
+  const lower = level.toLowerCase().trim();
+  if (lower.includes('fundamental')) return 'fundamental';
+  if (lower.includes('médio') || lower.includes('medio') || lower.includes('tecnico') || lower.includes('técnico')) return 'medio';
+  if (lower.includes('superior') || lower.includes('graduação') || lower.includes('graduacao') || lower.includes('faculdade')) return 'superior';
+  if (lower.includes('pós') || lower.includes('pos') || lower.includes('mestrado') || lower.includes('doutorado')) return 'pos-graduacao';
+  return null;
+}
+
 export async function bulkCreateCompanies(
   companies: Array<{
     company_name: string;
@@ -517,7 +529,7 @@ export async function bulkCreateCompanies(
     };
   }>,
   affiliateId: string,
-  schoolId?: string
+  agencyId?: string
 ): Promise<{ created: string[]; errors: { email: string; message: string }[] }> {
   const created: string[] = [];
   const errors: { email: string; message: string }[] = [];
@@ -539,7 +551,7 @@ export async function bulkCreateCompanies(
         company_name: company.company_name,
         email: company.email,
         affiliate_id: affiliateId,
-        school_id: schoolId || null,
+        agency_id: agencyId || null,
         status: 'pending',
       };
 
@@ -571,6 +583,13 @@ export async function bulkCreateCompanies(
       } else if (data) {
         created.push(data.id);
 
+        // Generate registration token for login access
+        try {
+          await createCompanyRegistrationToken(data.id);
+        } catch (tokenError) {
+          console.error(`Failed to create registration token for company ${data.id}:`, tokenError);
+        }
+
         // Save multiple emails to company_emails table if provided
         if (company.emails && company.emails.length > 0) {
           const emailRecords = company.emails.map(e => ({
@@ -586,7 +605,10 @@ export async function bulkCreateCompanies(
         }
 
         // Create job if job data is provided
+        console.log(`[BulkImport] Job data for ${company.company_name}:`, company.job ? `title="${company.job.title}"` : 'NO JOB DATA');
         if (company.job && company.job.title) {
+          console.log(`[BulkImport] Creating job "${company.job.title}" for company "${company.company_name}"`);
+
           const salaryInCents = parseSalary(company.job.salary);
           const benefitsArray = company.job.benefits
             ? company.job.benefits.split(',').map(b => b.trim()).filter(b => b)
@@ -594,9 +616,9 @@ export async function bulkCreateCompanies(
           // Parse openings count, default to 1
           const openingsCount = company.job.openings ? parseInt(company.job.openings, 10) : 1;
 
-          const { data: jobData } = await supabaseAdmin.from('jobs').insert({
+          const { data: jobData, error: jobError } = await supabaseAdmin.from('jobs').insert({
             company_id: data.id,
-            school_id: schoolId || null,
+            agency_id: agencyId || null,
             title: company.job.title,
             description: company.job.description || '',
             salary: salaryInCents,
@@ -606,41 +628,47 @@ export async function bulkCreateCompanies(
             work_type: normalizeWorkType(company.job.work_type),
             required_skills: company.job.required_skills || null,
             openings: isNaN(openingsCount) ? 1 : openingsCount,
-            urgency: company.job.urgency || null,
-            gender_preference: company.job.gender_preference || null,
-            age_range: company.job.age_range || null,
-            education_level: company.job.education || null,
-            notes: company.job.notes || null,
+            min_education_level: normalizeEducationLevel(company.job.education),
+            specific_requirements: company.job.notes || null,
             status: 'open',
             created_at: new Date().toISOString(),
             published_at: new Date().toISOString(),
           }).select('id').single();
 
-          // Generate job summary in background (fire and forget)
-          if (jobData?.id) {
-            generateJobSummary({
-              title: company.job.title,
-              description: company.job.description || '',
-              contractType: normalizeContractType(company.job.contract_type),
-              workType: normalizeWorkType(company.job.work_type),
-              requirements: company.job.required_skills,
-              benefits: company.job.benefits,
-              salary: company.job.salary,
-              companyName: company.company_name,
-            }).then(async (summary) => {
-              if (summary) {
-                await supabaseAdmin
-                  .from("jobs")
-                  .update({
-                    summary,
-                    summary_generated_at: new Date().toISOString(),
-                  })
-                  .eq("id", jobData.id);
-                console.log(`Generated summary for job ${jobData.id}`);
-              }
-            }).catch((err) => {
-              console.error(`Failed to generate job summary for ${jobData.id}:`, err);
-            });
+          if (jobError) {
+            console.error(`[BulkImport] Failed to create job for ${company.company_name}:`, jobError);
+          } else {
+            console.log(`[BulkImport] Successfully created job ${jobData?.id} for ${company.company_name}`);
+
+            // Generate job summary in background (fire and forget)
+            if (jobData?.id) {
+              generateJobSummary({
+                title: company.job.title,
+                description: company.job.description || '',
+                contractType: normalizeContractType(company.job.contract_type),
+                workType: normalizeWorkType(company.job.work_type),
+                requirements: company.job.required_skills,
+                benefits: company.job.benefits,
+                salary: company.job.salary,
+                companyName: company.company_name,
+              }).then(async (summary) => {
+                if (summary) {
+                  await supabaseAdmin
+                    .from("jobs")
+                    .update({
+                      summary,
+                      summary_generated_at: new Date().toISOString(),
+                    })
+                    .eq("id", jobData.id);
+                  console.log(`Generated summary for job ${jobData.id}`);
+                  // Generate embedding from summary
+                  await generateJobEmbedding(jobData.id);
+                  console.log(`Generated embedding for job ${jobData.id}`);
+                }
+              }).catch((err) => {
+                console.error(`Failed to generate job summary/embedding for ${jobData.id}:`, err);
+              });
+            }
           }
         }
 

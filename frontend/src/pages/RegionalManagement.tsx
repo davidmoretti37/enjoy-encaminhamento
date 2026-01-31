@@ -42,10 +42,10 @@ export default function RegionalManagement() {
   const [inviteEmail, setInviteEmail] = useState("");
 
   // Queries
-  const { data: schools, isLoading: schoolsLoading, refetch: refetchSchools } = trpc.school.getAll.useQuery();
+  const { data: agencies, isLoading: agenciesLoading, refetch: refetchAgencies } = trpc.agency.getAll.useQuery();
 
   // Create invitation mutation - sends email directly via backend
-  const createInvitationMutation = trpc.school.createInvitation.useMutation({
+  const createInvitationMutation = trpc.agency.createInvitation.useMutation({
     onSuccess: (data) => {
       if (data.emailSent) {
         toast.success("Convite enviado com sucesso!");
@@ -62,18 +62,18 @@ export default function RegionalManagement() {
     }
   });
 
-  // Mutations - Schools
-  const updateSchoolStatusMutation = trpc.school.updateStatus.useMutation({
+  // Mutations - Agencies
+  const updateAgencyStatusMutation = trpc.agency.updateStatus.useMutation({
     onSuccess: () => {
-      toast.success('Status da escola atualizado!');
-      refetchSchools();
+      toast.success('Status da agência atualizado!');
+      refetchAgencies();
     },
     onError: (error) => {
-      toast.error(error.message || 'Erro ao atualizar escola');
+      toast.error(error.message || 'Erro ao atualizar agência');
     }
   });
 
-  if (authLoading || schoolsLoading) {
+  if (authLoading || agenciesLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <ClassicLoader />
@@ -81,7 +81,7 @@ export default function RegionalManagement() {
     );
   }
 
-  if (!user || user.role !== 'affiliate') {
+  if (!user || user.role !== 'admin') {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Card className="max-w-md">
@@ -103,16 +103,16 @@ export default function RegionalManagement() {
     createInvitationMutation.mutate({ email: inviteEmail.trim() });
   };
 
-  // Handlers - Schools
-  const handleApproveSchool = async (id: string) => {
-    await updateSchoolStatusMutation.mutateAsync({ id, status: 'active' });
+  // Handlers - Agencies
+  const handleApproveAgency = async (id: string) => {
+    await updateAgencyStatusMutation.mutateAsync({ id, status: 'active' });
   };
 
-  const handleSuspendSchool = async (id: string) => {
-    await updateSchoolStatusMutation.mutateAsync({ id, status: 'suspended' });
+  const handleSuspendAgency = async (id: string) => {
+    await updateAgencyStatusMutation.mutateAsync({ id, status: 'suspended' });
   };
 
-  const getSchoolStatusBadge = (status: string) => {
+  const getAgencyStatusBadge = (status: string) => {
     switch (status) {
       case 'active':
         return <Badge className="bg-green-500">Ativa</Badge>;
@@ -135,24 +135,24 @@ export default function RegionalManagement() {
           <div>
             <h1 className="text-2xl font-bold flex items-center gap-2">
               <MapPin className="h-6 w-6 text-blue-600" />
-              Escolas
+              Agências
             </h1>
-            <p className="text-muted-foreground text-sm">Gerencie as escolas da sua rede</p>
+            <p className="text-muted-foreground text-sm">Gerencie as agências da sua rede</p>
           </div>
           <Button onClick={() => setInviteDialogOpen(true)}>
             <Plus className="h-4 w-4 mr-2" />
-            Convidar Escola
+            Convidar Agência
           </Button>
         </div>
 
-        {/* Schools Table */}
+        {/* Agencies Table */}
         <Card>
           <CardHeader>
-            <CardTitle>Escolas</CardTitle>
-            <CardDescription>Lista de todas as escolas da rede</CardDescription>
+            <CardTitle>Agências</CardTitle>
+            <CardDescription>Lista de todas as agências da rede</CardDescription>
           </CardHeader>
           <CardContent>
-            {schools && schools.length > 0 ? (
+            {agencies && agencies.length > 0 ? (
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -165,40 +165,40 @@ export default function RegionalManagement() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {schools.map((school: any) => (
-                    <TableRow key={school.id}>
-                      <TableCell className="font-medium">{school.school_name}</TableCell>
-                      <TableCell className="font-mono text-sm">{school.cnpj || 'N/A'}</TableCell>
-                      <TableCell>{school.email || 'N/A'}</TableCell>
-                      <TableCell>{school.city || 'N/A'}</TableCell>
-                      <TableCell>{getSchoolStatusBadge(school.status)}</TableCell>
+                  {agencies.map((agency: any) => (
+                    <TableRow key={agency.id}>
+                      <TableCell className="font-medium">{agency.agency_name}</TableCell>
+                      <TableCell className="font-mono text-sm">{agency.cnpj || 'N/A'}</TableCell>
+                      <TableCell>{agency.email || 'N/A'}</TableCell>
+                      <TableCell>{agency.city || 'N/A'}</TableCell>
+                      <TableCell>{getAgencyStatusBadge(agency.status)}</TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
-                          {school.status === 'pending' && (
+                          {agency.status === 'pending' && (
                             <Button
                               size="sm"
                               variant="default"
-                              onClick={() => handleApproveSchool(school.id)}
+                              onClick={() => handleApproveAgency(agency.id)}
                             >
                               <CheckCircle className="h-4 w-4 mr-1" />
                               Aprovar
                             </Button>
                           )}
-                          {school.status === 'active' && (
+                          {agency.status === 'active' && (
                             <Button
                               size="sm"
                               variant="destructive"
-                              onClick={() => handleSuspendSchool(school.id)}
+                              onClick={() => handleSuspendAgency(agency.id)}
                             >
                               <XCircle className="h-4 w-4 mr-1" />
                               Suspender
                             </Button>
                           )}
-                          {school.status === 'suspended' && (
+                          {agency.status === 'suspended' && (
                             <Button
                               size="sm"
                               variant="default"
-                              onClick={() => handleApproveSchool(school.id)}
+                              onClick={() => handleApproveAgency(agency.id)}
                             >
                               <CheckCircle className="h-4 w-4 mr-1" />
                               Reativar
@@ -213,31 +213,31 @@ export default function RegionalManagement() {
             ) : (
               <div className="text-center py-12">
                 <Building2 className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                <h3 className="text-lg font-semibold mb-2">Nenhuma escola cadastrada</h3>
+                <h3 className="text-lg font-semibold mb-2">Nenhuma agência cadastrada</h3>
                 <p className="text-muted-foreground">
-                  Envie convites para escolas se cadastrarem na plataforma
+                  Envie convites para agências se cadastrarem na plataforma
                 </p>
               </div>
             )}
           </CardContent>
         </Card>
 
-        {/* Invite School Dialog */}
+        {/* Invite Agency Dialog */}
         <Dialog open={inviteDialogOpen} onOpenChange={setInviteDialogOpen}>
           <DialogContent>
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <Mail className="h-5 w-5" />
-                Convidar Escola
+                Convidar Agência
               </DialogTitle>
               <DialogDescription>
-                Digite o email da escola para enviar um convite de cadastro.
+                Digite o email da agência para enviar um convite de cadastro.
               </DialogDescription>
             </DialogHeader>
             <div className="py-4">
               <Input
                 type="email"
-                placeholder="email@escola.com.br"
+                placeholder="email@agencia.com.br"
                 value={inviteEmail}
                 onChange={(e) => setInviteEmail(e.target.value)}
                 onKeyDown={(e) => {

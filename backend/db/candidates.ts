@@ -109,14 +109,14 @@ export async function searchCandidates(filters: {
 // ============================================
 
 /**
- * Get all active candidates for a franchise
+ * Get all active candidates for an affiliate/admin
  * Used by: Background matching service
  */
-export async function getAllActiveCandidates(franchiseId: string): Promise<Candidate[]> {
+export async function getAllActiveCandidates(affiliateId: string): Promise<Candidate[]> {
   const { data, error } = await supabaseAdmin
     .from("candidates")
     .select("*")
-    .eq("franchise_id", franchiseId)
+    .eq("affiliate_id", affiliateId)
     .eq("status", "active")
     .order("created_at", { ascending: false });
 
@@ -129,19 +129,19 @@ export async function getAllActiveCandidates(franchiseId: string): Promise<Candi
 }
 
 /**
- * Get all active candidates for a school
- * Used by: Background matching service for school-based job matching
+ * Get all active candidates for an agency
+ * Used by: Background matching service for agency-based job matching
  */
-export async function getAllActiveCandidatesBySchool(schoolId: string): Promise<Candidate[]> {
+export async function getAllActiveCandidatesByAgency(agencyId: string): Promise<Candidate[]> {
   const { data, error } = await supabaseAdmin
     .from("candidates")
     .select("*")
-    .eq("school_id", schoolId)
+    .eq("agency_id", agencyId)
     .eq("status", "active")
     .order("created_at", { ascending: false });
 
   if (error) {
-    console.error("[Database] Failed to get active candidates by school:", error);
+    console.error("[Database] Failed to get active candidates by agency:", error);
     return [];
   }
 
@@ -239,7 +239,7 @@ export async function getCandidateByEmail(email: string): Promise<Candidate | nu
 /**
  * Bulk create candidates from Excel/CSV import
  * @param candidates Array of candidate data to insert
- * @param schoolId The school ID that imported these candidates
+ * @param agencyId The agency ID that imported these candidates
  * @returns Object with created candidate IDs and any errors
  */
 export async function bulkCreateCandidates(
@@ -275,7 +275,7 @@ export async function bulkCreateCandidates(
     pdp_intrapersonal?: Record<string, string>;
     pdp_interpersonal?: Record<string, string>;
   }>,
-  schoolId: string
+  agencyId: string
 ): Promise<{ created: string[]; errors: { email: string; message: string }[] }> {
   const created: string[] = [];
   const errors: { email: string; message: string }[] = [];
@@ -329,7 +329,7 @@ export async function bulkCreateCandidates(
         email: candidate.email,
         name: candidate.full_name,
         role: "candidate",
-        school_id: schoolId,
+        agency_id: agencyId,
       });
 
       if (userError) {
@@ -348,7 +348,7 @@ export async function bulkCreateCandidates(
         full_name: candidate.full_name,
         cpf: normalizedCpf,
         email: candidate.email.toLowerCase().trim(),
-        school_id: schoolId,
+        agency_id: agencyId,
         status: 'active',
       };
 

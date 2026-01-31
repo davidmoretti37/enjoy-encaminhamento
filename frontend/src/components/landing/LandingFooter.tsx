@@ -7,14 +7,11 @@ export default function LandingFooter() {
         <div className="grid md:grid-cols-4 gap-8">
           <div>
             <div className="flex items-center space-x-3 mb-4">
-              <img src={APP_LOGO} alt="ANEC Logo" className="h-12 w-auto" />
-              <span className="text-lg font-bold text-[#0A2342]">{APP_TITLE}</span>
+              <img src={APP_LOGO} alt="ANEC RG Logo" className="h-12 w-auto" />
+              <span className="text-lg font-bold text-[#0A2342]">ANEC RG</span>
             </div>
             <p className="text-sm text-[#0A2342]/70 font-medium mb-2">
               Conectando Talentos • Construindo Carreiras
-            </p>
-            <p className="text-sm text-muted-foreground">
-              Agência Nacional de Emprego e Carreira
             </p>
           </div>
 

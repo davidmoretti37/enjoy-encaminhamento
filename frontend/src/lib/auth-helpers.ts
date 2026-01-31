@@ -15,7 +15,7 @@ const API_URL = FRONTEND_ENV.apiUrl || "http://localhost:5001";
 interface SignUpMetadata {
   name?: string;
   role?: "company" | "candidate";
-  school_id?: string;
+  agency_id?: string;
 }
 
 interface AuthData {
@@ -55,7 +55,7 @@ export async function signUp(
             email: data.user.email,
             name: metadata?.name,
             role: metadata?.role || "candidate",
-            school_id: metadata?.school_id || null,
+            agency_id: metadata?.agency_id || null,
           },
         }),
       });

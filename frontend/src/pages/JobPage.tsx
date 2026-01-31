@@ -1,7 +1,7 @@
 // @ts-nocheck
 import { useAuth } from "@/_core/hooks/useAuth";
 import ClassicLoader from "@/components/ui/ClassicLoader";
-import { useSchoolContext } from "@/contexts/SchoolContext";
+import { useAgencyContext } from "@/contexts/AgencyContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -43,7 +43,7 @@ import { useState } from "react";
 
 export default function JobPage() {
   const { user, loading: authLoading } = useAuth();
-  const { currentSchool, isAllSchoolsMode } = useSchoolContext();
+  const { currentAgency, isAllAgenciesMode } = useAgencyContext();
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedJob, setSelectedJob] = useState<string | null>(null);
   const [matchingJobId, setMatchingJobId] = useState<string | null>(null);
@@ -51,22 +51,22 @@ export default function JobPage() {
   const [selectedJobForMatches, setSelectedJobForMatches] = useState<any>(null);
 
   // Determine role capabilities
-  const isAffiliate = user?.role === 'affiliate';
-  const isSchool = user?.role === 'school';
+  const isAffiliate = user?.role === 'admin';
+  const isAgency = user?.role === 'agency';
   const isAdmin = isAffiliate; // Affiliates have admin-like capabilities
 
   // Conditional tRPC queries based on role
-  // Pass null explicitly for "All Schools" mode (currentSchool is null)
+  // Pass null explicitly for "All Agencies" mode (currentAgency is null)
   const affiliateJobsQuery = trpc.affiliate.getJobs.useQuery(
-    { schoolId: currentSchool?.id ?? null },
+    { agencyId: currentAgency?.id ?? null },
     { enabled: isAffiliate }
   );
-  const schoolJobsQuery = trpc.school.getJobs.useQuery(undefined, { enabled: isSchool });
+  const agencyJobsQuery = trpc.agency.getJobs.useQuery(undefined, { enabled: isAgency });
 
   // Select the right data based on role
-  const jobs = isAffiliate ? affiliateJobsQuery.data : schoolJobsQuery.data;
-  const refetchJobs = isAffiliate ? affiliateJobsQuery.refetch : schoolJobsQuery.refetch;
-  const jobsLoading = affiliateJobsQuery.isLoading || schoolJobsQuery.isLoading;
+  const jobs = isAffiliate ? affiliateJobsQuery.data : agencyJobsQuery.data;
+  const refetchJobs = isAffiliate ? affiliateJobsQuery.refetch : agencyJobsQuery.refetch;
+  const jobsLoading = affiliateJobsQuery.isLoading || agencyJobsQuery.isLoading;
 
   // Mutations (admin only)
   const updateStatusMutation = trpc.job.updateStatus.useMutation({
@@ -99,7 +99,7 @@ export default function JobPage() {
     );
   }
 
-  if (!user || !['affiliate', 'school'].includes(user.role)) {
+  if (!user || !['admin', 'agency'].includes(user.role)) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Card className="max-w-md">
@@ -199,7 +199,7 @@ export default function JobPage() {
     return (
       job.title?.toLowerCase().includes(searchLower) ||
       companyName?.toLowerCase().includes(searchLower) ||
-      job.school?.school_name?.toLowerCase().includes(searchLower) ||
+      job.agency?.agency_name?.toLowerCase().includes(searchLower) ||
       job.city?.toLowerCase().includes(searchLower)
     );
   });
@@ -302,7 +302,7 @@ export default function JobPage() {
               <div className="flex-1 relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
-                  placeholder={isAdmin ? "Buscar por título, empresa ou cidade..." : "Buscar por título, empresa, escola ou cidade..."}
+                  placeholder={isAdmin ? "Buscar por título, empresa ou cidade..." : "Buscar por título, empresa, agência ou cidade..."}
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="pl-10"
@@ -332,7 +332,7 @@ export default function JobPage() {
                   <TableRow>
                     <TableHead>Título</TableHead>
                     <TableHead>Empresa</TableHead>
-                    {isAllSchoolsMode && <TableHead>Escola</TableHead>}
+                    {isAllAgenciesMode && <TableHead>Agência</TableHead>}
                     <TableHead>Tipo</TableHead>
                     <TableHead>{isAdmin ? 'Localização' : 'Cidade'}</TableHead>
                     <TableHead>Status</TableHead>
@@ -347,11 +347,11 @@ export default function JobPage() {
                       <TableRow key={job.id}>
                         <TableCell className="font-medium">{job.title}</TableCell>
                         <TableCell>{companyName || 'N/A'}</TableCell>
-                        {isAllSchoolsMode && (
+                        {isAllAgenciesMode && (
                           <TableCell>
                             <div className="flex items-center gap-2">
                               <Building className="h-4 w-4 text-slate-400" />
-                              <span className="text-sm">{job.school?.school_name || 'N/A'}</span>
+                              <span className="text-sm">{job.agency?.agency_name || 'N/A'}</span>
                             </div>
                           </TableCell>
                         )}

@@ -36,8 +36,8 @@ export const adminProcedure = t.procedure.use(
   t.middleware(async (opts) => {
     const { ctx, next } = opts;
 
-    // Only affiliate role has admin access
-    if (!ctx.user || ctx.user.role !== "affiliate") {
+    // Only admin role has admin access
+    if (!ctx.user || ctx.user.role !== "admin") {
       throw new TRPCError({ code: "FORBIDDEN", message: NOT_ADMIN_ERR_MSG });
     }
 
