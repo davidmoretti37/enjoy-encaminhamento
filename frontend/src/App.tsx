@@ -49,12 +49,25 @@ import CandidateOnboarding from "./pages/candidate/CandidateOnboarding";
 import CompanyInviteAccept from "./pages/company/CompanyInviteAccept";
 import VagasPage from "./pages/VagasPage";
 import CompanyVagasPage from "./pages/CompanyVagasPage";
+// Public landing pages
+import JovemAprendizPage from "./pages/JovemAprendizPage";
+import EmpresasPage from "./pages/EmpresasPage";
+import AssessoriaPage from "./pages/AssessoriaPage";
+import CltPcdPage from "./pages/CltPcdPage";
+import EstagioPage from "./pages/EstagioPage";
+import PublicVagasPage from "./pages/PublicVagasPage";
 
 function Router() {
   return (
     <Switch>
       {/* Public routes - no auth required */}
       <Route path={"/"} component={Home} />
+      <Route path={"/jovem-aprendiz"} component={JovemAprendizPage} />
+      <Route path={"/empresas"} component={EmpresasPage} />
+      <Route path={"/assessoria"} component={AssessoriaPage} />
+      <Route path={"/clt-pcd"} component={CltPcdPage} />
+      <Route path={"/estagio"} component={EstagioPage} />
+      <Route path={"/vagas"} component={PublicVagasPage} />
       <Route path={"/login"} component={Login} />
       <Route path={"/contract/:token"} component={ContractSign} />
       <Route path={"/company/register/:token"} component={CompanyRegister} />
@@ -72,8 +85,8 @@ function Router() {
       <Route>
         <AuthGuard>
           <Switch>
-            <Route path={"/vagas"} component={CompanyVagasPage} />
-            <Route path={"/vagas/:jobId"} component={VagasPage} />
+            <Route path={"/empresa/vagas"} component={CompanyVagasPage} />
+            <Route path={"/empresa/vagas/:jobId"} component={VagasPage} />
 
             {/* Admin routes */}
             <Route path={"/admin/dashboard"} component={AffiliateDashboard} />

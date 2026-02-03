@@ -79,7 +79,7 @@ function LogoMarquee({ logos }: { logos: { name: string; src: string }[] }) {
   return (
     <div className="text-center mb-12">
       <p className="text-sm text-slate-500 uppercase tracking-wider mb-8 font-medium">
-        Empresas que confiam na ANEC RG
+        Empresas que confiam na ANEC
       </p>
       <div className="relative overflow-hidden">
         {/* Gradient fade on edges */}

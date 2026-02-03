@@ -31,10 +31,10 @@ const faqs = [
   {
     question: "Quanto tempo leva para ser contratado?",
     answer:
-      "O tempo médio de contratação através da ANEC RG é de 5 dias. Porém, isso pode variar de acordo com o perfil da vaga e a disponibilidade do candidato para entrevistas.",
+      "O tempo médio de contratação através da ANEC é de 5 dias. Porém, isso pode variar de acordo com o perfil da vaga e a disponibilidade do candidato para entrevistas.",
   },
   {
-    question: "A ANEC RG oferece suporte durante o contrato?",
+    question: "A ANEC oferece suporte durante o contrato?",
     answer:
       "Sim! Oferecemos acompanhamento contínuo tanto para empresas quanto para candidatos. Isso inclui feedbacks mensais, suporte dedicado e, em alguns planos, desenvolvimento pessoal e profissional.",
   },
@@ -47,7 +47,7 @@ const itemVariants = {
 
 export default function FAQSection() {
   return (
-    <section className="py-20 bg-slate-50/50">
+    <section id="faq" className="py-20 bg-slate-50/50 scroll-mt-20">
       <div className="container mx-auto px-4">
         <motion.div
           initial="hidden"
@@ -64,7 +64,7 @@ export default function FAQSection() {
             Perguntas <span className="text-gradient">Frequentes</span>
           </h2>
           <p className="text-lg text-slate-600 max-w-2xl mx-auto">
-            Tire suas dúvidas sobre como a ANEC RG pode ajudar você ou sua empresa
+            Tire suas dúvidas sobre como a ANEC pode ajudar você ou sua empresa
           </p>
         </motion.div>
 

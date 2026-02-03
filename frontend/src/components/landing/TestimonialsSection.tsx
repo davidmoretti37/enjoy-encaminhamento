@@ -16,7 +16,7 @@ const testimonials = [
     role: "Estagiária de Administração",
     company: "Empresa de Tecnologia em SP",
     quote:
-      "Em apenas 3 dias após meu cadastro, já estava em entrevista. A equipe da ANEC RG me preparou para cada etapa. Hoje sou estagiária e já tenho proposta de efetivação!",
+      "Em apenas 3 dias após meu cadastro, já estava em entrevista. A equipe da ANEC me preparou para cada etapa. Hoje sou estagiária e já tenho proposta de efetivação!",
     initials: "AC",
     rating: 5,
     highlight: "Contratada em 3 dias",
@@ -27,7 +27,7 @@ const testimonials = [
     role: "Ex-aprendiz, hoje Assistente Administrativo",
     company: "Indústria em Uberlândia",
     quote:
-      "Comecei como jovem aprendiz através da ANEC RG. O acompanhamento foi incrível - feedbacks mensais, orientação de carreira. Após 1 ano, fui efetivado como CLT!",
+      "Comecei como jovem aprendiz através da ANEC. O acompanhamento foi incrível - feedbacks mensais, orientação de carreira. Após 1 ano, fui efetivado como CLT!",
     initials: "LM",
     rating: 5,
     highlight: "De aprendiz a CLT",
@@ -38,7 +38,7 @@ const testimonials = [
     role: "Estagiária de Marketing",
     company: "Agência Digital em Ipatinga",
     quote:
-      "Estava há 6 meses procurando estágio sem sucesso. Na ANEC RG, em 1 semana recebi 3 propostas de empresas. O match com IA realmente funciona!",
+      "Estava há 6 meses procurando estágio sem sucesso. Na ANEC, em 1 semana recebi 3 propostas de empresas. O match com IA realmente funciona!",
     initials: "MO",
     rating: 5,
     highlight: "3 propostas em 1 semana",
@@ -60,7 +60,7 @@ const testimonials = [
     role: "Analista Júnior (ex-estagiária)",
     company: "Consultoria em São Paulo",
     quote:
-      "A ANEC RG me acompanhou durante todo o estágio. Os feedbacks mensais me ajudaram a crescer, e quando surgiu a vaga CLT, eu estava preparada. Recomendo demais!",
+      "A ANEC me acompanhou durante todo o estágio. Os feedbacks mensais me ajudaram a crescer, e quando surgiu a vaga CLT, eu estava preparada. Recomendo demais!",
     initials: "JS",
     rating: 5,
     highlight: "Efetivada após estágio",

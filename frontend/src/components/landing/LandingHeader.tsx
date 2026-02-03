@@ -1,42 +1,36 @@
 import { useState, useEffect } from "react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { APP_LOGO } from "@/const";
 import { Menu, X } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
 const navLinks = [
-  { label: "Como Funciona", href: "#como-funciona" },
-  { label: "Planos", href: "#planos" },
-  { label: "Depoimentos", href: "#depoimentos" },
+  { label: "HOME", href: "/" },
+  { label: "JOVEM APRENDIZ", href: "/jovem-aprendiz" },
+  { label: "EMPRESAS", href: "/empresas" },
+  { label: "ASSESSORIA", href: "/assessoria" },
+  { label: "CLT E PCD", href: "/clt-pcd" },
+  { label: "ESTÁGIO", href: "/estagio" },
+  { label: "VAGAS", href: "/vagas", highlighted: true },
 ];
 
-interface LandingHeaderProps {
-  hasSelectedPersona?: boolean;
-}
-
-export default function LandingHeader({ hasSelectedPersona = false }: LandingHeaderProps) {
+export default function LandingHeader() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [location] = useLocation();
 
   useEffect(() => {
     const handleScroll = () => {
       setIsScrolled(window.scrollY > 20);
     };
-
     window.addEventListener("scroll", handleScroll);
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
-  const scrollToSection = (href: string) => {
-    if (!hasSelectedPersona) return;
-    setIsMobileMenuOpen(false);
-    if (href.startsWith("#")) {
-      const element = document.querySelector(href);
-      if (element) {
-        element.scrollIntoView({ behavior: "smooth" });
-      }
-    }
+  const isActive = (href: string) => {
+    if (href === "/") return location === "/";
+    return location.startsWith(href);
   };
 
   return (
@@ -51,54 +45,48 @@ export default function LandingHeader({ hasSelectedPersona = false }: LandingHea
         <div className="container mx-auto px-4">
           <div className="flex items-center justify-between h-16 md:h-20">
             {/* Logo */}
-            <Link href="/" className="flex items-center gap-2">
+            <Link href="/" className="flex items-center gap-2 shrink-0">
               <img
                 src={APP_LOGO}
-                alt="ANEC RG"
+                alt="ANEC"
                 className="h-10 md:h-12 w-auto"
               />
-              <span
-                className={`text-lg md:text-xl font-bold transition-colors ${
-                  isScrolled ? "text-[#0A2342]" : "text-[#0A2342]"
-                }`}
-              >
-                ANEC RG
+              <span className="text-lg md:text-xl font-bold text-[#0A2342]">
+                ANEC
               </span>
             </Link>
 
             {/* Desktop Navigation */}
-            <nav className="hidden md:flex items-center gap-8">
+            <nav className="hidden lg:flex items-center gap-1">
               {navLinks.map((link) => (
-                <button
+                <Link
                   key={link.href}
-                  onClick={() => scrollToSection(link.href)}
-                  disabled={!hasSelectedPersona}
-                  className={`text-sm font-medium transition-colors ${
-                    hasSelectedPersona
-                      ? "text-slate-600 hover:text-[#FF6B35] cursor-pointer"
-                      : "text-slate-300 cursor-not-allowed"
+                  href={link.href}
+                  className={`text-xs font-semibold px-3 py-2 rounded-full transition-all ${
+                    link.highlighted
+                      ? "bg-[#FF6B35] text-white hover:bg-[#FF6B35]/90"
+                      : isActive(link.href)
+                        ? "text-[#FF6B35] bg-[#FF6B35]/10"
+                        : "text-slate-600 hover:text-[#0A2342] hover:bg-slate-100"
                   }`}
-                  title={!hasSelectedPersona ? "Selecione Empresa ou Candidato primeiro" : undefined}
                 >
                   {link.label}
-                </button>
+                </Link>
               ))}
             </nav>
 
             {/* Desktop CTAs */}
-            <div className="hidden md:flex items-center gap-4">
+            <div className="hidden lg:flex items-center gap-4 shrink-0">
               <Link
                 href="/login"
-                className={`text-sm font-medium transition-colors hover:text-[#FF6B35] ${
-                  isScrolled ? "text-slate-600" : "text-slate-600"
-                }`}
+                className="text-sm font-medium text-slate-600 hover:text-[#FF6B35] transition-colors"
               >
                 Entrar
               </Link>
               <Link href="/login?tab=signup">
                 <Button
                   size="sm"
-                  className="bg-[#FF6B35] hover:bg-[#FF6B35]/90 text-white px-6"
+                  className="bg-[#0A2342] hover:bg-[#0A2342]/90 text-white px-6"
                 >
                   Cadastrar
                 </Button>
@@ -108,7 +96,7 @@ export default function LandingHeader({ hasSelectedPersona = false }: LandingHea
             {/* Mobile Menu Button */}
             <button
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-              className="md:hidden p-2 rounded-lg hover:bg-slate-100 transition-colors"
+              className="lg:hidden p-2 rounded-lg hover:bg-slate-100 transition-colors"
             >
               {isMobileMenuOpen ? (
                 <X className="h-6 w-6 text-slate-600" />
@@ -127,7 +115,7 @@ export default function LandingHeader({ hasSelectedPersona = false }: LandingHea
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/20 z-40 md:hidden"
+            className="fixed inset-0 bg-black/20 z-40 lg:hidden"
             onClick={() => setIsMobileMenuOpen(false)}
           />
         )}
@@ -141,7 +129,7 @@ export default function LandingHeader({ hasSelectedPersona = false }: LandingHea
             animate={{ x: 0 }}
             exit={{ x: "100%" }}
             transition={{ type: "spring", damping: 25, stiffness: 200 }}
-            className="fixed top-0 right-0 bottom-0 w-72 bg-white z-50 shadow-xl md:hidden"
+            className="fixed top-0 right-0 bottom-0 w-72 bg-white z-50 shadow-xl lg:hidden"
           >
             <div className="flex flex-col h-full">
               {/* Mobile Header */}
@@ -156,26 +144,23 @@ export default function LandingHeader({ hasSelectedPersona = false }: LandingHea
               </div>
 
               {/* Mobile Nav Links */}
-              <nav className="flex-1 p-4">
-                <div className="space-y-2">
+              <nav className="flex-1 p-4 overflow-y-auto">
+                <div className="space-y-1">
                   {navLinks.map((link) => (
-                    <button
+                    <Link
                       key={link.href}
-                      onClick={() => scrollToSection(link.href)}
-                      disabled={!hasSelectedPersona}
+                      href={link.href}
+                      onClick={() => setIsMobileMenuOpen(false)}
                       className={`block w-full text-left px-4 py-3 rounded-lg font-medium transition-colors ${
-                        hasSelectedPersona
-                          ? "text-slate-600 hover:bg-slate-100 hover:text-[#FF6B35]"
-                          : "text-slate-300 cursor-not-allowed"
+                        link.highlighted
+                          ? "bg-[#FF6B35] text-white"
+                          : isActive(link.href)
+                            ? "text-[#FF6B35] bg-[#FF6B35]/10"
+                            : "text-slate-600 hover:bg-slate-100 hover:text-[#0A2342]"
                       }`}
                     >
                       {link.label}
-                      {!hasSelectedPersona && (
-                        <span className="block text-xs text-slate-400 mt-1">
-                          Selecione uma opção primeiro
-                        </span>
-                      )}
-                    </button>
+                    </Link>
                   ))}
                 </div>
               </nav>
@@ -184,13 +169,14 @@ export default function LandingHeader({ hasSelectedPersona = false }: LandingHea
               <div className="p-4 border-t space-y-3">
                 <Link
                   href="/login"
+                  onClick={() => setIsMobileMenuOpen(false)}
                   className="block w-full text-center py-3 rounded-lg border border-slate-200 text-slate-600 font-medium hover:bg-slate-50 transition-colors"
                 >
                   Entrar
                 </Link>
-                <Link href="/login?tab=signup">
-                  <Button className="w-full bg-[#FF6B35] hover:bg-[#FF6B35]/90 text-white">
-                    Cadastrar Grátis
+                <Link href="/login?tab=signup" onClick={() => setIsMobileMenuOpen(false)}>
+                  <Button className="w-full bg-[#0A2342] hover:bg-[#0A2342]/90 text-white">
+                    Cadastrar
                   </Button>
                 </Link>
               </div>
