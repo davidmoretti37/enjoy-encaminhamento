@@ -317,8 +317,8 @@ export default function AssessoriaPage() {
               variants={containerVariants}
             >
               {[
-                { value: "50+", label: "Instituições Parceiras" },
-                { value: "3.000+", label: "Alunos Encaminhados" },
+                { value: "15+", label: "Instituições Parceiras" },
+                { value: "400+", label: "Alunos Encaminhados" },
                 { value: "85%", label: "Taxa de Colocação" },
                 { value: "4", label: "Regiões Atendidas" },
               ].map((stat) => (

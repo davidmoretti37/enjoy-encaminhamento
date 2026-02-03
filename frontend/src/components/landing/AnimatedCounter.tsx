@@ -1,5 +1,4 @@
-import { useEffect, useRef, useState } from "react";
-import { motion, useInView } from "motion/react";
+import { useEffect, useRef, useState, useCallback } from "react";
 
 interface AnimatedCounterProps {
   end: number;
@@ -18,47 +17,54 @@ export default function AnimatedCounter({
 }: AnimatedCounterProps) {
   const [count, setCount] = useState(0);
   const ref = useRef<HTMLSpanElement>(null);
-  const isInView = useInView(ref, { once: true, margin: "-100px" });
   const hasAnimated = useRef(false);
 
+  const startAnimation = useCallback(() => {
+    if (hasAnimated.current) return;
+    hasAnimated.current = true;
+
+    const startTime = performance.now();
+    const durationMs = duration * 1000;
+
+    const animate = (now: number) => {
+      const elapsed = now - startTime;
+      const progress = Math.min(elapsed / durationMs, 1);
+      const easeOutQuart = 1 - Math.pow(1 - progress, 4);
+      setCount(Math.floor(easeOutQuart * end));
+
+      if (progress < 1) {
+        requestAnimationFrame(animate);
+      } else {
+        setCount(end);
+      }
+    };
+
+    requestAnimationFrame(animate);
+  }, [end, duration]);
+
   useEffect(() => {
-    if (isInView && !hasAnimated.current) {
-      hasAnimated.current = true;
-      const startTime = Date.now();
-      const endTime = startTime + duration * 1000;
+    const el = ref.current;
+    if (!el) return;
 
-      const animate = () => {
-        const now = Date.now();
-        const progress = Math.min((now - startTime) / (duration * 1000), 1);
-
-        // Easing function for smooth deceleration
-        const easeOutQuart = 1 - Math.pow(1 - progress, 4);
-        const currentCount = Math.floor(easeOutQuart * end);
-
-        setCount(currentCount);
-
-        if (now < endTime) {
-          requestAnimationFrame(animate);
-        } else {
-          setCount(end);
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          startAnimation();
+          observer.disconnect();
         }
-      };
+      },
+      { threshold: 0.3 }
+    );
 
-      requestAnimationFrame(animate);
-    }
-  }, [isInView, end, duration]);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [startAnimation]);
 
   return (
-    <motion.span
-      ref={ref}
-      className={className}
-      initial={{ opacity: 0, y: 10 }}
-      animate={isInView ? { opacity: 1, y: 0 } : {}}
-      transition={{ duration: 0.5 }}
-    >
+    <span ref={ref} className={className}>
       {prefix}
       {count.toLocaleString("pt-BR")}
       {suffix}
-    </motion.span>
+    </span>
   );
 }

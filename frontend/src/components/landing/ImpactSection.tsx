@@ -5,7 +5,7 @@ import AnimatedCounter from "./AnimatedCounter";
 const stats = [
   {
     icon: Users,
-    value: 6000,
+    value: 850,
     suffix: "+",
     label: "Profissionais Encaminhados",
     color: "text-[#FF6B35]",
@@ -13,7 +13,7 @@ const stats = [
   },
   {
     icon: Building2,
-    value: 500,
+    value: 120,
     suffix: "+",
     label: "Empresas Parceiras",
     color: "text-[#0A2342]",
@@ -21,7 +21,7 @@ const stats = [
   },
   {
     icon: Award,
-    value: 95,
+    value: 97,
     suffix: "%",
     label: "Taxa de Satisfação",
     color: "text-green-600",
@@ -100,7 +100,7 @@ export default function ImpactSection() {
                   <Icon className={`h-7 w-7 ${stat.color}`} />
                 </div>
                 <div className="text-3xl md:text-4xl font-bold text-white mb-1">
-                  <AnimatedCounter target={stat.value} duration={2000} />
+                  <AnimatedCounter end={stat.value} duration={2} />
                   {stat.suffix}
                 </div>
                 <p className="text-sm text-white/50">{stat.label}</p>
