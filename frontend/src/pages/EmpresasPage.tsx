@@ -115,8 +115,13 @@ export default function EmpresasPage() {
   return (
     <PublicLayout>
       {/* Hero */}
-      <section className="relative pt-32 pb-16 px-4 bg-gradient-to-br from-slate-50 via-white to-orange-50/40">
-        <div className="container mx-auto text-center max-w-4xl">
+      <section className="relative pt-32 pb-16 px-4 overflow-hidden">
+        {/* Hero background image */}
+        <div className="absolute inset-0">
+          <img src="https://images.unsplash.com/photo-1600880292203-757bb62b4baf?w=1200&q=80&fit=crop" alt="" className="w-full h-full object-cover" loading="eager" />
+          <div className="absolute inset-0 bg-gradient-to-b from-white/92 via-white/85 to-white/95" />
+        </div>
+        <div className="relative z-10 container mx-auto text-center max-w-4xl">
           <motion.div
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}

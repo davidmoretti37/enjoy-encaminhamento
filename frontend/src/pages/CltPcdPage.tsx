@@ -16,6 +16,7 @@ import {
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import PublicLayout from "@/components/landing/PublicLayout";
+import ComparisonTable from "@/components/landing/ComparisonTable";
 
 const itemVariants = {
   hidden: { opacity: 0, y: 20 },
@@ -96,8 +97,13 @@ export default function CltPcdPage() {
   return (
     <PublicLayout>
       {/* Hero */}
-      <section className="relative pt-32 pb-16 px-4 bg-gradient-to-br from-slate-50 via-white to-orange-50/40">
-        <div className="container mx-auto text-center max-w-4xl">
+      <section className="relative pt-32 pb-16 px-4 overflow-hidden">
+        {/* Hero background image */}
+        <div className="absolute inset-0">
+          <img src="https://images.unsplash.com/photo-1573164713714-d95e436ab8d6?w=1200&q=80&fit=crop" alt="" className="w-full h-full object-cover" loading="eager" />
+          <div className="absolute inset-0 bg-gradient-to-b from-white/92 via-white/85 to-white/95" />
+        </div>
+        <div className="relative z-10 container mx-auto text-center max-w-4xl">
           <motion.div
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -295,8 +301,74 @@ export default function CltPcdPage() {
         </div>
       </section>
 
+      {/* Key Stats */}
+      <section className="py-16 bg-slate-50/50">
+        <div className="container mx-auto px-4">
+          <motion.div
+            className="grid grid-cols-2 md:grid-cols-4 gap-6 max-w-4xl mx-auto"
+            initial="hidden"
+            whileInView="visible"
+            viewport={{ once: true, amount: 0.2 }}
+            variants={containerVariants}
+          >
+            {[
+              { value: "44h", label: "Jornada Semanal Máx." },
+              { value: "8%", label: "FGTS Mensal" },
+              { value: "30 dias", label: "Férias Anuais" },
+              { value: "2% a 5%", label: "Cotas PCD" },
+            ].map((stat) => (
+              <motion.div
+                key={stat.label}
+                variants={itemVariants}
+                className="text-center p-6 rounded-xl bg-white border border-slate-200"
+              >
+                <div className="text-2xl md:text-3xl font-bold text-[#0A2342] mb-1">
+                  {stat.value}
+                </div>
+                <div className="text-xs text-slate-600">{stat.label}</div>
+              </motion.div>
+            ))}
+          </motion.div>
+        </div>
+      </section>
+
+      {/* Comparison Table */}
+      <ComparisonTable highlight="clt" />
+
+      {/* Government Links */}
+      <section className="py-12 bg-white">
+        <div className="container mx-auto px-4">
+          <div className="max-w-2xl mx-auto space-y-4">
+            <div className="p-5 rounded-xl border-2 border-[#0A2342]/10 bg-[#0A2342]/5 text-center">
+              <p className="text-xs text-slate-500 mb-2">Legislação CLT:</p>
+              <a
+                href="https://www.planalto.gov.br/ccivil_03/decreto-lei/del5452.htm"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 text-sm text-[#0A2342] font-semibold hover:text-[#FF6B35] transition-colors"
+              >
+                Decreto-Lei nº 5.452/1943 — Planalto.gov.br
+                <ArrowRight className="h-3.5 w-3.5" />
+              </a>
+            </div>
+            <div className="p-5 rounded-xl border-2 border-[#0A2342]/10 bg-[#0A2342]/5 text-center">
+              <p className="text-xs text-slate-500 mb-2">Legislação PCD:</p>
+              <a
+                href="https://www.planalto.gov.br/ccivil_03/leis/l8213cons.htm"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 text-sm text-[#0A2342] font-semibold hover:text-[#FF6B35] transition-colors"
+              >
+                Lei nº 8.213/1991 — Planalto.gov.br
+                <ArrowRight className="h-3.5 w-3.5" />
+              </a>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* CTA */}
-      <section className="py-20 bg-slate-50/50">
+      <section className="py-20 bg-[#0A2342]">
         <div className="container mx-auto px-4 text-center">
           <motion.div
             initial="hidden"
@@ -304,7 +376,7 @@ export default function CltPcdPage() {
             viewport={{ once: true, amount: 0.3 }}
             variants={itemVariants}
           >
-            <h2 className="text-3xl md:text-4xl font-bold text-[#0A2342] mb-4">
+            <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">
               Precisa de Suporte em CLT ou Inclusão PCD?
             </h2>
             <p className="text-lg text-slate-600 max-w-xl mx-auto mb-8">

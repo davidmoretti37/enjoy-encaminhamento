@@ -2,6 +2,9 @@ import { ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { motion } from "motion/react";
 
+const HERO_IMAGE =
+  "https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=1200&q=80&fit=crop";
+
 export default function HeroSection() {
   const scrollToServices = () => {
     const el = document.querySelector("#servicos");
@@ -9,12 +12,19 @@ export default function HeroSection() {
   };
 
   return (
-    <section className="relative min-h-[85vh] flex flex-col items-center justify-center pt-24 pb-16 px-4 overflow-hidden">
-      {/* Background gradients */}
-      <div className="absolute inset-0 bg-gradient-to-br from-slate-50 via-white to-orange-50/40" />
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(10,35,66,0.08),transparent_50%)]" />
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_80%,rgba(255,107,53,0.12),transparent_50%)]" />
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(10,35,66,0.04),transparent_60%)]" />
+    <section className="relative min-h-[90vh] flex flex-col items-center justify-center pt-24 pb-16 px-4 overflow-hidden">
+      {/* Background image with overlay */}
+      <div className="absolute inset-0">
+        <img
+          src={HERO_IMAGE}
+          alt=""
+          className="w-full h-full object-cover"
+          loading="eager"
+        />
+        <div className="absolute inset-0 bg-gradient-to-b from-white/90 via-white/80 to-white/95" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(10,35,66,0.12),transparent_50%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_80%,rgba(255,107,53,0.10),transparent_50%)]" />
+      </div>
 
       {/* Decorative floating elements */}
       <motion.div
@@ -27,11 +37,6 @@ export default function HeroSection() {
         animate={{ y: [0, 20, 0], x: [0, -10, 0] }}
         transition={{ duration: 10, repeat: Infinity, ease: "easeInOut" }}
       />
-      <motion.div
-        className="absolute top-1/2 left-1/4 w-16 h-16 rounded-full bg-[#FF6B35]/5 blur-xl"
-        animate={{ y: [0, 15, 0], x: [0, -8, 0] }}
-        transition={{ duration: 12, repeat: Infinity, ease: "easeInOut" }}
-      />
 
       <div className="relative z-10 w-full max-w-5xl mx-auto text-center">
         <motion.div
@@ -41,7 +46,7 @@ export default function HeroSection() {
         >
           {/* Badge */}
           <motion.div
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[#0A2342]/5 border border-[#0A2342]/10 mb-8"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/80 backdrop-blur-sm border border-[#0A2342]/10 mb-8"
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ delay: 0.2 }}
@@ -111,6 +116,16 @@ export default function HeroSection() {
             </svg>
           </motion.div>
         </motion.div>
+      </div>
+
+      {/* Wave divider */}
+      <div className="absolute bottom-0 left-0 right-0">
+        <svg viewBox="0 0 1440 80" fill="none" className="w-full">
+          <path
+            d="M0 40C240 80 480 0 720 40C960 80 1200 0 1440 40V80H0V40Z"
+            fill="white"
+          />
+        </svg>
       </div>
     </section>
   );

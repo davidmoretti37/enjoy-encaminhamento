@@ -7,7 +7,7 @@ import {
   CarouselPrevious,
   CarouselNext,
 } from "@/components/ui/carousel";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Quote, Star } from "lucide-react";
 
 const testimonials = [
@@ -18,6 +18,7 @@ const testimonials = [
     quote:
       "Em apenas 3 dias após meu cadastro, já estava em entrevista. A equipe da ANEC me preparou para cada etapa. Hoje sou estagiária e já tenho proposta de efetivação!",
     initials: "AC",
+    photo: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=200&q=80&fit=crop&crop=face",
     rating: 5,
     highlight: "Contratada em 3 dias",
     bgColor: "bg-[#FF6B35]",
@@ -29,6 +30,7 @@ const testimonials = [
     quote:
       "Comecei como jovem aprendiz através da ANEC. O acompanhamento foi incrível - feedbacks mensais, orientação de carreira. Após 1 ano, fui efetivado como CLT!",
     initials: "LM",
+    photo: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&q=80&fit=crop&crop=face",
     rating: 5,
     highlight: "De aprendiz a CLT",
     bgColor: "bg-[#0A2342]",
@@ -40,6 +42,7 @@ const testimonials = [
     quote:
       "Estava há 6 meses procurando estágio sem sucesso. Na ANEC, em 1 semana recebi 3 propostas de empresas. O match com IA realmente funciona!",
     initials: "MO",
+    photo: "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=200&q=80&fit=crop&crop=face",
     rating: 5,
     highlight: "3 propostas em 1 semana",
     bgColor: "bg-[#FF6B35]",
@@ -51,6 +54,7 @@ const testimonials = [
     quote:
       "O diferencial foi a pré-seleção humana. A equipe entendeu exatamente o que eu buscava e me conectou com uma empresa que tem tudo a ver com meu perfil.",
     initials: "PH",
+    photo: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=200&q=80&fit=crop&crop=face",
     rating: 5,
     highlight: "Match perfeito",
     bgColor: "bg-[#0A2342]",
@@ -62,6 +66,7 @@ const testimonials = [
     quote:
       "A ANEC me acompanhou durante todo o estágio. Os feedbacks mensais me ajudaram a crescer, e quando surgiu a vaga CLT, eu estava preparada. Recomendo demais!",
     initials: "JS",
+    photo: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&q=80&fit=crop&crop=face",
     rating: 5,
     highlight: "Efetivada após estágio",
     bgColor: "bg-[#FF6B35]",
@@ -108,8 +113,8 @@ export default function TestimonialsSection() {
             Carreira
           </h2>
           <p className="text-lg text-slate-600 max-w-2xl mx-auto">
-            Milhares de profissionais encontraram oportunidades através da ANEC
-            RG. Conheça algumas histórias de sucesso.
+            Milhares de profissionais encontraram oportunidades através da ANEC.
+            Conheça algumas histórias de sucesso.
           </p>
         </motion.div>
 
@@ -156,7 +161,12 @@ export default function TestimonialsSection() {
 
                       {/* Author */}
                       <div className="flex items-center gap-3 pt-4 border-t border-slate-100">
-                        <Avatar className={`h-12 w-12 ${testimonial.bgColor}`}>
+                        <Avatar className="h-12 w-12 border-2 border-slate-200">
+                          <AvatarImage
+                            src={testimonial.photo}
+                            alt={testimonial.name}
+                            className="object-cover"
+                          />
                           <AvatarFallback
                             className={`${testimonial.bgColor} text-white font-semibold`}
                           >
