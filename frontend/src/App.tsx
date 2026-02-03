@@ -1,7 +1,8 @@
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
-import { Route, Switch } from "wouter";
+import { Route, Switch, useLocation } from "wouter";
+import { useEffect } from "react";
 import ErrorBoundary from "./components/ErrorBoundary";
 import AuthGuard from "./components/AuthGuard";
 import { ThemeProvider } from "./contexts/ThemeContext";
@@ -57,8 +58,18 @@ import CltPcdPage from "./pages/CltPcdPage";
 import EstagioPage from "./pages/EstagioPage";
 import PublicVagasPage from "./pages/PublicVagasPage";
 
+function ScrollToTop() {
+  const [location] = useLocation();
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [location]);
+  return null;
+}
+
 function Router() {
   return (
+    <>
+    <ScrollToTop />
     <Switch>
       {/* Public routes - no auth required */}
       <Route path={"/"} component={Home} />
@@ -134,6 +145,7 @@ function Router() {
         </AuthGuard>
       </Route>
     </Switch>
+    </>
   );
 }
 
