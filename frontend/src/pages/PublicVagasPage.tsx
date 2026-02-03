@@ -124,11 +124,7 @@ export default function PublicVagasPage() {
       <section className="py-12 bg-white">
         <div className="container mx-auto px-4">
           {/* Filter Bar */}
-          <motion.div
-            initial="hidden"
-            whileInView="visible"
-            viewport={{ once: true }}
-            variants={itemVariants}
+          <div
             className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-10 max-w-4xl mx-auto"
           >
             <div className="flex items-center gap-2">
@@ -150,20 +146,13 @@ export default function PublicVagasPage() {
                 </button>
               ))}
             </div>
-          </motion.div>
+          </div>
 
           {/* Job Listings */}
-          <motion.div
-            className="max-w-4xl mx-auto space-y-4"
-            initial="hidden"
-            whileInView="visible"
-            viewport={{ once: true, amount: 0.1 }}
-            variants={containerVariants}
-          >
-            {filteredJobs.map((job, index) => (
-              <motion.div
-                key={index}
-                variants={itemVariants}
+          <div className="max-w-4xl mx-auto space-y-4">
+            {filteredJobs.map((job) => (
+              <div
+                key={job.title}
                 className="p-6 bg-white rounded-xl border border-slate-200 hover:border-[#FF6B35]/30 hover:shadow-md transition-all"
               >
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -208,18 +197,12 @@ export default function PublicVagasPage() {
                     </Button>
                   </Link>
                 </div>
-              </motion.div>
+              </div>
             ))}
-          </motion.div>
+          </div>
 
           {/* More jobs CTA */}
-          <motion.div
-            initial="hidden"
-            whileInView="visible"
-            viewport={{ once: true }}
-            variants={itemVariants}
-            className="text-center mt-12"
-          >
+          <div className="text-center mt-12">
             <p className="text-slate-600 mb-4">
               Cadastre-se para ver todas as vagas e receber notificações de novas oportunidades.
             </p>
@@ -232,7 +215,7 @@ export default function PublicVagasPage() {
                 <ArrowRight className="ml-2 h-5 w-5" />
               </Button>
             </Link>
-          </motion.div>
+          </div>
         </div>
       </section>
     </PublicLayout>
