@@ -166,9 +166,9 @@ export default function AgencyManagement() {
 
   const handleSendViaGmail = (email: string, token: string) => {
     const inviteUrl = `${window.location.origin}/register/agency?token=${token}`;
-    const subject = encodeURIComponent("Convite para Plataforma Corriculos");
+    const subject = encodeURIComponent("Convite para Plataforma Currículos");
     const body = encodeURIComponent(
-      `Olá!\n\nVocê foi convidado(a) para se cadastrar como agência na Plataforma Corriculos.\n\nClique no link abaixo para criar sua conta:\n${inviteUrl}\n\nEste convite é válido por 7 dias e pode ser usado apenas uma vez.\n\nAté breve!\nEquipe Corriculos`
+      `Olá!\n\nVocê foi convidado(a) para se cadastrar como agência na Plataforma Currículos.\n\nClique no link abaixo para criar sua conta:\n${inviteUrl}\n\nEste convite é válido por 7 dias e pode ser usado apenas uma vez.\n\nAté breve!\nEquipe Currículos`
     );
     window.open(`mailto:${email}?subject=${subject}&body=${body}`, '_blank');
   };

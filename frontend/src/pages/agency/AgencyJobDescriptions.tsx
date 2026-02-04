@@ -34,9 +34,21 @@ import {
   Bot,
   UserCheck,
   AlertCircle,
-  Plus
+  Plus,
+  ChevronDown,
+  ChevronUp,
+  Mail,
+  Phone,
+  GraduationCap,
+  Star,
+  AlertTriangle,
+  ThumbsUp,
+  SlidersHorizontal,
+  UserPlus,
 } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
+import { Slider } from '@/components/ui/slider';
+import { Checkbox } from '@/components/ui/checkbox';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { toast } from 'sonner';
@@ -53,12 +65,84 @@ const jobStatusConfig: Record<string, { label: string; color: string; icon: Reac
   paused: { label: 'Pausada', color: 'bg-gray-100 text-gray-800', icon: <Pause className="h-3 w-3" /> },
 };
 
+// Score color helper
+function getScoreColor(score: number) {
+  if (score >= 80) return 'bg-green-100 text-green-700 border-green-200';
+  if (score >= 60) return 'bg-blue-100 text-blue-700 border-blue-200';
+  if (score >= 40) return 'bg-yellow-100 text-yellow-700 border-yellow-200';
+  return 'bg-gray-100 text-gray-600 border-gray-200';
+}
+
+// Score bar for match factors
+function FactorBar({ label, value }: { label: string; value: number | null }) {
+  if (value == null) return null;
+  const color = value >= 80 ? 'bg-green-500' : value >= 60 ? 'bg-blue-500' : value >= 40 ? 'bg-yellow-500' : 'bg-red-400';
+  return (
+    <div>
+      <div className="flex justify-between text-xs text-gray-600 mb-0.5">
+        <span>{label}</span>
+        <span className="font-medium">{Math.round(value)}</span>
+      </div>
+      <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
+        <div className={`h-full ${color} rounded-full transition-all`} style={{ width: `${Math.min(value, 100)}%` }} />
+      </div>
+    </div>
+  );
+}
+
+// Recommendation label in Portuguese
+function getRecommendationLabel(rec: string | null) {
+  const map: Record<string, { label: string; className: string }> = {
+    HIGHLY_RECOMMENDED: { label: 'Altamente Recomendado', className: 'bg-green-100 text-green-800' },
+    RECOMMENDED: { label: 'Recomendado', className: 'bg-blue-100 text-blue-800' },
+    CONSIDER: { label: 'Considerar', className: 'bg-yellow-100 text-yellow-800' },
+    NOT_RECOMMENDED: { label: 'Avaliar', className: 'bg-gray-100 text-gray-600' },
+  };
+  if (!rec) return null;
+  return map[rec] || { label: rec, className: 'bg-gray-100 text-gray-600' };
+}
+
 // Component to show matched candidates for a job
 function MatchedCandidatesList({ jobId }: { jobId: string }) {
+  const [minScore, setMinScore] = useState(0);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [showAll, setShowAll] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
   const { data, isLoading } = trpc.job.getMatchesForJob.useQuery(
-    { jobId, minScore: 50 },
+    { jobId, minScore: 0, limit: 100 },
     { enabled: !!jobId }
   );
+
+  const createBatchMutation = trpc.batch.createDraftBatch.useMutation({
+    onSuccess: () => {
+      toast.success(`Grupo criado com ${selectedIds.size} candidato(s)!`);
+      setSelectedIds(new Set());
+    },
+    onError: (error) => {
+      toast.error(error.message || 'Erro ao criar grupo');
+    },
+  });
+
+  const toggleSelection = (candidateId: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(candidateId)) {
+        next.delete(candidateId);
+      } else {
+        next.add(candidateId);
+      }
+      return next;
+    });
+  };
+
+  const handleCreateGroup = () => {
+    if (selectedIds.size === 0) return;
+    createBatchMutation.mutate({
+      jobId,
+      candidateIds: Array.from(selectedIds),
+    });
+  };
 
   if (isLoading) {
     return (
@@ -67,15 +151,16 @@ function MatchedCandidatesList({ jobId }: { jobId: string }) {
           <Users className="h-4 w-4 text-gray-500" />
           <h4 className="text-sm font-medium text-gray-700">Candidatos Compatíveis</h4>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-          {[1, 2, 3].map((i) => (
+        <div className="space-y-2">
+          {[1, 2, 3, 4].map((i) => (
             <Card key={i} className="p-4">
               <div className="flex items-center gap-3">
                 <Skeleton className="h-10 w-10 rounded-full" />
                 <div className="flex-1">
-                  <Skeleton className="h-4 w-32 mb-1" />
-                  <Skeleton className="h-3 w-24" />
+                  <Skeleton className="h-4 w-40 mb-1" />
+                  <Skeleton className="h-3 w-28" />
                 </div>
+                <Skeleton className="h-6 w-12 rounded-full" />
               </div>
             </Card>
           ))}
@@ -85,74 +170,318 @@ function MatchedCandidatesList({ jobId }: { jobId: string }) {
   }
 
   if (!data?.matches || data.matches.length === 0) {
-    return null; // Don't show anything if no matches
+    return null;
   }
+
+  // Filter by min score on the client
+  const filteredMatches = data.matches.filter((m: any) => m.compositeScore >= minScore);
+  const displayedMatches = showAll ? filteredMatches : filteredMatches.slice(0, 10);
 
   return (
     <div className="mt-4">
+      {/* Header with filter */}
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <Users className="h-4 w-4 text-green-600" />
           <h4 className="text-sm font-medium text-gray-700">
-            Candidatos Compatíveis ({data.matches.length})
+            Candidatos Compatíveis ({filteredMatches.length})
           </h4>
         </div>
-        {data.pagination.totalMatches > data.matches.length && (
-          <span className="text-xs text-gray-500">
-            +{data.pagination.totalMatches - data.matches.length} mais
-          </span>
-        )}
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-        {data.matches.map((match: any) => (
-          <Card key={match.matchId} className="p-4 hover:shadow-md transition-shadow">
-            <div className="flex items-start gap-3">
-              {/* Avatar */}
-              <div className="h-10 w-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-medium text-sm">
-                {match.candidateName?.charAt(0)?.toUpperCase() || '?'}
+
+      {/* Score filter */}
+      {data.matches.length > 5 && (
+        <Card className="p-3 mb-3">
+          <div className="flex items-center gap-3">
+            <SlidersHorizontal className="h-4 w-4 text-gray-400 shrink-0" />
+            <div className="flex-1">
+              <div className="flex justify-between text-xs text-gray-600 mb-1">
+                <span>Score mínimo</span>
+                <span className="font-medium">{minScore}%</span>
               </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <p className="font-medium text-gray-900 truncate text-sm">
-                    {match.candidateName}
-                  </p>
-                  {/* Score badge */}
+              <Slider
+                value={[minScore]}
+                onValueChange={(v) => setMinScore(v[0])}
+                min={0}
+                max={100}
+                step={5}
+                className="w-full"
+              />
+            </div>
+            <span className="text-xs text-gray-500 shrink-0">
+              {filteredMatches.length}/{data.matches.length}
+            </span>
+          </div>
+        </Card>
+      )}
+
+      {/* Candidate list */}
+      <div className="space-y-2">
+        {displayedMatches.map((match: any) => {
+          const isExpanded = expandedId === match.matchId;
+          const recLabel = getRecommendationLabel(match.recommendation);
+          const skills = match.candidateProfile?.skills || [];
+          const displaySkills = skills.slice(0, 4);
+          const moreSkills = skills.length - displaySkills.length;
+
+          return (
+            <Card
+              key={match.matchId}
+              className={`overflow-hidden transition-shadow ${isExpanded ? 'shadow-md ring-1 ring-blue-200' : 'hover:shadow-sm'}`}
+            >
+              {/* Main row - clickable */}
+              <div className="w-full p-4 text-left flex items-center gap-3">
+                {/* Checkbox */}
+                <div className="shrink-0" onClick={(e) => e.stopPropagation()}>
+                  <Checkbox
+                    checked={selectedIds.has(match.candidateId)}
+                    onCheckedChange={() => toggleSelection(match.candidateId)}
+                    className="h-4.5 w-4.5"
+                  />
+                </div>
+
+                {/* Avatar */}
+                <button
+                  className="flex items-center gap-3 flex-1 min-w-0 text-left"
+                  onClick={() => setExpandedId(isExpanded ? null : match.matchId)}
+                >
+                <div className="h-10 w-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-medium text-sm shrink-0">
+                  {match.candidateName?.charAt(0)?.toUpperCase() || '?'}
+                </div>
+
+                {/* Name + info */}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="font-medium text-gray-900 text-sm truncate">
+                      {match.candidateName}
+                    </p>
+                    {recLabel && (
+                      <Badge variant="secondary" className={`text-[10px] px-1.5 py-0 ${recLabel.className}`}>
+                        {recLabel.label}
+                      </Badge>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                    {match.candidateProfile?.city && (
+                      <span className="text-xs text-gray-500 flex items-center gap-0.5">
+                        <MapPin className="h-3 w-3" />
+                        {match.candidateProfile.city}{match.candidateProfile.state ? `, ${match.candidateProfile.state}` : ''}
+                      </span>
+                    )}
+                    {match.candidateProfile?.educationLevel && (
+                      <span className="text-xs text-gray-500 flex items-center gap-0.5">
+                        <GraduationCap className="h-3 w-3" />
+                        {match.candidateProfile.educationLevel}
+                      </span>
+                    )}
+                  </div>
+                  {/* Skills preview */}
+                  {displaySkills.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-1.5">
+                      {displaySkills.map((skill: string) => (
+                        <span key={skill} className="px-1.5 py-0 text-[10px] bg-blue-50 text-blue-700 rounded border border-blue-100">
+                          {skill}
+                        </span>
+                      ))}
+                      {moreSkills > 0 && (
+                        <span className="text-[10px] text-gray-400">+{moreSkills}</span>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Score badge */}
+                <div className="flex items-center gap-2 shrink-0">
                   <Badge
                     variant="secondary"
-                    className={`text-xs px-1.5 py-0 ${
-                      match.compositeScore >= 80 ? 'bg-green-100 text-green-700' :
-                      match.compositeScore >= 60 ? 'bg-yellow-100 text-yellow-700' :
-                      'bg-gray-100 text-gray-700'
-                    }`}
+                    className={`text-sm font-semibold px-2.5 py-0.5 border ${getScoreColor(match.compositeScore)}`}
                   >
                     {Math.round(match.compositeScore)}%
                   </Badge>
+                  {isExpanded
+                    ? <ChevronUp className="h-4 w-4 text-gray-400" />
+                    : <ChevronDown className="h-4 w-4 text-gray-400" />
+                  }
                 </div>
-                {/* Candidate profile info */}
-                <div className="flex flex-wrap gap-1 mt-1">
-                  {match.candidateProfile?.city && (
-                    <span className="text-xs text-gray-500 flex items-center gap-0.5">
-                      <MapPin className="h-3 w-3" />
-                      {match.candidateProfile.city}
-                    </span>
-                  )}
-                  {match.candidateProfile?.educationLevel && (
-                    <span className="text-xs text-gray-500">
-                      • {match.candidateProfile.educationLevel}
-                    </span>
-                  )}
-                </div>
-                {/* Recommendation */}
-                {match.recommendation && (
-                  <p className="text-xs text-gray-600 mt-1.5 line-clamp-2">
-                    {match.recommendation}
-                  </p>
-                )}
+                </button>
               </div>
-            </div>
-          </Card>
-        ))}
+
+              {/* Expanded detail */}
+              {isExpanded && (
+                <div className="border-t bg-gray-50/50 px-4 py-4 space-y-4">
+                  {/* Contact info */}
+                  <div className="flex flex-wrap gap-4">
+                    {match.candidateEmail && (
+                      <a href={`mailto:${match.candidateEmail}`} className="text-sm text-blue-600 hover:underline flex items-center gap-1">
+                        <Mail className="h-3.5 w-3.5" />
+                        {match.candidateEmail}
+                      </a>
+                    )}
+                    {match.candidatePhone && (
+                      <a href={`tel:${match.candidatePhone}`} className="text-sm text-blue-600 hover:underline flex items-center gap-1">
+                        <Phone className="h-3.5 w-3.5" />
+                        {match.candidatePhone}
+                      </a>
+                    )}
+                  </div>
+
+                  {/* Summary */}
+                  {match.candidateProfile?.summary && (
+                    <div>
+                      <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Resumo</p>
+                      <p className="text-sm text-gray-700">{match.candidateProfile.summary}</p>
+                    </div>
+                  )}
+
+                  {/* AI Explanation */}
+                  {match.explanationSummary && (
+                    <div className="bg-blue-50 rounded-lg p-3">
+                      <p className="text-xs font-medium text-blue-800 mb-1 flex items-center gap-1">
+                        <Bot className="h-3.5 w-3.5" />
+                        Análise IA
+                      </p>
+                      <p className="text-sm text-blue-900">{match.explanationSummary}</p>
+                    </div>
+                  )}
+
+                  {/* LLM Reasoning */}
+                  {match.llm?.reasoning && (
+                    <div className="bg-purple-50 rounded-lg p-3">
+                      <p className="text-xs font-medium text-purple-800 mb-1">Raciocínio Detalhado</p>
+                      <p className="text-sm text-purple-900">{match.llm.reasoning}</p>
+                      {match.llm.confidence && (
+                        <p className="text-xs text-purple-600 mt-1">Confiança: {Math.round(match.llm.confidence)}%</p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Strengths & Concerns */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {match.strengths?.length > 0 && (
+                      <div>
+                        <p className="text-xs font-medium text-green-700 mb-1 flex items-center gap-1">
+                          <ThumbsUp className="h-3 w-3" /> Pontos Fortes
+                        </p>
+                        <ul className="space-y-0.5">
+                          {match.strengths.map((s: string, i: number) => (
+                            <li key={i} className="text-xs text-gray-700 flex items-start gap-1">
+                              <span className="text-green-500 mt-0.5">+</span> {s}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {match.concerns?.length > 0 && (
+                      <div>
+                        <p className="text-xs font-medium text-amber-700 mb-1 flex items-center gap-1">
+                          <AlertTriangle className="h-3 w-3" /> Pontos de Atenção
+                        </p>
+                        <ul className="space-y-0.5">
+                          {match.concerns.map((c: string, i: number) => (
+                            <li key={i} className="text-xs text-gray-700 flex items-start gap-1">
+                              <span className="text-amber-500 mt-0.5">!</span> {c}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Match factors */}
+                  {match.matchFactors && (
+                    <div>
+                      <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Fatores de Compatibilidade</p>
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
+                        <FactorBar label="Skills" value={match.matchFactors.skills} />
+                        <FactorBar label="Experiência" value={match.matchFactors.experience} />
+                        <FactorBar label="Localização" value={match.matchFactors.location} />
+                        <FactorBar label="Educação" value={match.matchFactors.education} />
+                        <FactorBar label="Contrato" value={match.matchFactors.contract} />
+                        <FactorBar label="Personalidade" value={match.matchFactors.personality} />
+                        <FactorBar label="Histórico" value={match.matchFactors.history} />
+                        <FactorBar label="Bidirecional" value={match.matchFactors.bidirectional} />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* All skills */}
+                  {skills.length > 4 && (
+                    <div>
+                      <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Todas as Skills</p>
+                      <div className="flex flex-wrap gap-1">
+                        {skills.map((skill: string) => (
+                          <span key={skill} className="px-2 py-0.5 text-xs bg-blue-50 text-blue-700 rounded border border-blue-100">
+                            {skill}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </Card>
+          );
+        })}
       </div>
+
+      {/* Show more button */}
+      {!showAll && filteredMatches.length > 10 && (
+        <Button
+          variant="outline"
+          size="sm"
+          className="w-full mt-3"
+          onClick={() => setShowAll(true)}
+        >
+          Ver todos os {filteredMatches.length} candidatos
+        </Button>
+      )}
+      {showAll && filteredMatches.length > 10 && (
+        <Button
+          variant="ghost"
+          size="sm"
+          className="w-full mt-3 text-gray-500"
+          onClick={() => setShowAll(false)}
+        >
+          Mostrar menos
+        </Button>
+      )}
+
+      {/* Floating selection action bar */}
+      {selectedIds.size > 0 && (
+        <div className="sticky bottom-4 mt-4 z-10">
+          <div className="bg-gray-900 text-white rounded-lg shadow-lg px-4 py-3 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <CheckCircle className="h-4 w-4 text-green-400" />
+              <span className="text-sm font-medium">
+                {selectedIds.size} candidato{selectedIds.size !== 1 ? 's' : ''} selecionado{selectedIds.size !== 1 ? 's' : ''}
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-gray-300 hover:text-white hover:bg-gray-800"
+                onClick={() => setSelectedIds(new Set())}
+              >
+                Limpar
+              </Button>
+              <Button
+                size="sm"
+                className="bg-green-600 hover:bg-green-700 text-white"
+                onClick={handleCreateGroup}
+                disabled={createBatchMutation.isPending}
+              >
+                {createBatchMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+                ) : (
+                  <UserPlus className="h-4 w-4 mr-1.5" />
+                )}
+                Adicionar ao Grupo
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -168,6 +497,7 @@ function MatchingStatusCard({ jobId }: { jobId: string }) {
   const triggerMatchingMutation = trpc.job.triggerMatchingForAgency.useMutation({
     onSuccess: () => {
       utils.job.getMatchingProgress.invalidate({ jobId });
+      utils.job.getMatchesForJob.invalidate({ jobId });
     },
   });
 

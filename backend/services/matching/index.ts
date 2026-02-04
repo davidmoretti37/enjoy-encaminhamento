@@ -4,8 +4,9 @@
 
 import { supabaseAdmin } from '../../supabase';
 import {
-  calculateAllFactors,
+  calculateAllFactorsBatch,
   calculateDataCompleteness,
+  batchFetchCandidateData,
 } from './softScoring';
 import {
   getWeightProfile,
@@ -16,6 +17,7 @@ import {
 import {
   reRankCandidatesBatch,
   filterForReRanking,
+  preScreenCandidatesListwise,
 } from './llmReranking';
 import { generateExplanation } from './explainability';
 
@@ -36,6 +38,9 @@ export interface MatchingConfig {
   enableLLMReranking?: boolean;
   llmRerankThreshold?: number;
   llmRerankLimit?: number;
+
+  // Search settings
+  useHybridSearch?: boolean;
 
   // Output settings
   includeExplanations?: boolean;
@@ -74,8 +79,9 @@ const DEFAULT_CONFIG: Required<MatchingConfig> = {
   weightProfile: 'balanced',
   customWeights: {},
   enableLLMReranking: true,
-  llmRerankThreshold: 60,
-  llmRerankLimit: 50,
+  llmRerankThreshold: 65,
+  llmRerankLimit: 15,
+  useHybridSearch: true,
   includeExplanations: true,
   limit: 50,
 };
@@ -88,13 +94,16 @@ const ALGORITHM_VERSION = 'v2.0';
 
 async function retrieveCandidatesBroad(
   jobId: string,
-  options: { threshold: number; limit: number }
+  options: { threshold: number; limit: number; useHybridSearch?: boolean }
 ): Promise<CandidateData[]> {
-  const { data, error } = await supabaseAdmin.rpc('match_candidates_broad', {
+  const rpcName = options.useHybridSearch ? 'match_candidates_hybrid' : 'match_candidates_broad';
+  const rpcParams: Record<string, any> = {
     job_id_input: jobId,
     match_threshold: options.threshold,
     match_count: options.limit,
-  });
+  };
+
+  const { data, error } = await supabaseAdmin.rpc(rpcName, rpcParams);
 
   if (error) {
     console.error('Vector retrieval error:', error);
@@ -155,13 +164,17 @@ async function scoreCandidates(
 ): Promise<Array<{ candidate: CandidateData; factors: FactorScores; compositeScore: number }>> {
   const results: Array<{ candidate: CandidateData; factors: FactorScores; compositeScore: number }> = [];
 
+  // Batch-fetch all candidate data upfront (3 queries instead of ~1,500)
+  const candidateIds = candidates.map(c => c.id);
+  const batchedData = await batchFetchCandidateData(candidateIds);
+
   // Process candidates in parallel batches
   const batchSize = 20;
   for (let i = 0; i < candidates.length; i += batchSize) {
     const batch = candidates.slice(i, i + batchSize);
     const batchResults = await Promise.all(
       batch.map(async (candidate) => {
-        const factors = await calculateAllFactors(candidate, job);
+        const factors = await calculateAllFactorsBatch(candidate, job, batchedData);
         const compositeScore = calculateCompositeScore(factors, weights);
         return { candidate, factors, compositeScore };
       })
@@ -190,16 +203,33 @@ async function reRankTopCandidates(
     compositeScore: sc.compositeScore,
   }));
 
-  const filtered = filterForReRanking(candidatesForReRank, {
+  // Get a broader pool for pre-screening (2x the limit)
+  const preScreenLimit = Math.min(options.limit * 2, 30);
+  const broadPool = filterForReRanking(candidatesForReRank, {
     minScore: options.threshold,
-    maxCount: options.limit,
+    maxCount: preScreenLimit,
   });
 
-  if (filtered.length === 0) {
+  if (broadPool.length === 0) {
     return new Map();
   }
 
-  return await reRankCandidatesBatch(filtered, job, {
+  // If pool is small enough, skip pre-screening
+  let finalCandidates = broadPool;
+  if (broadPool.length > options.limit) {
+    // Listwise pre-screening: 1 LLM call to pick the best candidates
+    const selectedIds = await preScreenCandidatesListwise(broadPool, job, options.limit);
+    const selectedSet = new Set(selectedIds);
+    finalCandidates = broadPool.filter(c => selectedSet.has(c.candidate.id));
+
+    // Fallback: if fewer than expected were selected, fill from top by score
+    if (finalCandidates.length < options.limit) {
+      const remaining = broadPool.filter(c => !selectedSet.has(c.candidate.id));
+      finalCandidates.push(...remaining.slice(0, options.limit - finalCandidates.length));
+    }
+  }
+
+  return await reRankCandidatesBatch(finalCandidates, job, {
     concurrency: 5,
     onProgress: (completed, total) => {
       console.log(`LLM re-ranking progress: ${completed}/${total}`);
@@ -262,6 +292,7 @@ export async function runMatchingPipeline(
   const candidates = await retrieveCandidatesBroad(jobId, {
     threshold: cfg.vectorThreshold,
     limit: cfg.vectorRecallLimit,
+    useHybridSearch: cfg.useHybridSearch,
   });
   console.log(`[Matching] Retrieved ${candidates.length} candidates`);
 

@@ -256,6 +256,70 @@ export function filterForReRanking(
 }
 
 // ============================================
+// LISTWISE PRE-SCREENING
+// ============================================
+
+const LISTWISE_SYSTEM_PROMPT = `Você é um especialista em recrutamento. Sua tarefa é analisar uma lista de candidatos resumidos e selecionar os melhores para análise detalhada.
+
+Responda APENAS em JSON válido no formato:
+{"selected": ["id1", "id2", ...]}`;
+
+/**
+ * Pre-screen candidates using a single LLM call with compact profiles.
+ * Selects the top N candidates from a larger pool for detailed re-ranking.
+ */
+export async function preScreenCandidatesListwise(
+  candidates: CandidateForReRank[],
+  job: JobData,
+  selectCount: number = 15
+): Promise<string[]> {
+  try {
+    const candidateLines = candidates.map((c, i) => {
+      const cand = c.candidate;
+      return `${i + 1}. ID: ${cand.id} | Score: ${c.compositeScore.toFixed(0)} | Skills: ${(cand.skills || []).slice(0, 5).join(', ') || 'N/A'} | Loc: ${cand.city || '?'}/${cand.state || '?'} | Ed: ${cand.education_level || 'N/A'}`;
+    }).join('\n');
+
+    const userPrompt = `## VAGA: ${job.title}
+Tipo: ${job.contract_type} | Local: ${job.location || 'N/A'} | Trabalho: ${job.work_type}
+Habilidades: ${(job.required_skills || []).join(', ') || 'N/A'}
+Educação mínima: ${job.min_education_level || 'N/A'}
+
+## CANDIDATOS (${candidates.length} total):
+${candidateLines}
+
+Selecione os ${selectCount} melhores candidatos para análise detalhada. Considere compatibilidade de habilidades, localização e educação. Retorne APENAS o JSON com os IDs selecionados.`;
+
+    const response = await generateWithGroq(
+      [
+        { role: 'system', content: LISTWISE_SYSTEM_PROMPT },
+        { role: 'user', content: userPrompt },
+      ],
+      { temperature: 0.2, maxTokens: 500 }
+    );
+
+    if (!response) {
+      return candidates.slice(0, selectCount).map(c => c.candidate.id);
+    }
+
+    let jsonStr = response.trim();
+    if (jsonStr.startsWith('```json')) jsonStr = jsonStr.slice(7);
+    if (jsonStr.startsWith('```')) jsonStr = jsonStr.slice(3);
+    if (jsonStr.endsWith('```')) jsonStr = jsonStr.slice(0, -3);
+    jsonStr = jsonStr.trim();
+
+    const parsed = JSON.parse(jsonStr);
+    if (Array.isArray(parsed.selected) && parsed.selected.length > 0) {
+      return parsed.selected.slice(0, selectCount);
+    }
+
+    return candidates.slice(0, selectCount).map(c => c.candidate.id);
+  } catch (error) {
+    console.warn('Listwise pre-screening failed, falling back to top by score:', error);
+    return candidates.slice(0, selectCount).map(c => c.candidate.id);
+  }
+}
+
+// ============================================
 // HELPER FUNCTIONS
 // ============================================
 

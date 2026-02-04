@@ -356,32 +356,34 @@ export async function getCandidatesByAffiliateId(
   affiliateId: string,
   agencyId?: string | null
 ): Promise<any[]> {
-  let targetCity: string | null = null;
-
+  // If a specific agency is selected, filter by agency_id
   if (agencyId) {
-    const { data: agency } = await supabaseAdmin
-      .from("agencies")
-      .select("city")
-      .eq("id", agencyId)
-      .single();
-    targetCity = agency?.city || null;
-  } else {
-    const { data: affiliate } = await supabaseAdmin
-      .from("affiliates")
-      .select("city")
-      .eq("id", affiliateId)
-      .single();
-    targetCity = affiliate?.city || null;
+    const { data, error } = await supabaseAdmin
+      .from("candidates")
+      .select("*")
+      .eq("agency_id", agencyId)
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("Error fetching affiliate candidates:", error);
+      return [];
+    }
+    return data || [];
   }
 
-  if (!targetCity) {
-    return [];
-  }
+  // Otherwise, get all agencies under this affiliate and fetch all their candidates
+  const { data: agencies } = await supabaseAdmin
+    .from("agencies")
+    .select("id")
+    .eq("affiliate_id", affiliateId);
+
+  const agencyIds = (agencies || []).map(a => a.id);
+  if (agencyIds.length === 0) return [];
 
   const { data, error } = await supabaseAdmin
     .from("candidates")
     .select("*")
-    .eq("city", targetCity)
+    .in("agency_id", agencyIds)
     .order("created_at", { ascending: false });
 
   if (error) {
@@ -409,7 +411,7 @@ export async function getJobsByAffiliateId(
         .select(
           `
           *,
-          company:companies!jobs_company_id_fkey (
+          company:companies (
             id,
             company_name,
             affiliate_id,
@@ -434,7 +436,7 @@ export async function getJobsByAffiliateId(
     .select(
       `
       *,
-      company:companies!jobs_company_id_fkey (
+      company:companies (
         id,
         company_name,
         affiliate_id
@@ -477,7 +479,7 @@ export async function getApplicationsByAffiliateId(
       job:jobs!applications_job_id_fkey (
         id,
         title,
-        company:companies!jobs_company_id_fkey (
+        company:companies (
           id,
           company_name
         )
@@ -520,7 +522,7 @@ export async function getContractsByAffiliateId(
         job:jobs!applications_job_id_fkey (
           id,
           title,
-          company:companies!jobs_company_id_fkey (
+          company:companies (
             id,
             company_name
           )
@@ -565,7 +567,7 @@ export async function getPaymentsByAffiliateId(
           job:jobs!applications_job_id_fkey (
             id,
             title,
-            company:companies!jobs_company_id_fkey (
+            company:companies (
               id,
               company_name
             )

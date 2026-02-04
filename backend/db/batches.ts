@@ -251,6 +251,39 @@ export async function getBatchesByAgencyId(
 }
 
 /**
+ * Get batches for multiple agencies (for affiliate view)
+ */
+export async function getBatchesByAgencyIds(
+  agencyIds: string[],
+  status?: string
+): Promise<any[]> {
+  if (agencyIds.length === 0) return [];
+
+  let query = supabase
+    .from("candidate_batches")
+    .select(`
+      *,
+      job:jobs(id, title, contract_type, status),
+      company:companies(id, company_name, email),
+      agency:agencies(id, name)
+    `)
+    .in("agency_id", agencyIds);
+
+  if (status) {
+    query = query.eq("status", status);
+  }
+
+  const { data, error } = await query.order("created_at", { ascending: false });
+
+  if (error) {
+    console.error("[Database] Failed to get batches by agency IDs:", error);
+    return [];
+  }
+
+  return data || [];
+}
+
+/**
  * Unlock a batch (called after payment)
  */
 export async function unlockBatch(batchId: string): Promise<void> {

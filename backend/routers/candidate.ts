@@ -502,4 +502,17 @@ export const candidateRouter = router({
         similarity: r.similarity,
       }));
     }),
+
+  // Get candidates by IDs (for batch/group display)
+  getByIds: protectedProcedure
+    .input(z.object({
+      ids: z.array(z.string().uuid()).min(1).max(100),
+    }))
+    .query(async ({ ctx, input }) => {
+      if (ctx.user.role !== 'admin' && ctx.user.role !== 'agency') {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Acesso negado' });
+      }
+      const candidates = await db.getCandidatesByIds(input.ids);
+      return candidates;
+    }),
 });

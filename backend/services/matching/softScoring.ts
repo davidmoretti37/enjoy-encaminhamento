@@ -72,6 +72,18 @@ export interface FactorScores {
   bidirectional: number;
 }
 
+export interface BatchedCandidateData {
+  contracts: Map<string, Array<{ status: string; created_at: string }>>;
+  feedback: Map<string, Array<{
+    performance: number | null;
+    punctuality: number | null;
+    communication: number | null;
+    teamwork: number | null;
+    technical_skills: number | null;
+  }>>;
+  preferences: Map<string, CandidatePreferences & { preferred_states?: string[]; willing_to_relocate?: boolean; salary_negotiable?: boolean }>;
+}
+
 // ============================================
 // EDUCATION LEVEL MAPPING
 // ============================================
@@ -568,8 +580,175 @@ export function calculateDataCompleteness(candidate: CandidateData): number {
   return Math.round((filledFields / fields.length) * 100);
 }
 
+// ============================================
+// BATCH DATA FETCHING
+// ============================================
+
 /**
- * Calculate all factor scores for a candidate-job pair
+ * Fetch contracts, feedback, and preferences for all candidates in 3 queries.
+ * Replaces ~1,500 individual queries with 3 bulk queries.
+ */
+export async function batchFetchCandidateData(candidateIds: string[]): Promise<BatchedCandidateData> {
+  if (candidateIds.length === 0) {
+    return { contracts: new Map(), feedback: new Map(), preferences: new Map() };
+  }
+
+  const [contractsResult, feedbackResult, prefsResult] = await Promise.all([
+    supabaseAdmin
+      .from('contracts')
+      .select('candidate_id, status, created_at')
+      .in('candidate_id', candidateIds),
+    supabaseAdmin
+      .from('feedback')
+      .select('candidate_id, performance, punctuality, communication, teamwork, technical_skills')
+      .in('candidate_id', candidateIds),
+    supabaseAdmin
+      .from('candidate_preferences')
+      .select('*')
+      .in('candidate_id', candidateIds),
+  ]);
+
+  // Group contracts by candidate_id
+  const contracts = new Map<string, Array<{ status: string; created_at: string }>>();
+  for (const row of contractsResult.data || []) {
+    const list = contracts.get(row.candidate_id) || [];
+    list.push({ status: row.status, created_at: row.created_at });
+    contracts.set(row.candidate_id, list);
+  }
+
+  // Group feedback by candidate_id
+  const feedback = new Map<string, Array<any>>();
+  for (const row of feedbackResult.data || []) {
+    const list = feedback.get(row.candidate_id) || [];
+    list.push(row);
+    feedback.set(row.candidate_id, list);
+  }
+
+  // Map preferences by candidate_id (one per candidate)
+  const preferences = new Map<string, any>();
+  for (const row of prefsResult.data || []) {
+    preferences.set(row.candidate_id, row);
+  }
+
+  return { contracts, feedback, preferences };
+}
+
+/**
+ * Score historical performance using pre-fetched batch data
+ */
+export function scoreHistoricalPerformanceFromBatch(
+  candidateId: string,
+  batchedData: BatchedCandidateData
+): number {
+  const candidateContracts = batchedData.contracts.get(candidateId);
+  if (!candidateContracts || candidateContracts.length === 0) {
+    return 70; // No history = neutral score
+  }
+
+  const completed = candidateContracts.filter(c => c.status === 'completed').length;
+  const terminated = candidateContracts.filter(c => c.status === 'terminated').length;
+  const total = candidateContracts.length;
+
+  if (total === 0) return 70;
+
+  const completionRate = completed / total;
+  const terminationPenalty = (terminated / total) * 30;
+  let score = 70 + (completionRate * 30) - terminationPenalty;
+
+  const candidateFeedback = batchedData.feedback.get(candidateId);
+  if (candidateFeedback && candidateFeedback.length > 0) {
+    let totalFeedbackScore = 0;
+    let feedbackCount = 0;
+
+    for (const f of candidateFeedback) {
+      const scores = [f.performance, f.punctuality, f.communication, f.teamwork, f.technical_skills];
+      for (const s of scores) {
+        if (s != null) {
+          totalFeedbackScore += s;
+          feedbackCount++;
+        }
+      }
+    }
+
+    if (feedbackCount > 0) {
+      const avgFeedback = totalFeedbackScore / feedbackCount;
+      const feedbackBonus = ((avgFeedback - 3) / 2) * 20;
+      score += feedbackBonus;
+    }
+  }
+
+  return Math.max(0, Math.min(100, Math.round(score)));
+}
+
+/**
+ * Score bidirectional match using pre-fetched batch data
+ */
+export function scoreBidirectionalMatchFromBatch(
+  candidateId: string,
+  candidate: CandidateData,
+  job: JobData,
+  batchedData: BatchedCandidateData
+): number {
+  let score = 70;
+
+  if (candidate.preferred_work_type) {
+    if (candidate.preferred_work_type === job.work_type) {
+      score += 15;
+    } else if (job.work_type === 'hibrido') {
+      score += 10;
+    } else {
+      score -= 10;
+    }
+  }
+
+  const prefs = batchedData.preferences.get(candidateId);
+  if (prefs) {
+    if (prefs.preferred_states?.length > 0 && job.location) {
+      const jobState = job.location.split(',')[1]?.trim().toUpperCase();
+      if (jobState && prefs.preferred_states.includes(jobState)) {
+        score += 10;
+      } else if (!prefs.willing_to_relocate) {
+        score -= 15;
+      }
+    }
+
+    if (job.salary && prefs.min_salary) {
+      if (job.salary >= prefs.min_salary) {
+        score += 10;
+      } else if (!prefs.salary_negotiable) {
+        score -= 15;
+      }
+    }
+  }
+
+  return Math.max(0, Math.min(100, Math.round(score)));
+}
+
+/**
+ * Calculate all factor scores using pre-fetched batch data
+ */
+export async function calculateAllFactorsBatch(
+  candidate: CandidateData,
+  job: JobData,
+  batchedData: BatchedCandidateData
+): Promise<FactorScores> {
+  const skillsScore = await scoreSkills(candidate, job);
+
+  return {
+    semantic: scoreSemanticSimilarity(candidate),
+    skills: skillsScore,
+    location: scoreLocation(candidate, job),
+    education: scoreEducation(candidate, job),
+    experience: scoreExperience(candidate, job),
+    contract: scoreContractCompatibility(candidate, job),
+    personality: scorePersonalityFit(candidate, job),
+    history: scoreHistoricalPerformanceFromBatch(candidate.id, batchedData),
+    bidirectional: scoreBidirectionalMatchFromBatch(candidate.id, candidate, job, batchedData),
+  };
+}
+
+/**
+ * Calculate all factor scores for a candidate-job pair (original, non-batched)
  */
 export async function calculateAllFactors(
   candidate: CandidateData,

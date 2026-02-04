@@ -3,7 +3,7 @@
 import { z } from "zod";
 import { router } from "../_core/trpc";
 import { TRPCError } from "@trpc/server";
-import { agencyProcedure, companyProcedure } from "./procedures";
+import { agencyProcedure, companyProcedure, adminProcedure } from "./procedures";
 import * as db from "../db";
 import * as batchDb from "../db/batches";
 
@@ -61,7 +61,7 @@ export const batchRouter = router({
   createDraftBatch: agencyProcedure
     .input(z.object({
       jobId: z.string().uuid(),
-      candidateIds: z.array(z.string().uuid()).min(5).max(15),
+      candidateIds: z.array(z.string().uuid()).min(1).max(50),
       unlockFee: z.number().positive().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
@@ -269,6 +269,38 @@ export const batchRouter = router({
 
       await batchDb.cancelBatch(input.batchId, input.reason);
       return { success: true };
+    }),
+
+  // ============================================
+  // AFFILIATE ENDPOINTS
+  // ============================================
+
+  /**
+   * Get all batches for agencies under an affiliate
+   */
+  getAffiliateBatches: adminProcedure
+    .input(z.object({
+      agencyId: z.string().uuid().nullable().optional(),
+      status: z.enum(["draft", "sent", "unlocked", "meeting_scheduled", "completed", "cancelled"]).optional(),
+    }).optional())
+    .query(async ({ ctx, input }) => {
+      const affiliate = await db.getAffiliateByUserId(ctx.user.id);
+      if (!affiliate) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Affiliate not found" });
+      }
+
+      // If specific agency selected, get batches for that agency only
+      if (input?.agencyId) {
+        const batches = await batchDb.getBatchesByAgencyId(input.agencyId, input?.status);
+        return batches;
+      }
+
+      // Otherwise, get all agencies under this affiliate
+      const agencies = await db.getAgenciesByAffiliateId(affiliate.id);
+      const agencyIds = agencies.map((a: any) => a.id);
+
+      const batches = await batchDb.getBatchesByAgencyIds(agencyIds, input?.status);
+      return batches;
     }),
 
   // ============================================
