@@ -26,6 +26,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     cookies: parseCookies(req.headers.cookie || ""),
   });
 
+  // Strip /api/trpc prefix so tRPC can resolve the procedure name
+  expressReq.url = expressReq.url?.replace(/^\/api\/trpc/, '') || '/';
+
   return new Promise<void>((resolve, reject) => {
     trpcHandler(expressReq as any, res as any, (err) => {
       if (err) {
