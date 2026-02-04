@@ -125,6 +125,7 @@ export async function getCompanyFullHistory(
   let jobs: any[] = [];
   let phoneNumbers: { label: string; phone_number: string }[] = [];
   let companyEmails: { label: string; email: string; is_primary: boolean }[] = [];
+  let signedContratoInicial: any[] = [];
   if (company?.id) {
     const { data: companyContracts } = await supabaseAdmin
       .from("contracts")
@@ -165,6 +166,27 @@ export async function getCompanyFullHistory(
       .order("created_at", { ascending: true });
     if (!emailsError) {
       companyEmails = companyEmailsData || [];
+    }
+
+    // Fetch signed contrato_inicial documents
+    const { data: signedDocs } = await supabaseAdmin
+      .from("signed_documents")
+      .select("*, template:agency_document_templates(id, name, file_url, category)")
+      .eq("company_id", company.id)
+      .eq("category", "contrato_inicial")
+      .order("signed_at", { ascending: false });
+    signedContratoInicial = signedDocs || [];
+
+    // Fallback: if no docs found by company_id, try by signer_user_id
+    // (handles case where company_id was null at signing time)
+    if (signedContratoInicial.length === 0 && company.user_id) {
+      const { data: docsByUser } = await supabaseAdmin
+        .from("signed_documents")
+        .select("*, template:agency_document_templates(id, name, file_url, category)")
+        .eq("signer_user_id", company.user_id)
+        .eq("category", "contrato_inicial")
+        .order("signed_at", { ascending: false });
+      signedContratoInicial = docsByUser || [];
     }
   }
 
@@ -268,6 +290,7 @@ export async function getCompanyFullHistory(
     agencyContract,
     phoneNumbers,
     companyEmails,
+    signedContratoInicial,
   };
 }
 
@@ -435,10 +458,6 @@ export async function getCompanyFormsByAdmin(
     .select("*")
     .eq("admin_id", adminId)
     .order("created_at", { ascending: false });
-
-  if (agencyId) {
-    query = query.eq("agency_id", agencyId);
-  }
 
   const { data, error } = await query;
 
@@ -984,7 +1003,7 @@ export async function signMeetingContract(input: {
 export async function getAdminAgencyContext(adminId: string): Promise<string | null> {
   const { data, error } = await supabaseAdmin
     .from("admin_agency_context")
-    .select("current_agency_id")
+    .select("agency_id")
     .eq("admin_id", adminId)
     .single();
 
@@ -992,7 +1011,7 @@ export async function getAdminAgencyContext(adminId: string): Promise<string | n
     console.error("Error fetching admin agency context:", error);
   }
 
-  return data?.current_agency_id || null;
+  return data?.agency_id || null;
 }
 
 export async function setAdminAgencyContext(
@@ -1002,7 +1021,7 @@ export async function setAdminAgencyContext(
   const { error } = await supabaseAdmin.from("admin_agency_context").upsert(
     {
       admin_id: adminId,
-      current_agency_id: agencyId,
+      agency_id: agencyId,
       updated_at: new Date().toISOString(),
     },
     {

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import DashboardLayout from "@/components/DashboardLayout";
 import ClassicLoader from "@/components/ui/ClassicLoader";
@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { trpc } from "@/lib/trpc";
 import {
   DollarSign,
@@ -15,8 +16,12 @@ import {
   CheckCircle,
   Clock,
   Copy,
-  FileText,
-  QrCode
+  Upload,
+  QrCode,
+  ChevronDown,
+  ChevronUp,
+  Image,
+  Loader2
 } from "lucide-react";
 import { Link } from "wouter";
 import { toast } from "sonner";
@@ -27,6 +32,8 @@ export default function CompanyPayments() {
   const { user, loading: authLoading } = useAuth();
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
   const [selectedPayment, setSelectedPayment] = useState<any>(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const utils = trpc.useUtils();
 
@@ -50,15 +57,15 @@ export default function CompanyPayments() {
     { enabled: !!user && user.role === 'company' }
   );
 
-  const confirmPaymentMutation = trpc.company.confirmPaymentMade.useMutation({
+  const uploadReceiptMutation = trpc.company.uploadPaymentReceipt.useMutation({
     onSuccess: () => {
-      toast.success('Pagamento informado! Nossa equipe irá confirmar.');
+      toast.success('Comprovante enviado! Estamos verificando...');
       setPaymentModalOpen(false);
       utils.company.getPayments.invalidate();
       utils.company.getPaymentStats.invalidate();
     },
     onError: (error) => {
-      toast.error(error.message || 'Erro ao informar pagamento');
+      toast.error(error.message || 'Erro ao enviar comprovante');
     },
   });
 
@@ -98,10 +105,58 @@ export default function CompanyPayments() {
     toast.success('Chave PIX copiada!');
   };
 
-  const handleConfirmPayment = () => {
-    if (selectedPayment) {
-      confirmPaymentMutation.mutate({ paymentId: selectedPayment.id });
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !selectedPayment) return;
+
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error('Arquivo muito grande. Máximo 10MB.');
+      return;
     }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const base64 = (reader.result as string).split(',')[1];
+      uploadReceiptMutation.mutate({
+        paymentId: selectedPayment.id,
+        fileName: file.name,
+        fileData: base64,
+        contentType: file.type,
+      });
+    };
+    reader.readAsDataURL(file);
+
+    // Reset file input
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const formatAmount = (cents: number) => {
+    return (cents / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
+  };
+
+  const getReceiptStatusBadge = (payment: any) => {
+    if (!payment.receipt_status) return null;
+    switch (payment.receipt_status) {
+      case 'pending-review':
+        return <Badge className="bg-yellow-500">Em análise</Badge>;
+      case 'verified':
+        return <Badge className="bg-green-500">Verificado</Badge>;
+      case 'rejected':
+        return <Badge className="bg-red-500">Rejeitado</Badge>;
+      default:
+        return null;
+    }
+  };
+
+  const getPaymentTypeLabel = (type: string) => {
+    const labels: Record<string, string> = {
+      'monthly-fee': 'Mensalidade',
+      'insurance-fee': 'Seguro Estágio',
+      'setup-fee': 'Taxa Inicial',
+      'penalty': 'Multa',
+      'refund': 'Reembolso',
+    };
+    return labels[type] || type;
   };
 
   const isLoading = statsLoading || overdueLoading || upcomingLoading;
@@ -169,18 +224,22 @@ export default function CompanyPayments() {
               {overduePayments.map((payment: any) => (
                 <div key={payment.id} className="border border-red-200 rounded-lg p-4 bg-red-50 flex items-center justify-between">
                   <div>
-                    <p className="font-medium text-gray-900">
-                      {payment.contract?.candidate?.full_name} • {payment.period || format(new Date(payment.due_date), 'MMM/yyyy', { locale: ptBR })}
-                    </p>
+                    <div className="flex items-center gap-2 mb-1">
+                      <p className="font-medium text-gray-900">
+                        {payment.contract?.candidate?.full_name} • {payment.billing_period || format(new Date(payment.due_date), 'MMM/yyyy', { locale: ptBR })}
+                      </p>
+                      <Badge variant="outline" className="text-xs">{getPaymentTypeLabel(payment.payment_type)}</Badge>
+                      {getReceiptStatusBadge(payment)}
+                    </div>
                     <p className="text-lg font-bold text-red-700">
-                      R$ {payment.amount?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      R$ {formatAmount(payment.amount)}
                     </p>
                     <p className="text-sm text-red-600">
                       Venceu em: {format(new Date(payment.due_date), 'dd/MM/yyyy', { locale: ptBR })} ({Math.abs(differenceInDays(new Date(payment.due_date), new Date()))} dias atrás)
                     </p>
                   </div>
                   <Button onClick={() => handleOpenPayment(payment)}>
-                    Pagar
+                    {payment.receipt_url ? 'Ver Detalhes' : 'Pagar'}
                   </Button>
                 </div>
               ))}
@@ -200,11 +259,14 @@ export default function CompanyPayments() {
               {upcomingPayments.map((payment: any) => (
                 <div key={payment.id} className="border rounded-lg p-4 flex items-center justify-between hover:bg-gray-50 transition-colors">
                   <div>
-                    <p className="font-medium text-gray-900">
-                      {payment.contract?.candidate?.full_name} • {payment.period || format(new Date(payment.due_date), 'MMM/yyyy', { locale: ptBR })}
-                    </p>
+                    <div className="flex items-center gap-2 mb-1">
+                      <p className="font-medium text-gray-900">
+                        {payment.contract?.candidate?.full_name} • {payment.billing_period || format(new Date(payment.due_date), 'MMM/yyyy', { locale: ptBR })}
+                      </p>
+                      <Badge variant="outline" className="text-xs">{getPaymentTypeLabel(payment.payment_type)}</Badge>
+                    </div>
                     <p className="text-lg font-semibold text-gray-700">
-                      R$ {payment.amount?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      R$ {formatAmount(payment.amount)}
                     </p>
                     <p className="text-sm text-gray-500">
                       Vence em: {format(new Date(payment.due_date), 'dd/MM/yyyy', { locale: ptBR })} (em {differenceInDays(new Date(payment.due_date), new Date())} dias)
@@ -227,35 +289,43 @@ export default function CompanyPayments() {
           </div>
         )}
 
-        {/* Payment History */}
+        {/* Payment History - Collapsible */}
         {historyLoading ? null : paymentHistory && paymentHistory.length > 0 && (
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle className="text-lg">Histórico</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-2">
-                {paymentHistory.slice(0, 10).map((payment: any) => (
-                  <div key={payment.id} className="flex items-center justify-between py-2 border-b last:border-0">
-                    <div className="flex items-center gap-3">
-                      <CheckCircle className="h-4 w-4 text-green-600" />
-                      <span className="text-gray-700">
-                        {payment.contract?.candidate?.full_name} • {payment.period || format(new Date(payment.due_date), 'MMM/yyyy', { locale: ptBR })}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-4">
-                      <span className="font-medium">
-                        R$ {payment.amount?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                      </span>
-                      <span className="text-sm text-gray-500">
-                        Pago em {payment.paid_at && format(new Date(payment.paid_at), 'dd/MM', { locale: ptBR })}
-                      </span>
-                    </div>
+          <Collapsible open={historyOpen} onOpenChange={setHistoryOpen}>
+            <Card>
+              <CollapsibleTrigger asChild>
+                <CardHeader className="flex flex-row items-center justify-between cursor-pointer hover:bg-gray-50 transition-colors">
+                  <CardTitle className="text-lg">Histórico ({paymentHistory.length})</CardTitle>
+                  {historyOpen ? <ChevronUp className="h-5 w-5 text-gray-500" /> : <ChevronDown className="h-5 w-5 text-gray-500" />}
+                </CardHeader>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <CardContent>
+                  <div className="space-y-2">
+                    {paymentHistory.map((payment: any) => (
+                      <div key={payment.id} className="flex items-center justify-between py-2 border-b last:border-0">
+                        <div className="flex items-center gap-3">
+                          <CheckCircle className="h-4 w-4 text-green-600" />
+                          <span className="text-gray-700">
+                            {payment.contract?.candidate?.full_name} • {payment.billing_period || format(new Date(payment.due_date), 'MMM/yyyy', { locale: ptBR })}
+                          </span>
+                          <Badge variant="outline" className="text-xs">{getPaymentTypeLabel(payment.payment_type)}</Badge>
+                        </div>
+                        <div className="flex items-center gap-4">
+                          <span className="font-medium">
+                            R$ {formatAmount(payment.amount)}
+                          </span>
+                          <span className="text-sm text-gray-500">
+                            Pago em {payment.paid_at && format(new Date(payment.paid_at), 'dd/MM', { locale: ptBR })}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+                </CardContent>
+              </CollapsibleContent>
+            </Card>
+          </Collapsible>
         )}
 
         {/* Payment Modal */}
@@ -264,14 +334,15 @@ export default function CompanyPayments() {
             <DialogHeader>
               <DialogTitle>Pagamento</DialogTitle>
               <DialogDescription>
-                {selectedPayment?.contract?.candidate?.full_name} • {selectedPayment?.period || (selectedPayment?.due_date && format(new Date(selectedPayment.due_date), 'MMM/yyyy', { locale: ptBR }))}
+                {selectedPayment?.contract?.candidate?.full_name} • {selectedPayment?.billing_period || (selectedPayment?.due_date && format(new Date(selectedPayment.due_date), 'MMM/yyyy', { locale: ptBR }))}
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-6 py-4">
               <div className="text-center">
                 <p className="text-3xl font-bold text-gray-900">
-                  R$ {selectedPayment?.amount?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  R$ {selectedPayment?.amount ? formatAmount(selectedPayment.amount) : '0,00'}
                 </p>
+                <Badge variant="outline" className="mt-1">{selectedPayment?.payment_type && getPaymentTypeLabel(selectedPayment.payment_type)}</Badge>
               </div>
 
               <Separator />
@@ -293,33 +364,56 @@ export default function CompanyPayments() {
 
               <Separator />
 
-              {/* Boleto */}
-              <div>
-                <h4 className="font-semibold mb-3 flex items-center gap-2">
-                  <FileText className="h-4 w-4" />
-                  Boleto
+              {/* Receipt Upload */}
+              <div className="space-y-3">
+                <h4 className="font-semibold flex items-center gap-2">
+                  <Upload className="h-4 w-4" />
+                  Enviar Comprovante
                 </h4>
-                <Button variant="outline" className="w-full">
-                  Gerar Boleto
-                </Button>
-              </div>
 
-              <Separator />
+                {/* Show existing receipt if uploaded */}
+                {selectedPayment?.receipt_url && (
+                  <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+                    <Image className="h-5 w-5 text-gray-500" />
+                    <span className="text-sm text-gray-600 flex-1">Comprovante enviado</span>
+                    {getReceiptStatusBadge(selectedPayment)}
+                  </div>
+                )}
 
-              {/* Confirm Payment */}
-              <div className="text-center">
-                <p className="text-sm text-gray-600 mb-2">Já pagou?</p>
-                <Button
-                  variant="secondary"
-                  className="w-full"
-                  onClick={handleConfirmPayment}
-                  disabled={confirmPaymentMutation.isPending}
-                >
-                  {confirmPaymentMutation.isPending ? 'Informando...' : 'Informar Pagamento'}
-                </Button>
-                <p className="text-xs text-gray-500 mt-1">
-                  (Nossa equipe irá confirmar)
-                </p>
+                {/* Upload area - show if no receipt or rejected */}
+                {(!selectedPayment?.receipt_url || selectedPayment?.receipt_status === 'rejected') && (
+                  <label className="flex flex-col items-center justify-center w-full h-28 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
+                    {uploadReceiptMutation.isPending ? (
+                      <Loader2 className="h-6 w-6 text-gray-400 animate-spin" />
+                    ) : (
+                      <>
+                        <Upload className="h-6 w-6 text-gray-400 mb-2" />
+                        <span className="text-sm text-gray-500">Clique para enviar comprovante</span>
+                        <span className="text-xs text-gray-400">PNG, JPG ou PDF (max 10MB)</span>
+                      </>
+                    )}
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      className="hidden"
+                      accept="image/*,.pdf"
+                      onChange={handleFileSelect}
+                      disabled={uploadReceiptMutation.isPending}
+                    />
+                  </label>
+                )}
+
+                {selectedPayment?.receipt_status === 'rejected' && (
+                  <p className="text-sm text-red-600">Comprovante rejeitado. Envie um novo comprovante.</p>
+                )}
+
+                {selectedPayment?.receipt_status === 'pending-review' && (
+                  <p className="text-sm text-yellow-600">Comprovante em análise. Aguarde a verificação.</p>
+                )}
+
+                {selectedPayment?.receipt_status === 'verified' && (
+                  <p className="text-sm text-green-600">Comprovante verificado com sucesso.</p>
+                )}
               </div>
             </div>
             <DialogFooter>

@@ -7,29 +7,20 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { trpc } from "@/lib/trpc";
 import {
-  Settings,
   User,
   Mail,
   Building,
   FileText,
-  Upload,
-  PenLine,
   Trash2,
-  FileCheck,
   Loader2,
-  Eye,
   LogOut,
+  Plus,
+  ExternalLink,
+  FolderOpen,
 } from "lucide-react";
 import { useState, useRef } from "react";
 import { toast } from "sonner";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from "@/components/ui/dialog";
+import { useAgencyContext } from "@/contexts/AgencyContext";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -41,65 +32,61 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 
+const CATEGORIES = [
+  { key: "contrato_inicial", label: "Contrato Inicial", description: "Documentos assinados pela empresa durante o onboarding" },
+  { key: "clt", label: "CLT", description: "Documentos para contratação CLT" },
+  { key: "estagio", label: "Estágio", description: "Documentos para contratação de estagiários" },
+  { key: "menor_aprendiz", label: "Jovem Aprendiz", description: "Documentos para contratação de jovens aprendizes" },
+] as const;
+
 export default function SettingsPage() {
   const { user, loading: authLoading, logout } = useAuth();
-  const [isUploading, setIsUploading] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [showEditorModal, setShowEditorModal] = useState(false);
-  const [showPreviewModal, setShowPreviewModal] = useState(false);
-  const [editorContent, setEditorContent] = useState("");
-  const [isSavingHtml, setIsSavingHtml] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const docFileInputRef = useRef<HTMLInputElement>(null);
+  const [docUploading, setDocUploading] = useState(false);
+  const [docDeleting, setDocDeleting] = useState<string | null>(null);
+  const [docDeleteConfirm, setDocDeleteConfirm] = useState<string | null>(null);
+  const [docName, setDocName] = useState("");
+  const [uploadCategory, setUploadCategory] = useState<string | null>(null);
 
   // Detect role
   const isAffiliate = user?.role === "admin";
   const isAgency = user?.role === "agency";
+  const { currentAgency, isAllAgenciesMode } = useAgencyContext();
 
-  // Get agency contract
-  const { data: contract, refetch: refetchContract, isLoading: contractLoading } = trpc.agency.getContract.useQuery(
-    undefined,
-    { enabled: isAffiliate || isAgency }
-  );
+  // For admins, only fetch when an agency is selected
+  const canManageDocs = isAgency || (isAffiliate && !isAllAgenciesMode);
 
-  // Upload PDF mutation
-  const uploadMutation = trpc.agency.uploadContractPdf.useMutation({
+  // Document template queries and mutations
+  const { data: docTemplates, refetch: refetchDocTemplates, isLoading: docTemplatesLoading } =
+    trpc.agency.getDocumentTemplates.useQuery(
+      {},
+      { enabled: canManageDocs }
+    );
+
+  const uploadDocMutation = trpc.agency.uploadDocumentTemplate.useMutation({
     onSuccess: () => {
-      toast.success("Contrato PDF enviado com sucesso!");
-      refetchContract();
-      setIsUploading(false);
+      toast.success("Documento adicionado com sucesso!");
+      refetchDocTemplates();
+      setDocUploading(false);
+      setDocName("");
+      setUploadCategory(null);
     },
-    onError: (error) => {
+    onError: (error: any) => {
       toast.error(`Erro ao enviar: ${error.message}`);
-      setIsUploading(false);
+      setDocUploading(false);
     },
   });
 
-  // Save HTML mutation
-  const saveHtmlMutation = trpc.agency.saveContractHtml.useMutation({
+  const deleteDocMutation = trpc.agency.deleteDocumentTemplate.useMutation({
     onSuccess: () => {
-      toast.success("Contrato salvo com sucesso!");
-      refetchContract();
-      setIsSavingHtml(false);
-      setShowEditorModal(false);
+      toast.success("Documento removido!");
+      refetchDocTemplates();
+      setDocDeleting(null);
+      setDocDeleteConfirm(null);
     },
-    onError: (error) => {
-      toast.error(`Erro ao salvar: ${error.message}`);
-      setIsSavingHtml(false);
-    },
-  });
-
-  // Delete contract mutation
-  const deleteMutation = trpc.agency.deleteContract.useMutation({
-    onSuccess: () => {
-      toast.success("Contrato removido!");
-      refetchContract();
-      setIsDeleting(false);
-      setShowDeleteConfirm(false);
-    },
-    onError: (error) => {
+    onError: (error: any) => {
       toast.error(`Erro ao remover: ${error.message}`);
-      setIsDeleting(false);
+      setDocDeleting(null);
     },
   });
 
@@ -123,9 +110,9 @@ export default function SettingsPage() {
     );
   }
 
-  const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleDocFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (!file) return;
+    if (!file || !uploadCategory) return;
 
     if (file.type !== "application/pdf") {
       toast.error("Por favor, selecione um arquivo PDF");
@@ -133,60 +120,56 @@ export default function SettingsPage() {
     }
 
     if (file.size > 10 * 1024 * 1024) {
-      toast.error("Arquivo muito grande. Maximo: 10MB");
+      toast.error("Arquivo muito grande. Máximo: 10MB");
       return;
     }
 
-    setIsUploading(true);
+    setDocUploading(true);
 
-    // Convert to base64
     const reader = new FileReader();
     reader.onload = async (e) => {
       const base64 = e.target?.result as string;
-      uploadMutation.mutate({
-        fileBase64: base64.split(",")[1], // Remove data:application/pdf;base64, prefix
+      uploadDocMutation.mutate({
+        category: uploadCategory as any,
+        name: docName.trim() || file.name.replace(/\.pdf$/i, ""),
+        fileBase64: base64.split(",")[1],
         fileName: file.name,
       });
     };
     reader.onerror = () => {
       toast.error("Erro ao ler arquivo");
-      setIsUploading(false);
+      setDocUploading(false);
     };
     reader.readAsDataURL(file);
 
-    // Reset input
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
+    if (docFileInputRef.current) {
+      docFileInputRef.current.value = "";
     }
   };
 
-  const handleSaveHtml = () => {
-    if (!editorContent.trim()) {
-      toast.error("O contrato não pode estar vazio");
-      return;
-    }
-    setIsSavingHtml(true);
-    saveHtmlMutation.mutate({ html: editorContent });
+  const triggerUpload = (category: string) => {
+    setUploadCategory(category);
+    // Small delay to ensure state is set before file dialog opens
+    setTimeout(() => docFileInputRef.current?.click(), 0);
   };
 
-  const handleDelete = () => {
-    setIsDeleting(true);
-    deleteMutation.mutate();
-  };
-
-  const openEditor = () => {
-    // Pre-fill with existing HTML content if available
-    if (contract?.type === "html" && contract.html) {
-      setEditorContent(contract.html);
-    } else {
-      setEditorContent("");
-    }
-    setShowEditorModal(true);
+  const getTemplatesForCategory = (category: string) => {
+    if (!docTemplates) return [];
+    return docTemplates.filter((t: any) => t.category === category);
   };
 
   return (
     <DashboardLayout>
       <div className="space-y-6 max-w-4xl mx-auto">
+        {/* Hidden file input shared across categories */}
+        <input
+          type="file"
+          accept=".pdf"
+          ref={docFileInputRef}
+          onChange={handleDocFileSelect}
+          className="hidden"
+        />
+
         {/* Header */}
         <div>
           <h1 className="text-2xl font-semibold text-gray-900">Configurações</h1>
@@ -228,117 +211,119 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
 
-        {/* Contract Section */}
+        {/* Document Templates Section — List View */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <FileText className="h-5 w-5" />
-              Contrato
+              <FolderOpen className="h-5 w-5" />
+              Documentos
             </CardTitle>
             <CardDescription>
-              Configure o contrato que sera enviado para empresas
+              {isAffiliate && currentAgency
+                ? `Documentos da agência: ${currentAgency.name}`
+                : "Gerencie os documentos que as empresas devem assinar em cada etapa"}
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            {contractLoading ? (
+          <CardContent className="space-y-6">
+            {isAffiliate && isAllAgenciesMode ? (
+              <div className="text-center py-8 text-muted-foreground">
+                <Building className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                <p className="text-sm">Selecione uma agência para gerenciar documentos</p>
+              </div>
+            ) : docTemplatesLoading ? (
               <div className="flex items-center justify-center py-8">
                 <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
               </div>
-            ) : contract ? (
-              // Contract exists
-              <div className="space-y-4">
-                <div className="flex items-center justify-between p-4 bg-green-50 rounded-lg border border-green-200">
-                  <div className="flex items-center gap-3">
-                    <FileCheck className="h-6 w-6 text-green-600" />
-                    <div>
-                      <p className="font-medium text-green-800">
-                        Contrato Configurado
-                      </p>
-                      <p className="text-sm text-green-600">
-                        Tipo: {contract.type === "pdf" ? "PDF" : "Texto formatado"}
-                      </p>
-                    </div>
-                  </div>
-                  <Badge className="bg-green-100 text-green-700">Ativo</Badge>
-                </div>
-
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    onClick={() => setShowPreviewModal(true)}
-                    className="gap-2"
-                  >
-                    <Eye className="h-4 w-4" />
-                    Visualizar
-                  </Button>
-                  {contract.type === "html" && (
-                    <Button
-                      variant="outline"
-                      onClick={openEditor}
-                      className="gap-2"
-                    >
-                      <PenLine className="h-4 w-4" />
-                      Editar
-                    </Button>
-                  )}
-                  <Button
-                    variant="outline"
-                    onClick={() => setShowDeleteConfirm(true)}
-                    className="gap-2 text-destructive hover:text-destructive"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                    Remover
-                  </Button>
-                </div>
-              </div>
             ) : (
-              // No contract
-              <div className="space-y-4">
-                <div className="flex items-center justify-between p-4 bg-yellow-50 rounded-lg border border-yellow-200">
-                  <div className="flex items-center gap-3">
-                    <FileText className="h-6 w-6 text-yellow-600" />
-                    <div>
-                      <p className="font-medium text-yellow-800">
-                        Nenhum Contrato Configurado
-                      </p>
-                      <p className="text-sm text-yellow-600">
-                        Configure um contrato para poder enviar para empresas
-                      </p>
+              CATEGORIES.map((cat, index) => {
+                const templates = getTemplatesForCategory(cat.key);
+                return (
+                  <div key={cat.key}>
+                    {index > 0 && <Separator className="mb-6" />}
+
+                    {/* Category header */}
+                    <div className="flex items-center justify-between mb-3">
+                      <div>
+                        <h3 className="text-sm font-semibold">{cat.label}</h3>
+                        <p className="text-xs text-muted-foreground">{cat.description}</p>
+                      </div>
+                      <Badge variant="outline" className="text-xs">
+                        {templates.length} {templates.length === 1 ? "documento" : "documentos"}
+                      </Badge>
+                    </div>
+
+                    {/* Document list */}
+                    {templates.length > 0 && (
+                      <div className="space-y-2 mb-3">
+                        {templates.map((template: any) => (
+                          <div
+                            key={template.id}
+                            className="flex items-center justify-between p-3 bg-white border rounded-lg"
+                          >
+                            <div className="flex items-center gap-3">
+                              <FileText className="h-4 w-4 text-blue-600" />
+                              <div>
+                                <p className="text-sm font-medium">{template.name}</p>
+                                <p className="text-xs text-muted-foreground">
+                                  {new Date(template.created_at).toLocaleDateString("pt-BR")}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => window.open(template.file_url, "_blank")}
+                              >
+                                <ExternalLink className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="text-destructive hover:text-destructive"
+                                onClick={() => setDocDeleteConfirm(template.id)}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Upload row */}
+                    <div className="flex items-end gap-3">
+                      <div className="flex-1">
+                        <input
+                          type="text"
+                          placeholder="Nome do documento (opcional)"
+                          value={uploadCategory === cat.key ? docName : ""}
+                          onFocus={() => setUploadCategory(cat.key)}
+                          onChange={(e) => {
+                            setUploadCategory(cat.key);
+                            setDocName(e.target.value);
+                          }}
+                          className="w-full px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                        />
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => triggerUpload(cat.key)}
+                        disabled={docUploading && uploadCategory === cat.key}
+                        className="gap-2 shrink-0"
+                      >
+                        {docUploading && uploadCategory === cat.key ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Plus className="h-4 w-4" />
+                        )}
+                        Adicionar PDF
+                      </Button>
                     </div>
                   </div>
-                </div>
-
-                <div className="flex gap-2">
-                  <input
-                    type="file"
-                    accept=".pdf"
-                    onChange={handleFileSelect}
-                    ref={fileInputRef}
-                    className="hidden"
-                  />
-                  <Button
-                    variant="outline"
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={isUploading}
-                    className="gap-2"
-                  >
-                    {isUploading ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Upload className="h-4 w-4" />
-                    )}
-                    Enviar PDF
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={openEditor}
-                    className="gap-2"
-                  >
-                    <PenLine className="h-4 w-4" />
-                    Criar Contrato
-                  </Button>
-                </div>
-              </div>
+                );
+              })
             )}
           </CardContent>
         </Card>
@@ -363,23 +348,28 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
 
-        {/* Delete Confirmation */}
-        <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+        {/* Document Template Delete Confirmation */}
+        <AlertDialog open={!!docDeleteConfirm} onOpenChange={(open) => !open && setDocDeleteConfirm(null)}>
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>Remover Contrato?</AlertDialogTitle>
+              <AlertDialogTitle>Remover Documento?</AlertDialogTitle>
               <AlertDialogDescription>
-                Esta ação não pode ser desfeita. O contrato será removido permanentemente.
+                Esta ação não pode ser desfeita. O documento será removido permanentemente.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel disabled={isDeleting}>Cancelar</AlertDialogCancel>
+              <AlertDialogCancel disabled={!!docDeleting}>Cancelar</AlertDialogCancel>
               <AlertDialogAction
-                onClick={handleDelete}
-                disabled={isDeleting}
+                onClick={() => {
+                  if (docDeleteConfirm) {
+                    setDocDeleting(docDeleteConfirm);
+                    deleteDocMutation.mutate({ templateId: docDeleteConfirm });
+                  }
+                }}
+                disabled={!!docDeleting}
                 className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               >
-                {isDeleting ? (
+                {docDeleting ? (
                   <Loader2 className="h-4 w-4 animate-spin mr-2" />
                 ) : null}
                 Remover
@@ -387,76 +377,6 @@ export default function SettingsPage() {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
-
-        {/* Rich Text Editor Modal */}
-        <Dialog open={showEditorModal} onOpenChange={setShowEditorModal}>
-          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>Criar Contrato</DialogTitle>
-              <DialogDescription>
-                Escreva o texto do contrato. Use a formatação para estruturar o documento.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="min-h-[400px] border rounded-md">
-              <textarea
-                value={editorContent}
-                onChange={(e) => setEditorContent(e.target.value)}
-                placeholder="Digite o texto do contrato aqui..."
-                className="w-full h-[400px] p-4 resize-none focus:outline-none rounded-md"
-              />
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setShowEditorModal(false)}>
-                Cancelar
-              </Button>
-              <Button onClick={handleSaveHtml} disabled={isSavingHtml}>
-                {isSavingHtml ? (
-                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                ) : null}
-                Salvar Contrato
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
-        {/* Preview Modal */}
-        <Dialog open={showPreviewModal} onOpenChange={setShowPreviewModal}>
-          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>Visualizar Contrato</DialogTitle>
-            </DialogHeader>
-            <div className="min-h-[400px] border rounded-md p-4 bg-white">
-              {contract?.type === "pdf" ? (
-                <div className="flex flex-col items-center justify-center h-[400px] text-muted-foreground">
-                  <FileText className="h-12 w-12 mb-4" />
-                  <p>Visualizacao de PDF sera implementada em breve</p>
-                  {contract.pdfUrl && (
-                    <a
-                      href={contract.pdfUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="mt-4 text-blue-600 hover:underline"
-                    >
-                      Abrir PDF em nova aba
-                    </a>
-                  )}
-                </div>
-              ) : contract?.type === "html" ? (
-                <div
-                  className="prose max-w-none whitespace-pre-wrap"
-                  dangerouslySetInnerHTML={{ __html: contract.html || "" }}
-                />
-              ) : (
-                <p className="text-muted-foreground">Nenhum contrato para visualizar</p>
-              )}
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setShowPreviewModal(false)}>
-                Fechar
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
       </div>
     </DashboardLayout>
   );

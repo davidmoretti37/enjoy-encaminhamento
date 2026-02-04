@@ -72,6 +72,13 @@ export const RATE_LIMIT_CONFIG: Record<string, RateLimitConfig> = {
 
   // Default for queries (more lenient)
   "default.query": { windowMs: 15 * 60 * 1000, maxRequests: 500 }, // 500/15min
+
+  // Public booking/meeting endpoints
+  "outreach.getAvailableSlots": { windowMs: 15 * 60 * 1000, maxRequests: 60 }, // 60/15min
+  "outreach.createBooking": { windowMs: 60 * 60 * 1000, maxRequests: 10 }, // 10/hour
+  "outreach.getMeetingByToken": { windowMs: 15 * 60 * 1000, maxRequests: 30 }, // 30/15min
+  "outreach.cancelMeetingByToken": { windowMs: 60 * 60 * 1000, maxRequests: 10 }, // 10/hour
+  "outreach.confirmMeetingByToken": { windowMs: 60 * 60 * 1000, maxRequests: 10 }, // 10/hour
 };
 
 // In-memory rate limit store

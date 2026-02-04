@@ -168,14 +168,16 @@ export default function CompanyDocumentsModal({
   // Use real data from historyData.meeting (from database), not the meeting prop (may have fake data)
   const realMeeting = historyData?.meeting;
 
-  // Contract data can come from meeting (outreach flow) or company (onboarding flow)
+  // Contract data can come from meeting (outreach flow), company (onboarding flow), or signed_documents
+  const latestSignedDoc = historyData?.signedContratoInicial?.[0];
+
   const contractData = {
-    signed_at: companyData?.contract_signed_at || realMeeting?.contract_signed_at,
-    signature: companyData?.contract_signature || realMeeting?.contract_signature,
-    signer_name: companyData?.contract_signer_name || realMeeting?.contract_signer_name,
-    signer_cpf: companyData?.contract_signer_cpf || realMeeting?.contract_signer_cpf,
+    signed_at: companyData?.contract_signed_at || realMeeting?.contract_signed_at || latestSignedDoc?.signed_at,
+    signature: companyData?.contract_signature || realMeeting?.contract_signature || latestSignedDoc?.signature,
+    signer_name: companyData?.contract_signer_name || realMeeting?.contract_signer_name || latestSignedDoc?.signer_name,
+    signer_cpf: companyData?.contract_signer_cpf || realMeeting?.contract_signer_cpf || latestSignedDoc?.signer_cpf,
     sent_at: realMeeting?.contract_sent_at,
-    pdf_url: realMeeting?.contract_pdf_url,
+    pdf_url: realMeeting?.contract_pdf_url || latestSignedDoc?.signed_pdf_url,
   };
 
   const getContractStatus = () => {

@@ -7,6 +7,7 @@ interface NavItem {
   label: string;
   href: string;
   icon: LucideIcon;
+  badge?: number;
 }
 
 interface LumaBarProps {
@@ -87,6 +88,11 @@ export default function LumaBar({
                     }`}
                   >
                     <Icon size={20} />
+                    {item.badge != null && item.badge > 0 && (
+                      <span className="absolute -top-1 -right-1 flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold text-white bg-red-500 rounded-full leading-none">
+                        {item.badge > 99 ? '99+' : item.badge}
+                      </span>
+                    )}
                   </motion.button>
 
                   {/* Tooltip */}

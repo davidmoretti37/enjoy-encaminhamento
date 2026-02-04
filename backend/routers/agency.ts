@@ -368,6 +368,96 @@ export const agencyRouter = router({
     return { success: true };
   }),
 
+  // ============================================
+  // Document Template Management
+  // ============================================
+
+  // Get all document templates for the agency
+  getDocumentTemplates: agencyProcedure
+    .input(z.object({
+      category: z.enum(['contrato_inicial', 'clt', 'estagio', 'menor_aprendiz']).optional(),
+    }).optional())
+    .query(async ({ ctx, input }) => {
+      const agency = await db.getAgencyForUserContext(ctx.user.id, ctx.user.role);
+      if (!agency) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Agency not found.' });
+      }
+      return await db.getDocumentTemplates(agency.id, input?.category);
+    }),
+
+  // Upload a new document template
+  uploadDocumentTemplate: agencyProcedure
+    .input(z.object({
+      category: z.enum(['contrato_inicial', 'clt', 'estagio', 'menor_aprendiz']),
+      name: z.string().min(1),
+      fileBase64: z.string(),
+      fileName: z.string(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const agency = await db.getAgencyForUserContext(ctx.user.id, ctx.user.role);
+      if (!agency) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Agency not found.' });
+      }
+
+      const buffer = Buffer.from(input.fileBase64, 'base64');
+      if (buffer.length > 10 * 1024 * 1024) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Arquivo muito grande. Máximo 10MB.' });
+      }
+
+      const safeName = input.fileName
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-zA-Z0-9._-]/g, '_');
+      const key = `documents/${agency.id}/${input.category}/${Date.now()}-${safeName}`;
+      const { storagePut } = await import('../storage');
+      const { url } = await storagePut(key, buffer, 'application/pdf');
+
+      const result = await db.createDocumentTemplate({
+        agencyId: agency.id,
+        category: input.category,
+        name: input.name,
+        fileUrl: url,
+        fileKey: key,
+      });
+
+      return { id: result.id, name: input.name, fileUrl: url };
+    }),
+
+  // Delete a document template
+  deleteDocumentTemplate: agencyProcedure
+    .input(z.object({ templateId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const agency = await db.getAgencyForUserContext(ctx.user.id, ctx.user.role);
+      if (!agency) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Agency not found.' });
+      }
+
+      const { fileKey } = await db.deleteDocumentTemplate(input.templateId, agency.id);
+
+      if (fileKey) {
+        try {
+          const { storageDelete } = await import('../storage');
+          await storageDelete(fileKey);
+        } catch (err) {
+          console.error('[Agency] Failed to delete file from storage:', err);
+        }
+      }
+
+      return { success: true };
+    }),
+
+  // Reorder document templates within a category
+  reorderDocumentTemplates: agencyProcedure
+    .input(z.object({ templateIds: z.array(z.string().uuid()) }))
+    .mutation(async ({ ctx, input }) => {
+      const agency = await db.getAgencyForUserContext(ctx.user.id, ctx.user.role);
+      if (!agency) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Agency not found.' });
+      }
+
+      await db.reorderDocumentTemplates(agency.id, input.templateIds);
+      return { success: true };
+    }),
+
   // AI-powered column mapping for company imports
   analyzeCompanyColumns: agencyProcedure
     .input(z.object({

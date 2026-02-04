@@ -34,7 +34,7 @@ const services = [
     icon: FileText,
     title: "Gestão Contratual",
     description:
-      "Gestão completa de contratos e documentação legal com total conformidade — CLT, estágio e menor aprendiz.",
+      "Realizamos toda a documentação e gestão contratual de estagiários e jovens aprendizes com total conformidade legal.",
     href: "/clt-pcd",
   },
 ];

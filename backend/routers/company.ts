@@ -8,6 +8,8 @@ import { adminProcedure, companyProcedure } from "./procedures";
 import * as db from "../db";
 import { supabaseAdmin } from "../supabase";
 import { generateCompanySummary } from "../services/ai/summarizer";
+import { storagePut } from "../storage";
+import { verifyReceiptWithAI } from "../services/ai/receiptVerifier";
 
 export const companyRouter = router({
   // Check if company has completed onboarding
@@ -687,6 +689,43 @@ export const companyRouter = router({
       return { success: true };
     }),
 
+  uploadPaymentReceipt: companyProcedure
+    .input(z.object({
+      paymentId: z.string().uuid(),
+      fileName: z.string(),
+      fileData: z.string(), // base64 encoded
+      contentType: z.string(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const company = await db.getCompanyByUserId(ctx.user.id);
+      if (!company) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Company not found' });
+      }
+
+      const payment = await db.getPaymentById(input.paymentId, company.id);
+      if (!payment) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Payment not found' });
+      }
+
+      const fileBuffer = Buffer.from(input.fileData, 'base64');
+      const storageKey = `receipts/${company.id}/${input.paymentId}/${input.fileName}`;
+      const { url, key } = await storagePut(storageKey, fileBuffer, input.contentType);
+
+      await db.updatePayment(input.paymentId, {
+        receipt_url: url,
+        receipt_key: key,
+        receipt_status: 'pending-review',
+        receipt_uploaded_at: new Date().toISOString(),
+        payment_method: 'pix',
+      });
+
+      // AI verification (fire and forget)
+      verifyReceiptWithAI(input.paymentId, url, payment.amount)
+        .catch(err => console.error('[Receipt] AI verification failed:', err));
+
+      return { success: true, receiptUrl: url };
+    }),
+
   // Settings
   getCompanyInfo: companyProcedure.query(async ({ ctx }) => {
     const company = await db.getCompanyByUserId(ctx.user.id);
@@ -735,5 +774,38 @@ export const companyRouter = router({
       }
       await db.updateCompanyNotificationPrefs(company.id, input);
       return { success: true };
+    }),
+
+  // AI-powered smart search: search companies via their jobs' embeddings
+  smartSearch: protectedProcedure
+    .input(z.object({ query: z.string().min(1) }))
+    .mutation(async ({ ctx, input }) => {
+      if (ctx.user.role !== 'admin' && ctx.user.role !== 'agency') {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Acesso negado' });
+      }
+
+      const { generateEmbedding, formatEmbeddingForPostgres } = await import('../services/ai/embeddings');
+      const embedding = await generateEmbedding(input.query);
+      if (!embedding) {
+        throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Não foi possível processar a busca' });
+      }
+
+      const { data, error } = await supabaseAdmin.rpc('search_companies_by_job_embedding', {
+        query_embedding: formatEmbeddingForPostgres(embedding),
+        match_threshold: 0.3,
+        match_count: 50,
+      });
+
+      if (error) {
+        console.error('[Company.smartSearch] RPC error:', error);
+        throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Erro na busca' });
+      }
+
+      return (data || []).map((r: any) => ({
+        companyId: r.company_id,
+        companyName: r.company_name,
+        jobTitle: r.job_title,
+        similarity: r.similarity,
+      }));
     }),
 });

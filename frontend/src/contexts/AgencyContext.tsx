@@ -69,6 +69,10 @@ export function AgencyProvider({ children }: { children: ReactNode }) {
       utils.affiliate.getApplications.invalidate();
       utils.affiliate.getDashboardStats.invalidate();
 
+      // Agency queries (used by SettingsPage + agency views)
+      utils.agency.getDocumentTemplates.invalidate();
+      utils.agency.getContract.invalidate();
+
       // Admin queries (used by admin role)
       utils.candidate.getAllForAdmin.invalidate();
       utils.admin.getAllApplications.invalidate();

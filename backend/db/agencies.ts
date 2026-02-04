@@ -122,11 +122,18 @@ export async function getAgencyByUserId(userId: string) {
 /**
  * Get agency for user context based on role
  * For agency users: returns their agency
- * For other roles: returns null (they should use role-specific routes)
+ * For admin users: returns the agency they've selected via agency context switcher
+ * For other roles: returns null
  */
 export async function getAgencyForUserContext(userId: string, role: string) {
   if (role === 'agency') {
     return await getAgencyByUserId(userId);
+  }
+  if (role === 'admin') {
+    const { getAdminAgencyContext } = await import("./scheduling");
+    const agencyId = await getAdminAgencyContext(userId);
+    if (!agencyId) return null;
+    return await getAgencyById(agencyId);
   }
   return null;
 }

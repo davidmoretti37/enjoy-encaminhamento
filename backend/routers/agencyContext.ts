@@ -1,6 +1,7 @@
 // @ts-nocheck
 // Agency context router for admin agency switching
 import { z } from "zod";
+import { TRPCError } from "@trpc/server";
 import { router } from "../_core/trpc";
 import { adminProcedure } from "./procedures";
 import * as db from "../db";
@@ -22,6 +23,16 @@ export const agencyContextRouter = router({
       agencyId: z.string().uuid().nullable(),
     }))
     .mutation(async ({ ctx, input }) => {
+      if (input.agencyId !== null) {
+        const agency = await db.getAgencyById(input.agencyId);
+        if (!agency) {
+          throw new TRPCError({
+            code: 'NOT_FOUND',
+            message: 'Agência não encontrada',
+          });
+        }
+      }
+
       await db.setAdminAgencyContext(ctx.user.id, input.agencyId);
       return { success: true };
     }),

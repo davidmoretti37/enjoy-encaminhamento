@@ -2,13 +2,15 @@
 // Outreach router - email, scheduling, meetings, contracts
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import { publicProcedure, router } from "../_core/trpc";
+import { publicProcedure, rateLimitedPublicProcedure, router } from "../_core/trpc";
 import { adminProcedure, agencyProcedure } from "./procedures";
 import { sendEmail } from "./email";
 import * as db from "../db";
 import { createZoomMeeting, isZoomConfigured } from "../integrations/zoom";
 import { createGoogleMeeting, isGoogleMeetConfigured } from "../integrations/googleMeet";
 import { ENV } from "../_core/env";
+import { escapeHtml } from "../_core/htmlEscape";
+import { passwordSchema } from "../_core/passwordSchema";
 import { generateCompanySummary } from "../services/ai/summarizer";
 
 export const outreachRouter = router({
@@ -37,7 +39,7 @@ export const outreachRouter = router({
       }
 
       let htmlBody = `<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">`;
-      htmlBody += `<p>${input.body.replace(/\n/g, "<br>")}</p>`;
+      htmlBody += `<p>${escapeHtml(input.body).replace(/\n/g, "<br>")}</p>`;
 
       if (input.includeFormLink || input.includeBookingLink) {
         const encodedEmail = encodeURIComponent(input.recipientEmail);
@@ -279,7 +281,7 @@ export const outreachRouter = router({
           htmlBody = `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
               <h2>Reunião Confirmada!</h2>
-              <p>Olá ${meeting.contact_name || "Cliente"},</p>
+              <p>Olá ${escapeHtml(meeting.contact_name || "Cliente")},</p>
               <p>Sua reunião foi confirmada!</p>
               <div style="background: #f5f5f5; padding: 15px; border-radius: 8px; margin: 20px 0;">
                 <p><strong>📅 Data:</strong> ${dateStr}</p>
@@ -294,9 +296,9 @@ export const outreachRouter = router({
           htmlBody = `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
               <h2>Reunião Cancelada</h2>
-              <p>Olá ${meeting.contact_name || "Cliente"},</p>
+              <p>Olá ${escapeHtml(meeting.contact_name || "Cliente")},</p>
               <p>Infelizmente sua reunião foi cancelada.</p>
-              ${input.cancellationReason ? `<p><strong>Motivo:</strong> ${input.cancellationReason}</p>` : ""}
+              ${input.cancellationReason ? `<p><strong>Motivo:</strong> ${escapeHtml(input.cancellationReason)}</p>` : ""}
               <p>Caso deseje reagendar, acesse:</p>
               <p><a href="${baseUrl}/book/${ctx.user.id}?email=${encodeURIComponent(meeting.company_email)}${agencyParam}" style="color: #2563eb;">Agendar nova reunião</a></p>
             </div>
@@ -358,7 +360,7 @@ export const outreachRouter = router({
             `
               <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
                 <h2>Reunião Reagendada</h2>
-                <p>Olá ${meeting.contact_name || "Cliente"},</p>
+                <p>Olá ${escapeHtml(meeting.contact_name || "Cliente")},</p>
                 <p>Sua reunião foi reagendada para uma nova data.</p>
                 <div style="background: #f5f5f5; padding: 15px; border-radius: 8px; margin: 20px 0;">
                   <p><strong>📅 Nova Data:</strong> ${dateStr}</p>
@@ -381,7 +383,7 @@ export const outreachRouter = router({
     }),
 
   // PUBLIC: Get available slots for booking
-  getAvailableSlots: publicProcedure
+  getAvailableSlots: rateLimitedPublicProcedure("outreach.getAvailableSlots")
     .input(
       z.object({
         adminId: z.string().uuid(),
@@ -394,7 +396,7 @@ export const outreachRouter = router({
     }),
 
   // PUBLIC: Create a booking
-  createBooking: publicProcedure
+  createBooking: rateLimitedPublicProcedure("outreach.createBooking")
     .input(
       z.object({
         adminId: z.string().uuid(),
@@ -422,14 +424,14 @@ export const outreachRouter = router({
     }),
 
   // PUBLIC: Get meeting by confirmation token
-  getMeetingByToken: publicProcedure
+  getMeetingByToken: rateLimitedPublicProcedure("outreach.getMeetingByToken")
     .input(z.object({ token: z.string().uuid() }))
     .query(async ({ input }) => {
       return await db.getMeetingByToken(input.token);
     }),
 
   // PUBLIC: Cancel meeting by token
-  cancelMeetingByToken: publicProcedure
+  cancelMeetingByToken: rateLimitedPublicProcedure("outreach.cancelMeetingByToken")
     .input(
       z.object({
         token: z.string().uuid(),
@@ -442,7 +444,7 @@ export const outreachRouter = router({
     }),
 
   // PUBLIC: Confirm meeting by token
-  confirmMeetingByToken: publicProcedure
+  confirmMeetingByToken: rateLimitedPublicProcedure("outreach.confirmMeetingByToken")
     .input(z.object({ token: z.string().uuid() }))
     .mutation(async ({ input }) => {
       await db.confirmMeetingByToken(input.token);
@@ -506,7 +508,7 @@ export const outreachRouter = router({
           `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
               <h2>Link da Sua Reunião</h2>
-              <p>Olá ${meeting.contact_name || "Cliente"},</p>
+              <p>Olá ${escapeHtml(meeting.contact_name || "Cliente")},</p>
               <div style="background: #f5f5f5; padding: 15px; border-radius: 8px; margin: 20px 0;">
                 <p><strong>📅 Data:</strong> ${dateStr}</p>
                 <p><strong>🕐 Horário:</strong> ${timeStr}</p>
@@ -591,7 +593,7 @@ export const outreachRouter = router({
           `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
               <h2>Link da Sua Reunião</h2>
-              <p>Olá ${meeting.contact_name || "Cliente"},</p>
+              <p>Olá ${escapeHtml(meeting.contact_name || "Cliente")},</p>
               <div style="background: #f5f5f5; padding: 15px; border-radius: 8px; margin: 20px 0;">
                 <p><strong>📅 Data:</strong> ${dateStr}</p>
                 <p><strong>🕐 Horário:</strong> ${timeStr}</p>
@@ -858,7 +860,7 @@ export const outreachRouter = router({
     .input(
       z.object({
         registrationToken: z.string().uuid(),
-        password: z.string().min(6),
+        password: passwordSchema,
       })
     )
     .mutation(async ({ input }) => {
@@ -902,7 +904,7 @@ export const outreachRouter = router({
     .input(
       z.object({
         contractToken: z.string().uuid(),
-        password: z.string().min(6),
+        password: passwordSchema,
       })
     )
     .mutation(async ({ input }) => {

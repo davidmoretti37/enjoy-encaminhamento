@@ -534,6 +534,7 @@ export interface Database {
           contract_number: string
           monthly_salary: number
           monthly_fee: number
+          insurance_fee: number
           payment_day: number
           start_date: string
           end_date: string | null
@@ -556,6 +557,7 @@ export interface Database {
           contract_number: string
           monthly_salary: number
           monthly_fee: number
+          insurance_fee?: number
           payment_day?: number
           start_date: string
           end_date?: string | null
@@ -578,6 +580,7 @@ export interface Database {
           contract_number?: string
           monthly_salary?: number
           monthly_fee?: number
+          insurance_fee?: number
           payment_day?: number
           start_date?: string
           end_date?: string | null
@@ -671,7 +674,7 @@ export interface Database {
           contract_id: string
           company_id: string
           amount: number
-          payment_type: 'monthly-fee' | 'setup-fee' | 'penalty' | 'refund'
+          payment_type: 'monthly-fee' | 'setup-fee' | 'insurance-fee' | 'penalty' | 'refund'
           payment_method: 'credit-card' | 'debit-card' | 'bank-transfer' | 'pix' | null
           due_date: string
           paid_at: string | null
@@ -679,6 +682,14 @@ export interface Database {
           transaction_id: string | null
           payment_gateway_response: Json | null
           notes: string | null
+          receipt_url: string | null
+          receipt_key: string | null
+          receipt_status: 'pending-review' | 'verified' | 'rejected' | null
+          receipt_uploaded_at: string | null
+          receipt_verified_at: string | null
+          receipt_verified_by: string | null
+          ai_verification_result: Json | null
+          billing_period: string | null
           created_at: string
           updated_at: string
         }
@@ -687,7 +698,7 @@ export interface Database {
           contract_id: string
           company_id: string
           amount: number
-          payment_type: 'monthly-fee' | 'setup-fee' | 'penalty' | 'refund'
+          payment_type: 'monthly-fee' | 'setup-fee' | 'insurance-fee' | 'penalty' | 'refund'
           payment_method?: 'credit-card' | 'debit-card' | 'bank-transfer' | 'pix' | null
           due_date: string
           paid_at?: string | null
@@ -695,6 +706,14 @@ export interface Database {
           transaction_id?: string | null
           payment_gateway_response?: Json | null
           notes?: string | null
+          receipt_url?: string | null
+          receipt_key?: string | null
+          receipt_status?: 'pending-review' | 'verified' | 'rejected' | null
+          receipt_uploaded_at?: string | null
+          receipt_verified_at?: string | null
+          receipt_verified_by?: string | null
+          ai_verification_result?: Json | null
+          billing_period?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -703,7 +722,7 @@ export interface Database {
           contract_id?: string
           company_id?: string
           amount?: number
-          payment_type?: 'monthly-fee' | 'setup-fee' | 'penalty' | 'refund'
+          payment_type?: 'monthly-fee' | 'setup-fee' | 'insurance-fee' | 'penalty' | 'refund'
           payment_method?: 'credit-card' | 'debit-card' | 'bank-transfer' | 'pix' | null
           due_date?: string
           paid_at?: string | null
@@ -711,6 +730,14 @@ export interface Database {
           transaction_id?: string | null
           payment_gateway_response?: Json | null
           notes?: string | null
+          receipt_url?: string | null
+          receipt_key?: string | null
+          receipt_status?: 'pending-review' | 'verified' | 'rejected' | null
+          receipt_uploaded_at?: string | null
+          receipt_verified_at?: string | null
+          receipt_verified_by?: string | null
+          ai_verification_result?: Json | null
+          billing_period?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -966,19 +993,19 @@ export interface Database {
         Row: {
           id: string
           admin_id: string
-          current_agency_id: string | null
+          agency_id: string | null
           updated_at: string
         }
         Insert: {
           id?: string
           admin_id: string
-          current_agency_id?: string | null
+          agency_id?: string | null
           updated_at?: string
         }
         Update: {
           id?: string
           admin_id?: string
-          current_agency_id?: string | null
+          agency_id?: string | null
           updated_at?: string
         }
       }

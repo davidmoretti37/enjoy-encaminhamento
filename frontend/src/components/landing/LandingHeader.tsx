@@ -7,11 +7,11 @@ import { motion, AnimatePresence } from "motion/react";
 
 const navLinks = [
   { label: "HOME", href: "/" },
-  { label: "JOVEM APRENDIZ", href: "/jovem-aprendiz" },
   { label: "EMPRESAS", href: "/empresas" },
   { label: "ASSESSORIA", href: "/assessoria" },
-  { label: "CLT E PCD", href: "/clt-pcd" },
+  { label: "JOVEM APRENDIZ", href: "/jovem-aprendiz" },
   { label: "ESTÁGIO", href: "/estagio" },
+  { label: "CLT E PCD", href: "/clt-pcd" },
   { label: "VAGAS", href: "/vagas", highlighted: true },
 ];
 

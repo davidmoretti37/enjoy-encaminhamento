@@ -8,7 +8,7 @@ const itemVariants = {
 };
 
 const rows = [
-  { label: "Idade Mínima", clt: "18 anos", estagio: "16+ (estudante)", aprendiz: "14 a 24 anos" },
+  { label: "Idade Mínima", clt: "16+ (com responsável)", estagio: "16+ (estudante)", aprendiz: "14 a 24 anos" },
   { label: "Duração", clt: "Indeterminado", estagio: "Até 2 anos", aprendiz: "Até 2 anos" },
   { label: "FGTS", clt: "8%", estagio: "Não", aprendiz: "2%" },
   { label: "Férias", clt: "30 dias + 1/3", estagio: "30 dias recesso", aprendiz: "Coincide com escola" },

@@ -310,14 +310,13 @@ export default function AssessoriaPage() {
 
             {/* Institution metrics */}
             <motion.div
-              className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-12"
+              className="grid grid-cols-3 gap-6 mb-12"
               initial="hidden"
               whileInView="visible"
               viewport={{ once: true, amount: 0.2 }}
               variants={containerVariants}
             >
               {[
-                { value: "15+", label: "Instituições Parceiras" },
                 { value: "400+", label: "Alunos Encaminhados" },
                 { value: "85%", label: "Taxa de Colocação" },
                 { value: "4", label: "Regiões Atendidas" },

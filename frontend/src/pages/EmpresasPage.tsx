@@ -56,7 +56,7 @@ const steps = [
     number: "05",
     icon: Handshake,
     title: "Contratação",
-    description: "Escolha o candidato ideal. Cuidamos de toda a documentação e gestão contratual.",
+    description: "Escolha o candidato ideal. Realizamos toda a documentação e gestão contratual de estagiários e jovens aprendizes.",
   },
 ];
 
@@ -101,7 +101,7 @@ const hiringTypes = [
   },
   {
     title: "CLT",
-    description: "Contratação formal com todos os direitos trabalhistas. Para posições efetivas.",
+    description: "Apoio no desenvolvimento profissional, análise comportamental e orientação documental.",
     href: "/clt-pcd",
   },
   {

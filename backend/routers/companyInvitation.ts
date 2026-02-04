@@ -8,6 +8,7 @@ import { sendEmail } from "./email";
 import * as db from "../db/companyInvitations";
 import { supabaseAdmin } from "../supabase";
 import { ENV } from "../_core/env";
+import { passwordSchema } from "../_core/passwordSchema";
 
 // Email template for company invitation
 function generateInvitationEmail(
@@ -214,7 +215,7 @@ export const companyInvitationRouter = router({
   acceptInvitation: publicProcedure
     .input(z.object({
       token: z.string().uuid(),
-      password: z.string().min(6, "Password must be at least 6 characters"),
+      password: passwordSchema,
     }))
     .mutation(async ({ input }) => {
       const result = await db.acceptCompanyInvitation(input.token, input.password);

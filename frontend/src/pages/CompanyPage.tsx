@@ -5,6 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { trpc } from "@/lib/trpc";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
 import {
   Building,
   Clock,
@@ -14,6 +16,9 @@ import {
   FileText,
   Briefcase,
   Upload,
+  Search,
+  X,
+  Loader2,
 } from "lucide-react";
 import DashboardLayout from "@/components/DashboardLayout";
 import { useState, useMemo } from "react";
@@ -50,6 +55,34 @@ export default function CompanyPage() {
   const [sendingMeetingId, setSendingMeetingId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'empresas' | 'status'>('empresas');
   const [showImportModal, setShowImportModal] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [smartSearchIds, setSmartSearchIds] = useState<Set<string> | null>(null);
+
+  const smartSearchMutation = trpc.company.smartSearch.useMutation({
+    onSuccess: (results) => {
+      if (results.length === 0) {
+        toast.info('Nenhuma empresa encontrada para essa busca');
+        setSmartSearchIds(null);
+      } else {
+        setSmartSearchIds(new Set(results.map((r: any) => r.companyId)));
+        toast.success(`${results.length} empresa(s) encontrada(s)`);
+      }
+    },
+    onError: () => {
+      toast.error('Erro ao realizar busca inteligente');
+    },
+  });
+
+  const handleSearch = () => {
+    if (searchTerm.trim().length >= 3) {
+      smartSearchMutation.mutate({ query: searchTerm.trim() });
+    }
+  };
+
+  const clearSearch = () => {
+    setSearchTerm("");
+    setSmartSearchIds(null);
+  };
 
   // Detect role
   const isAffiliate = user?.role === 'admin';
@@ -195,7 +228,23 @@ export default function CompanyPage() {
     }));
 
   // Merge outreach and direct signup companies
-  const completedCompanies = [...completedFromOutreach, ...directCompaniesAsMeetings];
+  const allCompletedCompanies = [...completedFromOutreach, ...directCompaniesAsMeetings];
+
+  // Apply search filtering
+  const completedCompanies = allCompletedCompanies.filter((meeting: Meeting) => {
+    // AI search active: filter by matching IDs
+    if (smartSearchIds) {
+      return smartSearchIds.has(meeting.id);
+    }
+    // Text search
+    if (!searchTerm) return true;
+    const s = searchTerm.toLowerCase();
+    return (
+      meeting.company_name?.toLowerCase().includes(s) ||
+      meeting.contact_name?.toLowerCase().includes(s) ||
+      meeting.company_email?.toLowerCase().includes(s)
+    );
+  });
 
   // Waiting on us - contract not sent yet
   const waitingOnUs = (meetings || []).filter((m: Meeting) =>
@@ -223,6 +272,54 @@ export default function CompanyPage() {
               <Upload className="h-4 w-4 mr-2" />
               Importar Empresas
             </Button>
+          )}
+        </div>
+
+        {/* Search Bar */}
+        <div className="flex items-center gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <Input
+              placeholder="Buscar empresas... (Enter para busca inteligente)"
+              value={searchTerm}
+              onChange={(e) => {
+                setSearchTerm(e.target.value);
+                if (!e.target.value) {
+                  setSmartSearchIds(null);
+                }
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  handleSearch();
+                }
+              }}
+              className="pl-9 pr-10"
+            />
+            {(searchTerm || smartSearchIds) && (
+              <button
+                onClick={clearSearch}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+          <Button
+            variant="default"
+            size="sm"
+            onClick={handleSearch}
+            disabled={smartSearchMutation.isPending || searchTerm.trim().length < 3}
+          >
+            {smartSearchMutation.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Search className="h-4 w-4" />
+            )}
+          </Button>
+          {smartSearchIds && (
+            <Badge variant="secondary" className="whitespace-nowrap">
+              {smartSearchIds.size} resultado(s)
+            </Badge>
           )}
         </div>
 

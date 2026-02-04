@@ -103,16 +103,15 @@ export default function CompanyJobs() {
     },
   });
 
-  // TODO: triggerMatching endpoint not yet implemented
-  // const triggerMatchingMutation = trpc.job.triggerMatching.useMutation({
-  //   onSuccess: () => {
-  //     toast.success('Busca de candidatos iniciada!');
-  //     utils.company.getJobs.invalidate();
-  //   },
-  //   onError: (error: Error) => {
-  //     toast.error('Erro ao iniciar busca: ' + error.message);
-  //   },
-  // });
+  const triggerMatchingMutation = trpc.job.triggerMatching.useMutation({
+    onSuccess: () => {
+      toast.success('Busca de candidatos iniciada!');
+      utils.company.getJobs.invalidate();
+    },
+    onError: (error) => {
+      toast.error('Erro ao iniciar busca: ' + error.message);
+    },
+  });
 
   if (authLoading) {
     return (
@@ -524,8 +523,7 @@ export default function CompanyJobs() {
                             Retomar busca
                           </Button>
                         )}
-                        {/* TODO: Manual matching trigger - endpoint not yet implemented */}
-                        {/* {(job.status === 'pending_review' || job.status === 'paused') && (
+                        {(job.status === 'pending_review' || job.status === 'paused') && (
                           <Button
                             variant="default"
                             size="sm"
@@ -535,7 +533,7 @@ export default function CompanyJobs() {
                             <Search className="h-4 w-4 mr-1" />
                             {triggerMatchingMutation.isPending ? 'Iniciando...' : 'Iniciar Busca'}
                           </Button>
-                        )} */}
+                        )}
                       </div>
                     </div>
                   </CardContent>

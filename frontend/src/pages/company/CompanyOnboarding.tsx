@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState } from "react";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -17,17 +17,15 @@ import {
 import { FeatureSteps } from "@/components/ui/feature-steps";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
-import { Building, CheckCircle, Briefcase, ArrowRight, ArrowLeft, FileText, Eraser, ExternalLink, Bot, Users, DollarSign, Plus, Trash2 } from "lucide-react";
+import { Building, CheckCircle, Briefcase, ArrowRight, ArrowLeft, FileText, Bot, Users, DollarSign, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import ClassicLoader from "@/components/ui/ClassicLoader";
-import SignatureCanvas from "react-signature-canvas";
+import DocumentSigningFlow from "@/components/DocumentSigningFlow";
 
 const EMPLOYMENT_TYPES = [
   { value: "clt", label: "CLT" },
   { value: "estagio", label: "Estágio" },
   { value: "jovem_aprendiz", label: "Jovem Aprendiz" },
-  { value: "pj", label: "PJ" },
-  { value: "temporario", label: "Temporário" },
 ];
 
 const URGENCY_OPTIONS = [
@@ -109,14 +107,8 @@ export default function CompanyOnboarding() {
   const [step, setStep] = useState(1);
   const [submitting, setSubmitting] = useState(false);
 
-  // Contract signature state
-  const [signerName, setSignerName] = useState("");
-  const [signerCpf, setSignerCpf] = useState("");
-  const [acceptedTerms, setAcceptedTerms] = useState(false);
-  const sigRef = useRef<SignatureCanvas>(null);
-
-  // Fetch agency contract
-  const { data: agencyContract, isLoading: contractLoading } = trpc.company.getAgencyContract.useQuery();
+  // Document signing state
+  const [allDocsSigned, setAllDocsSigned] = useState(false);
 
   const [formData, setFormData] = useState({
     // Company Data
@@ -267,23 +259,6 @@ export default function CompanyOnboarding() {
     }));
   };
 
-  // CPF formatting for contract signer
-  const formatSignerCpf = (value: string) => {
-    const digits = value.replace(/\D/g, "").slice(0, 11);
-    if (digits.length <= 3) return digits;
-    if (digits.length <= 6) return `${digits.slice(0, 3)}.${digits.slice(3)}`;
-    if (digits.length <= 9) return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6)}`;
-    return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9)}`;
-  };
-
-  const handleSignerCpfChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setSignerCpf(formatSignerCpf(e.target.value));
-  };
-
-  const clearSignature = () => {
-    sigRef.current?.clear();
-  };
-
   const validateStep1 = () => {
     if (!formData.cnpj || !formData.legalName) {
       toast.error("CNPJ e Razão Social são obrigatórios");
@@ -321,25 +296,8 @@ export default function CompanyOnboarding() {
   };
 
   const validateStep3 = () => {
-    // If agency has no contract, skip validation
-    if (!agencyContract?.contract_type) {
-      return true;
-    }
-
-    if (!sigRef.current || sigRef.current.isEmpty()) {
-      toast.error("Por favor, faca sua assinatura");
-      return false;
-    }
-    if (!signerName.trim()) {
-      toast.error("Por favor, informe seu nome completo");
-      return false;
-    }
-    if (signerCpf.replace(/\D/g, "").length !== 11) {
-      toast.error("Por favor, informe um CPF válido");
-      return false;
-    }
-    if (!acceptedTerms) {
-      toast.error("Por favor, aceite os termos do contrato");
+    if (!allDocsSigned) {
+      toast.error("Por favor, assine todos os documentos antes de continuar");
       return false;
     }
     return true;
@@ -366,11 +324,6 @@ export default function CompanyOnboarding() {
     if (!validateStep3()) return;
 
     setSubmitting(true);
-
-    // Get signature if available
-    const signature = sigRef.current && !sigRef.current.isEmpty()
-      ? sigRef.current.toDataURL()
-      : undefined;
 
     submitOnboarding.mutate({
       // Company data
@@ -405,10 +358,6 @@ export default function CompanyOnboarding() {
       positionsCount: formData.positionsCount || undefined,
       genderPreference: formData.genderPreference || undefined,
       notes: formData.notes || undefined,
-      // Contract signature data
-      contractSignature: signature,
-      contractSignerName: signerName.trim() || undefined,
-      contractSignerCpf: signerCpf.replace(/\D/g, "") || undefined,
     });
   };
 
@@ -1076,143 +1025,28 @@ export default function CompanyOnboarding() {
             </div>
           )}
 
-          {/* Step 3: Contract Sign */}
+          {/* Step 3: Document Signing */}
           {step === 3 && (
             <div className="space-y-6">
               {/* Section Header */}
               <div className="text-center mb-8">
-                <h2 className="text-2xl font-bold text-gray-900">Contrato de Parceria</h2>
-                <p className="text-gray-500 mt-1">Leia e assine o contrato para finalizar seu cadastro</p>
+                <h2 className="text-2xl font-bold text-gray-900">Documentos de Parceria</h2>
+                <p className="text-gray-500 mt-1">Leia e assine os documentos para finalizar seu cadastro</p>
               </div>
 
               <Card className="shadow-xl border-0 bg-white/80 backdrop-blur">
               <CardContent className="p-8 space-y-6">
-                {contractLoading ? (
-                  <div className="flex justify-center py-12">
-                    <ClassicLoader />
-                  </div>
-                ) : !agencyContract?.contract_type ? (
-                  <div className="text-center py-8 bg-green-50 border border-green-200 rounded-lg">
-                    <CheckCircle className="h-12 w-12 text-green-500 mx-auto mb-3" />
-                    <p className="text-green-800 font-medium">Nenhum contrato necessário</p>
-                    <p className="text-green-600 text-sm mt-1">
-                      A agência não configurou um contrato obrigatório.
-                    </p>
-                  </div>
-                ) : (
-                  <>
-                    {/* Contract Display */}
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between">
-                        <Label className="text-base font-medium">
-                          Contrato - {agencyContract.agency_name}
-                        </Label>
-                        {agencyContract.contract_type === 'pdf' && agencyContract.contract_pdf_url && (
-                          <a
-                            href={agencyContract.contract_pdf_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-sm text-blue-600 hover:text-blue-800 flex items-center gap-1"
-                          >
-                            Abrir em nova aba
-                            <ExternalLink className="h-3 w-3" />
-                          </a>
-                        )}
-                      </div>
-
-                      {agencyContract.contract_type === 'pdf' && agencyContract.contract_pdf_url ? (
-                        <div className="border rounded-lg overflow-hidden bg-white">
-                          <iframe
-                            src={`${agencyContract.contract_pdf_url}#toolbar=0&navpanes=0&scrollbar=1&view=FitH`}
-                            className="w-full h-[500px]"
-                            title="Contrato"
-                            style={{ border: 'none' }}
-                          />
-                        </div>
-                      ) : agencyContract.contract_type === 'html' && agencyContract.contract_html ? (
-                        <div
-                          className="border rounded-lg p-4 bg-white max-h-[400px] overflow-y-auto prose prose-sm max-w-none"
-                          dangerouslySetInnerHTML={{ __html: agencyContract.contract_html }}
-                        />
-                      ) : (
-                        <div className="text-center py-8 bg-yellow-50 border border-yellow-200 rounded-lg">
-                          <p className="text-yellow-800">Contrato não disponível</p>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Signature Section */}
-                    <div className="space-y-4 pt-4 border-t">
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="grid gap-2">
-                          <Label htmlFor="signerName">Nome Completo do Assinante *</Label>
-                          <Input
-                            id="signerName"
-                            placeholder="Digite seu nome completo"
-                            value={signerName}
-                            onChange={(e) => setSignerName(e.target.value)}
-                          />
-                        </div>
-                        <div className="grid gap-2">
-                          <Label htmlFor="signerCpf">CPF do Assinante *</Label>
-                          <Input
-                            id="signerCpf"
-                            placeholder="000.000.000-00"
-                            value={signerCpf}
-                            onChange={handleSignerCpfChange}
-                          />
-                        </div>
-                      </div>
-
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between">
-                          <Label>Assinatura *</Label>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={clearSignature}
-                            className="text-gray-500 hover:text-gray-700"
-                          >
-                            <Eraser className="h-4 w-4 mr-1" />
-                            Limpar
-                          </Button>
-                        </div>
-                        <div className="border-2 border-dashed border-gray-300 rounded-lg bg-white">
-                          <SignatureCanvas
-                            ref={sigRef}
-                            canvasProps={{
-                              className: "w-full h-[150px]",
-                            }}
-                            backgroundColor="white"
-                          />
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                          Use o mouse ou o dedo para desenhar sua assinatura
-                        </p>
-                      </div>
-
-                      <div className="flex items-start space-x-3 pt-2">
-                        <Checkbox
-                          id="acceptTerms"
-                          checked={acceptedTerms}
-                          onCheckedChange={(checked) => setAcceptedTerms(checked as boolean)}
-                        />
-                        <label htmlFor="acceptTerms" className="text-sm text-gray-600 leading-relaxed">
-                          Li e concordo com os termos do contrato apresentado acima.
-                          Declaro que as informações fornecidas são verdadeiras.
-                        </label>
-                      </div>
-                    </div>
-                  </>
-                )}
+                <DocumentSigningFlow
+                  category="contrato_inicial"
+                  onAllSigned={() => setAllDocsSigned(true)}
+                />
 
                 <div className="flex justify-between pt-6 border-t">
                   <Button type="button" variant="outline" onClick={handleBack} size="lg" className="px-8">
                     <ArrowLeft className="h-4 w-4 mr-2" />
                     Voltar
                   </Button>
-                  <Button type="submit" disabled={submitting} size="lg" className="px-8 bg-green-600 hover:bg-green-700">
+                  <Button type="submit" disabled={submitting || !allDocsSigned} size="lg" className="px-8 bg-green-600 hover:bg-green-700">
                     {submitting ? (
                       <>
                         <ClassicLoader />

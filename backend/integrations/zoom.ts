@@ -46,10 +46,7 @@ async function getZoomAccessToken(): Promise<string> {
 
   const credentials = Buffer.from(`${clientId}:${clientSecret}`).toString("base64");
 
-  console.log("[Zoom] Getting access token...");
-  console.log("[Zoom] Account ID:", accountId);
-  console.log("[Zoom] Client ID:", clientId);
-  console.log("[Zoom] Client Secret length:", clientSecret?.length);
+  console.log("[Zoom] Getting access token with configured credentials...");
 
   const response = await fetch("https://zoom.us/oauth/token", {
     method: "POST",
@@ -62,7 +59,6 @@ async function getZoomAccessToken(): Promise<string> {
 
   const responseText = await response.text();
   console.log("[Zoom] Token response status:", response.status);
-  console.log("[Zoom] Token response:", responseText);
 
   if (!response.ok) {
     console.error("[Zoom] Token error:", responseText);

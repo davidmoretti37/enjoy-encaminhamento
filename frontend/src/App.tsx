@@ -37,7 +37,6 @@ import AgencyRegistration from "./pages/AgencyRegistration";
 import AgencyDashboard from "./pages/AgencyDashboard";
 import AgencyJobDescriptions from "./pages/agency/AgencyJobDescriptions";
 import Login from "./pages/Login";
-import AdminCalendar from "./pages/AdminCalendar";
 import PublicBooking from "./pages/PublicBooking";
 import CompanyForm from "./pages/CompanyForm";
 import MeetingConfirm from "./pages/MeetingConfirm";
@@ -104,7 +103,6 @@ function Router() {
             <Route path={"/admin/agencies"} component={AdminAgencies} />
             <Route path={"/admin/regional"} component={RegionalManagement} />
             <Route path={"/admin/feedback"} component={FeedbackManagement} />
-            <Route path={"/admin/calendar"} component={AdminCalendar} />
 
             {/* Agency routes */}
             <Route path={"/agency/dashboard"} component={AgencyDashboard} />

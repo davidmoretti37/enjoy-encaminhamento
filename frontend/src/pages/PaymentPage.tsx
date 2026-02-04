@@ -13,32 +13,38 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { trpc } from "@/lib/trpc";
 import {
   DollarSign,
   CheckCircle,
   Eye,
-  Search,
   Clock,
   AlertCircle,
-  Building
+  Building,
+  FileWarning,
+  ThumbsUp,
+  ThumbsDown,
+  Image,
+  X
 } from "lucide-react";
 import DashboardLayout from "@/components/DashboardLayout";
 import { useState } from "react";
+import { toast } from "sonner";
 
 export default function PaymentPage() {
   const { user, loading: authLoading } = useAuth();
   const { currentAgency, isAllAgenciesMode } = useAgencyContext();
   const [searchTerm, setSearchTerm] = useState("");
+  const [receiptModalOpen, setReceiptModalOpen] = useState(false);
+  const [selectedReceiptPayment, setSelectedReceiptPayment] = useState<any>(null);
 
   // Determine role capabilities
   const isAffiliate = user?.role === 'admin';
   const isAgency = user?.role === 'agency';
-  const isAdmin = isAffiliate; // Affiliates have admin-like capabilities
+  const isAdmin = isAffiliate;
 
   // Conditional tRPC queries based on role
-  // Pass null explicitly for "All Agencies" mode (currentAgency is null)
   const affiliatePaymentsQuery = trpc.affiliate.getPayments.useQuery(
     { agencyId: currentAgency?.id ?? null },
     { enabled: isAffiliate }
@@ -48,15 +54,33 @@ export default function PaymentPage() {
   // For affiliate commission card
   const affiliateQuery = trpc.affiliate.getByUserId.useQuery(undefined, { enabled: isAffiliate });
 
+  // Pending review receipts (admin only)
+  const pendingReviewQuery = trpc.admin.getPaymentsPendingReview.useQuery(undefined, {
+    enabled: isAdmin,
+  });
+
   // Select the right data based on role
   const payments = isAffiliate ? affiliatePaymentsQuery.data : agencyPaymentsQuery.data;
   const refetchPayments = isAffiliate ? affiliatePaymentsQuery.refetch : agencyPaymentsQuery.refetch;
   const paymentsLoading = affiliatePaymentsQuery.isLoading || agencyPaymentsQuery.isLoading;
   const affiliate = affiliateQuery.data;
+  const pendingReviews = pendingReviewQuery.data || [];
 
   // Mutations (admin only)
   const updateStatusMutation = trpc.admin.updatePaymentStatus.useMutation({
     onSuccess: () => refetchPayments()
+  });
+
+  const reviewReceiptMutation = trpc.admin.reviewPaymentReceipt.useMutation({
+    onSuccess: (_, variables) => {
+      toast.success(variables.action === 'approve' ? 'Comprovante aprovado!' : 'Comprovante rejeitado');
+      pendingReviewQuery.refetch();
+      refetchPayments();
+      setReceiptModalOpen(false);
+    },
+    onError: (error) => {
+      toast.error(error.message || 'Erro ao revisar comprovante');
+    },
   });
 
   const isLoading = authLoading || paymentsLoading;
@@ -82,13 +106,30 @@ export default function PaymentPage() {
     );
   }
 
-  // Handlers (admin only)
+  // Handlers
   const handleMarkPaid = async (paymentId: string) => {
     await updateStatusMutation.mutateAsync({ id: paymentId, status: 'paid' });
   };
 
   const handleMarkOverdue = async (paymentId: string) => {
     await updateStatusMutation.mutateAsync({ id: paymentId, status: 'overdue' });
+  };
+
+  const handleReviewReceipt = (payment: any) => {
+    setSelectedReceiptPayment(payment);
+    setReceiptModalOpen(true);
+  };
+
+  const handleApproveReceipt = () => {
+    if (selectedReceiptPayment) {
+      reviewReceiptMutation.mutate({ paymentId: selectedReceiptPayment.id, action: 'approve' });
+    }
+  };
+
+  const handleRejectReceipt = () => {
+    if (selectedReceiptPayment) {
+      reviewReceiptMutation.mutate({ paymentId: selectedReceiptPayment.id, action: 'reject', notes: 'Comprovante rejeitado pelo administrador' });
+    }
   };
 
   const getStatusBadge = (status: string) => {
@@ -108,10 +149,25 @@ export default function PaymentPage() {
     }
   };
 
+  const getReceiptStatusBadge = (receiptStatus: string | null) => {
+    if (!receiptStatus) return null;
+    switch (receiptStatus) {
+      case 'pending-review':
+        return <Badge className="bg-yellow-500 text-xs">Comprovante pendente</Badge>;
+      case 'verified':
+        return <Badge className="bg-green-500 text-xs">Comprovante OK</Badge>;
+      case 'rejected':
+        return <Badge className="bg-red-500 text-xs">Comprovante rejeitado</Badge>;
+      default:
+        return null;
+    }
+  };
+
   const getPaymentTypeBadge = (type: string) => {
     const types: Record<string, string> = {
       'monthly-fee': 'Mensalidade',
       'setup-fee': 'Taxa de Setup',
+      'insurance-fee': 'Seguro',
       'penalty': 'Multa',
       'refund': 'Reembolso'
     };
@@ -127,7 +183,7 @@ export default function PaymentPage() {
   const pendingRevenue = payments?.filter((p: any) => p.status === 'pending').reduce((sum: number, p: any) => sum + (p.amount || 0), 0) || 0;
   const overdueRevenue = payments?.filter((p: any) => p.status === 'overdue').reduce((sum: number, p: any) => sum + (p.amount || 0), 0) || 0;
 
-  // Calculate affiliate commission (only for non-admin affiliates)
+  // Calculate affiliate commission
   const affiliateCommission = !isAdmin && isAffiliate && affiliate ? (totalRevenue * affiliate.commission_rate) / 100 : 0;
 
   // Filter payments
@@ -154,7 +210,7 @@ export default function PaymentPage() {
         </div>
 
         {/* Summary Cards */}
-        <div className={`grid gap-6 ${isAdmin ? 'md:grid-cols-3' : 'md:grid-cols-4'}`}>
+        <div className={`grid gap-6 ${isAdmin ? (pendingReviews.length > 0 ? 'md:grid-cols-4' : 'md:grid-cols-3') : 'md:grid-cols-4'}`}>
           <Card className="border-emerald-200 bg-emerald-50/50 shadow-md hover:shadow-lg transition-shadow">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium text-emerald-700">{isAdmin ? 'Receita Recebida' : 'Receita Total'}</CardTitle>
@@ -203,7 +259,78 @@ export default function PaymentPage() {
               <p className="text-xs text-red-600">{payments?.filter((p: any) => p.status === 'overdue').length || 0} pagamentos</p>
             </CardContent>
           </Card>
+
+          {/* Pending Receipts Card - Admin only */}
+          {isAdmin && pendingReviews.length > 0 && (
+            <Card className="border-orange-200 bg-orange-50/50 shadow-md hover:shadow-lg transition-shadow">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium text-orange-700">Comprovantes Pendentes</CardTitle>
+                <FileWarning className="h-5 w-5 text-orange-600" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-3xl font-semibold mb-1 text-orange-900">{pendingReviews.length}</div>
+                <p className="text-xs text-orange-600">aguardando revisão</p>
+              </CardContent>
+            </Card>
+          )}
         </div>
+
+        {/* Pending Receipt Reviews - Admin only */}
+        {isAdmin && pendingReviews.length > 0 && (
+          <Card className="border-orange-200">
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2 text-orange-700">
+                <FileWarning className="h-5 w-5" />
+                Comprovantes para Revisão
+              </CardTitle>
+              <CardDescription>Comprovantes que a IA não conseguiu verificar automaticamente</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {pendingReviews.map((payment: any) => {
+                const aiResult = payment.ai_verification_result;
+                return (
+                  <div key={payment.id} className="border border-orange-200 rounded-lg p-4 bg-orange-50/50 flex items-center justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <p className="font-medium text-gray-900">
+                          {payment.companies?.company_name}
+                        </p>
+                        <span className="text-gray-400">•</span>
+                        <span className="text-sm text-gray-600">{payment.contracts?.contract_number}</span>
+                      </div>
+                      <p className="text-lg font-bold text-gray-800">
+                        {formatCurrency(payment.amount)}
+                      </p>
+                      {aiResult && (
+                        <p className="text-sm text-gray-500 mt-1">
+                          IA encontrou: {aiResult.amount_found != null ? `R$ ${aiResult.amount_found?.toFixed(2)}` : 'N/A'}
+                          {' • '}Confiança: {aiResult.confidence || 'N/A'}
+                          {aiResult.details && ` • ${aiResult.details}`}
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 ml-4">
+                      {payment.receipt_url && (
+                        <Button size="sm" variant="outline" onClick={() => handleReviewReceipt(payment)}>
+                          <Eye className="h-4 w-4 mr-1" />
+                          Ver
+                        </Button>
+                      )}
+                      <Button size="sm" variant="default" onClick={() => { setSelectedReceiptPayment(payment); handleApproveReceipt(); }} disabled={reviewReceiptMutation.isPending}>
+                        <ThumbsUp className="h-4 w-4 mr-1" />
+                        Aprovar
+                      </Button>
+                      <Button size="sm" variant="destructive" onClick={() => { setSelectedReceiptPayment(payment); handleRejectReceipt(); }} disabled={reviewReceiptMutation.isPending}>
+                        <ThumbsDown className="h-4 w-4 mr-1" />
+                        Rejeitar
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+            </CardContent>
+          </Card>
+        )}
 
         {/* Payments Table */}
         <Card>
@@ -226,6 +353,7 @@ export default function PaymentPage() {
                     <TableHead>Valor</TableHead>
                     <TableHead>{isAdmin ? 'Vencimento' : 'Data'}</TableHead>
                     <TableHead>Status</TableHead>
+                    {isAdmin && <TableHead>Comprovante</TableHead>}
                     {isAdmin && <TableHead className="text-right">Ações</TableHead>}
                   </TableRow>
                 </TableHeader>
@@ -255,18 +383,29 @@ export default function PaymentPage() {
                         </TableCell>
                         <TableCell>{getStatusBadge(payment.status)}</TableCell>
                         {isAdmin && (
+                          <TableCell>
+                            {payment.receipt_url ? (
+                              <button onClick={() => handleReviewReceipt(payment)} className="hover:opacity-80">
+                                {getReceiptStatusBadge(payment.receipt_status)}
+                              </button>
+                            ) : (
+                              <span className="text-xs text-gray-400">-</span>
+                            )}
+                          </TableCell>
+                        )}
+                        {isAdmin && (
                           <TableCell className="text-right">
                             <div className="flex justify-end gap-2">
                               {(payment.status === 'pending' || payment.status === 'overdue') && (
                                 <>
                                   <Button size="sm" variant="default" onClick={() => handleMarkPaid(payment.id)} disabled={updateStatusMutation.isPending}>
                                     <CheckCircle className="h-4 w-4 mr-1" />
-                                    Marcar Pago
+                                    Pago
                                   </Button>
                                   {payment.status === 'pending' && (
                                     <Button size="sm" variant="destructive" onClick={() => handleMarkOverdue(payment.id)} disabled={updateStatusMutation.isPending}>
                                       <AlertCircle className="h-4 w-4 mr-1" />
-                                      Marcar Atrasado
+                                      Atrasado
                                     </Button>
                                   )}
                                 </>
@@ -274,12 +413,9 @@ export default function PaymentPage() {
                               {payment.status === 'failed' && (
                                 <Button size="sm" variant="default" onClick={() => handleMarkPaid(payment.id)} disabled={updateStatusMutation.isPending}>
                                   <CheckCircle className="h-4 w-4 mr-1" />
-                                  Marcar Pago
+                                  Pago
                                 </Button>
                               )}
-                              <Button size="sm" variant="outline">
-                                <Eye className="h-4 w-4" />
-                              </Button>
                             </div>
                           </TableCell>
                         )}
@@ -303,6 +439,56 @@ export default function PaymentPage() {
             )}
           </CardContent>
         </Card>
+
+        {/* Receipt Review Modal */}
+        <Dialog open={receiptModalOpen} onOpenChange={setReceiptModalOpen}>
+          <DialogContent className="sm:max-w-[600px]">
+            <DialogHeader>
+              <DialogTitle>Revisão de Comprovante</DialogTitle>
+              <DialogDescription>
+                {selectedReceiptPayment?.companies?.company_name} • {formatCurrency(selectedReceiptPayment?.amount || 0)}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              {/* Receipt Image */}
+              {selectedReceiptPayment?.receipt_url && (
+                <div className="border rounded-lg overflow-hidden bg-gray-50">
+                  <img
+                    src={selectedReceiptPayment.receipt_url}
+                    alt="Comprovante de pagamento"
+                    className="w-full max-h-96 object-contain"
+                  />
+                </div>
+              )}
+
+              {/* AI Analysis Result */}
+              {selectedReceiptPayment?.ai_verification_result && (
+                <div className="p-3 bg-gray-50 rounded-lg text-sm space-y-1">
+                  <p className="font-medium text-gray-700">Análise da IA:</p>
+                  <p>Valor encontrado: {selectedReceiptPayment.ai_verification_result.amount_found != null ? `R$ ${selectedReceiptPayment.ai_verification_result.amount_found?.toFixed(2)}` : 'N/A'}</p>
+                  <p>Valor esperado: {formatCurrency(selectedReceiptPayment?.amount || 0)}</p>
+                  <p>Confiança: {selectedReceiptPayment.ai_verification_result.confidence || 'N/A'}</p>
+                  {selectedReceiptPayment.ai_verification_result.details && (
+                    <p>Detalhes: {selectedReceiptPayment.ai_verification_result.details}</p>
+                  )}
+                </div>
+              )}
+            </div>
+            <DialogFooter className="flex gap-2">
+              <Button variant="outline" onClick={() => setReceiptModalOpen(false)}>
+                Fechar
+              </Button>
+              <Button variant="destructive" onClick={handleRejectReceipt} disabled={reviewReceiptMutation.isPending}>
+                <ThumbsDown className="h-4 w-4 mr-1" />
+                Rejeitar
+              </Button>
+              <Button onClick={handleApproveReceipt} disabled={reviewReceiptMutation.isPending}>
+                <ThumbsUp className="h-4 w-4 mr-1" />
+                Aprovar
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </DashboardLayout>
   );

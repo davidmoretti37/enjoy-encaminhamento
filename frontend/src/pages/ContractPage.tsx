@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import DashboardLayout from "@/components/DashboardLayout";
 import { useState } from "react";
+import { toast } from "sonner";
 
 export default function ContractPage() {
   const { user, loading: authLoading } = useAuth();
@@ -54,7 +55,12 @@ export default function ContractPage() {
 
   // Mutations (admin only)
   const updateStatusMutation = trpc.admin.updateContractStatus.useMutation({
-    onSuccess: () => refetchContracts()
+    onSuccess: () => {
+      refetchContracts();
+    },
+    onError: (error: any) => {
+      toast.error(error.message || "Erro ao atualizar contrato");
+    },
   });
 
   const isLoading = authLoading || contractsLoading;

@@ -178,6 +178,49 @@ export const jobRouter = router({
       }
     }),
 
+  // Trigger matching pipeline for a job (company access)
+  triggerMatching: companyProcedure
+    .input(z.object({ jobId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const company = await db.getCompanyByUserId(ctx.user.id);
+      if (!company) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Empresa não encontrada' });
+      }
+
+      const job = await db.getJobById(input.jobId);
+      if (!job) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Vaga não encontrada' });
+      }
+
+      if (job.company_id !== company.id) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Acesso negado' });
+      }
+
+      if (!['pending_review', 'paused'].includes(job.status)) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Matching só pode ser iniciado para vagas em análise ou pausadas',
+        });
+      }
+
+      try {
+        const { runMatchingPipeline, saveMatchResults } = await import('../services/matching/index');
+        const result = await runMatchingPipeline(input.jobId, {});
+        await saveMatchResults(input.jobId, result.results, result.weightProfile);
+
+        return {
+          success: true,
+          matchesFound: result.results.length,
+        };
+      } catch (error: any) {
+        console.error('[Job.triggerMatching] Error:', error);
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: error.message || 'Erro ao iniciar busca de candidatos',
+        });
+      }
+    }),
+
   // Get matching progress/status for a job (admin/agency access)
   getMatchingProgress: protectedProcedure
     .input(z.object({ jobId: z.string().uuid() }))
@@ -343,6 +386,28 @@ export const jobRouter = router({
     if (!company) return [];
     return await db.getJobsByCompanyId(company.id);
   }),
+
+  // Get open jobs for public display (no auth required)
+  getPublicJobs: publicProcedure
+    .input(z.object({
+      contractType: z.string().optional(),
+    }).optional())
+    .query(async ({ input }) => {
+      const jobs = await db.getAllOpenJobs();
+      const filtered = input?.contractType
+        ? jobs.filter(j => j.contract_type === input.contractType)
+        : jobs;
+      return filtered.map(job => ({
+        id: job.id,
+        title: job.title,
+        contract_type: job.contract_type,
+        work_type: job.work_type,
+        location: job.location,
+        salary: job.salary,
+        hours_per_week: job.hours_per_week,
+        published_at: job.published_at,
+      }));
+    }),
 
   // Get all open jobs (requires login)
   getAllOpen: protectedProcedure.query(async () => {

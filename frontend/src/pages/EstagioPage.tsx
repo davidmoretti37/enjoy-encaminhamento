@@ -63,7 +63,7 @@ const internRights = [
 
 const requirements = [
   "Estar regularmente matriculado em instituição de ensino",
-  "Ter Termo de Compromisso de Estágio (TCE) assinado pelas 3 partes",
+  "Ter Termo de Compromisso de Estágio (TCE)",
   "Atividades compatíveis com o curso e horário escolar",
   "Duração máxima de 2 anos na mesma empresa (exceto PCD)",
   "Supervisor na empresa com formação na área do estagiário",

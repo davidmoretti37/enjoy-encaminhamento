@@ -313,8 +313,37 @@ export const candidateRouter = router({
         throw new TRPCError({ code: 'BAD_REQUEST', message: 'Arquivo muito grande. Máximo 5MB.' });
       }
 
+      // Verify file content matches claimed MIME type via magic bytes
+      let detectedMime: string | null = null;
+      if (buffer.length >= 12) {
+        if (buffer[0] === 0xFF && buffer[1] === 0xD8 && buffer[2] === 0xFF) {
+          detectedMime = 'image/jpeg';
+        } else if (
+          buffer[0] === 0x89 && buffer[1] === 0x50 &&
+          buffer[2] === 0x4E && buffer[3] === 0x47 &&
+          buffer[4] === 0x0D && buffer[5] === 0x0A &&
+          buffer[6] === 0x1A && buffer[7] === 0x0A
+        ) {
+          detectedMime = 'image/png';
+        } else if (
+          buffer[0] === 0x52 && buffer[1] === 0x49 &&
+          buffer[2] === 0x46 && buffer[3] === 0x46 &&
+          buffer[8] === 0x57 && buffer[9] === 0x45 &&
+          buffer[10] === 0x42 && buffer[11] === 0x50
+        ) {
+          detectedMime = 'image/webp';
+        }
+      }
+      if (!detectedMime) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Arquivo inválido. Tipo de imagem não reconhecido.' });
+      }
+      if (detectedMime !== input.mimeType) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'O conteúdo do arquivo não corresponde ao tipo informado.' });
+      }
+
       // Generate unique filename
-      const ext = input.mimeType.split('/')[1];
+      const extMap: Record<string, string> = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' };
+      const ext = extMap[detectedMime] || 'bin';
       const filename = `candidates/${ctx.user.id}/photo.${ext}`;
 
       // Upload to storage
@@ -440,5 +469,37 @@ export const candidateRouter = router({
     .mutation(async ({ input }) => {
       const success = await generateCandidateEmbedding(input.candidateId);
       return { success };
+    }),
+
+  // AI-powered smart search: search candidates via their embeddings
+  smartSearch: protectedProcedure
+    .input(z.object({ query: z.string().min(1) }))
+    .mutation(async ({ ctx, input }) => {
+      if (ctx.user.role !== 'admin' && ctx.user.role !== 'agency') {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Acesso negado' });
+      }
+
+      const { generateEmbedding, formatEmbeddingForPostgres } = await import('../services/ai/embeddings');
+      const embedding = await generateEmbedding(input.query);
+      if (!embedding) {
+        throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Não foi possível processar a busca' });
+      }
+
+      const { data, error } = await supabaseAdmin.rpc('search_candidates_by_embedding', {
+        query_embedding: formatEmbeddingForPostgres(embedding),
+        match_threshold: 0.3,
+        match_count: 50,
+      });
+
+      if (error) {
+        console.error('[Candidate.smartSearch] RPC error:', error);
+        throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Erro na busca' });
+      }
+
+      return (data || []).map((r: any) => ({
+        candidateId: r.candidate_id,
+        fullName: r.full_name,
+        similarity: r.similarity,
+      }));
     }),
 });

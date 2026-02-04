@@ -73,13 +73,13 @@ const pcdInfo = [
 const compliancePoints = [
   {
     icon: FileText,
-    title: "Gestão Contratual",
-    description: "Elaboração e gestão de contratos CLT com total conformidade legal.",
+    title: "Desenvolvimento Profissional",
+    description: "Plano de desenvolvimento profissional para o candidato CLT.",
   },
   {
     icon: Scale,
-    title: "Conformidade Trabalhista",
-    description: "Garantimos que todos os direitos trabalhistas sejam respeitados.",
+    title: "Análise Comportamental",
+    description: "Análise do perfil comportamental para melhor adequação à vaga.",
   },
   {
     icon: Users,
@@ -88,8 +88,8 @@ const compliancePoints = [
   },
   {
     icon: Building2,
-    title: "Suporte às Empresas",
-    description: "Orientação completa sobre obrigações legais e melhores práticas.",
+    title: "Orientação Documental",
+    description: "Suporte nas orientações dos documentos necessários para contratação.",
   },
 ];
 

@@ -28,11 +28,14 @@ import {
   FileText,
   Clock,
   Calendar,
-  Upload
+  Upload,
+  X,
+  Loader2,
 } from "lucide-react";
 import DashboardLayout from "@/components/DashboardLayout";
 import ImportCandidatesModal from "@/components/ImportCandidatesModal";
 import { useState } from "react";
+import { toast } from "sonner";
 
 export default function CandidatePage() {
   const { user, loading: authLoading } = useAuth();
@@ -41,6 +44,33 @@ export default function CandidatePage() {
   const [applicationSearchTerm, setApplicationSearchTerm] = useState("");
   const [selectedCandidate, setSelectedCandidate] = useState<string | null>(null);
   const [showImportModal, setShowImportModal] = useState(false);
+  const [smartSearchIds, setSmartSearchIds] = useState<Set<string> | null>(null);
+
+  const smartSearchMutation = trpc.candidate.smartSearch.useMutation({
+    onSuccess: (results) => {
+      if (results.length === 0) {
+        toast.info('Nenhum candidato encontrado para essa busca');
+        setSmartSearchIds(null);
+      } else {
+        setSmartSearchIds(new Set(results.map((r: any) => r.candidateId)));
+        toast.success(`${results.length} candidato(s) encontrado(s)`);
+      }
+    },
+    onError: () => {
+      toast.error('Erro ao realizar busca inteligente');
+    },
+  });
+
+  const handleSmartSearch = () => {
+    if (searchTerm.trim().length >= 3) {
+      smartSearchMutation.mutate({ query: searchTerm.trim() });
+    }
+  };
+
+  const clearSearch = () => {
+    setSearchTerm("");
+    setSmartSearchIds(null);
+  };
 
   // Determine role capabilities
   const isAffiliate = user?.role === 'admin';
@@ -177,6 +207,11 @@ export default function CandidatePage() {
 
   // Filter candidates
   const filteredCandidates = candidates?.filter((candidate: any) => {
+    // AI search active: filter by matching IDs
+    if (smartSearchIds) {
+      return smartSearchIds.has(candidate.id);
+    }
+    // Text search
     if (!searchTerm) return true;
     const searchLower = searchTerm.toLowerCase();
     const email = isAdmin ? candidate.users?.email : candidate.email;
@@ -225,6 +260,54 @@ export default function CandidatePage() {
               <Upload className="h-4 w-4" />
               Importar Candidatos
             </Button>
+          )}
+        </div>
+
+        {/* Search Bar */}
+        <div className="flex items-center gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <Input
+              placeholder="Buscar candidatos... (Enter para busca inteligente)"
+              value={searchTerm}
+              onChange={(e) => {
+                setSearchTerm(e.target.value);
+                if (!e.target.value) {
+                  setSmartSearchIds(null);
+                }
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  handleSmartSearch();
+                }
+              }}
+              className="pl-9 pr-10"
+            />
+            {(searchTerm || smartSearchIds) && (
+              <button
+                onClick={clearSearch}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+          <Button
+            variant="default"
+            size="sm"
+            onClick={handleSmartSearch}
+            disabled={smartSearchMutation.isPending || searchTerm.trim().length < 3}
+          >
+            {smartSearchMutation.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Search className="h-4 w-4" />
+            )}
+          </Button>
+          {smartSearchIds && (
+            <Badge variant="secondary" className="whitespace-nowrap">
+              {smartSearchIds.size} resultado(s)
+            </Badge>
           )}
         </div>
 

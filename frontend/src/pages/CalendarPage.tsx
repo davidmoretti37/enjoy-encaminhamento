@@ -15,6 +15,7 @@ import {
   Mail,
   Phone,
   ChevronDown,
+  ChevronLeft,
   ChevronRight,
   Video,
   CheckCircle,
@@ -42,7 +43,20 @@ import { Checkbox } from "@/components/ui/checkbox";
 import DashboardLayout from "@/components/DashboardLayout";
 import EmailComposeModal from "@/components/EmailComposeModal";
 import { useState } from "react";
-import { format, addDays, isSameDay, differenceInDays } from "date-fns";
+import {
+  format,
+  addDays,
+  isSameDay,
+  differenceInDays,
+  startOfWeek,
+  endOfWeek,
+  startOfMonth,
+  endOfMonth,
+  addWeeks,
+  addMonths,
+  subMonths,
+  eachDayOfInterval,
+} from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
 
@@ -59,11 +73,15 @@ const DAYS_OF_WEEK = [
 export default function CalendarPage() {
   const { user, loading: authLoading } = useAuth();
   const { currentAgency, isAllAgenciesMode } = useAgencyContext();
-  const [viewMode, setViewMode] = useState<'calendar' | 'status'>('calendar');
-  const [daysToShow] = useState(7);
-  const [customRange] = useState(false);
-  const [startDate] = useState<Date>(new Date());
-  const [endDate] = useState<Date>(addDays(new Date(), 7));
+  const [viewMode, setViewMode] = useState<'list' | 'month' | 'status'>('list');
+
+  // Week navigation
+  const [weekOffset, setWeekOffset] = useState(0);
+
+  // Month view
+  const [currentMonth, setCurrentMonth] = useState<Date>(new Date());
+  const [monthSelectedDay, setMonthSelectedDay] = useState<Date | null>(null);
+
   const [pendingExpanded, setPendingExpanded] = useState(false);
   const [confirmedExpanded, setConfirmedExpanded] = useState(false);
   const [completedExpanded, setCompletedExpanded] = useState(false);
@@ -374,6 +392,21 @@ export default function CalendarPage() {
   const noShowMeetings = meetings?.filter((m: any) => m.status === 'no_show') || [];
   const cancelledMeetings = meetings?.filter((m: any) => m.status === 'cancelled') || [];
 
+  // Week navigation computed values
+  const weekStart = startOfWeek(addWeeks(new Date(), weekOffset), { weekStartsOn: 1 });
+  const weekEnd = endOfWeek(addWeeks(new Date(), weekOffset), { weekStartsOn: 1 });
+
+  // Month grid computed values
+  const monthGridStart = startOfWeek(startOfMonth(currentMonth), { weekStartsOn: 1 });
+  const monthGridEnd = endOfWeek(endOfMonth(currentMonth), { weekStartsOn: 1 });
+  const monthGridDays = eachDayOfInterval({ start: monthGridStart, end: monthGridEnd });
+
+  const getMeetingCountForDate = (date: Date) =>
+    meetings?.filter((m: any) => isSameDay(new Date(m.scheduled_at), date)).length || 0;
+
+  const getMeetingsForDate = (date: Date) =>
+    meetings?.filter((m: any) => isSameDay(new Date(m.scheduled_at), date)) || [];
+
   // Helper to render meeting card with actions
   const renderMeetingCard = (meeting: any, showDate: boolean = true) => {
     const statusInfo = getStatusInfo(meeting.status);
@@ -564,30 +597,90 @@ export default function CalendarPage() {
         </div>
 
         {/* Tabs for different views */}
-        <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as 'calendar' | 'status')} className="space-y-4">
+        <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as 'list' | 'month' | 'status')} className="space-y-4">
           <TabsList className="bg-gray-100/80 p-1">
-            <TabsTrigger value="calendar" className="gap-2 data-[state=active]:bg-white data-[state=active]:shadow-sm">
-              Calendário
+            <TabsTrigger value="list" className="gap-2 data-[state=active]:bg-white data-[state=active]:shadow-sm">
+              Semana
+            </TabsTrigger>
+            <TabsTrigger value="month" className="gap-2 data-[state=active]:bg-white data-[state=active]:shadow-sm">
+              Mês
             </TabsTrigger>
             <TabsTrigger value="status" className="gap-2 data-[state=active]:bg-white data-[state=active]:shadow-sm">
               Por Status
             </TabsTrigger>
           </TabsList>
 
-          {/* Calendar View - Multiple Days */}
-          <TabsContent value="calendar" className="space-y-3">
-            {Array.from({ length: customRange ? differenceInDays(endDate, startDate) + 1 : daysToShow }, (_, i) => {
-              const date = addDays(customRange ? startDate : new Date(), i);
+          {/* Navigation header for list and month views */}
+          {(viewMode === 'list' || viewMode === 'month') && (
+            <div className="flex items-center justify-center gap-4">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => {
+                  if (viewMode === 'list') {
+                    setWeekOffset(prev => prev - 1);
+                  } else {
+                    setCurrentMonth(prev => subMonths(prev, 1));
+                    setMonthSelectedDay(null);
+                  }
+                }}
+              >
+                <ChevronLeft className="h-5 w-5" />
+              </Button>
+              <h2 className="text-lg font-semibold min-w-[240px] text-center capitalize">
+                {viewMode === 'list'
+                  ? `${format(weekStart, "dd MMM", { locale: ptBR })} — ${format(weekEnd, "dd MMM yyyy", { locale: ptBR })}`
+                  : format(currentMonth, "MMMM yyyy", { locale: ptBR })
+                }
+              </h2>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => {
+                  if (viewMode === 'list') {
+                    setWeekOffset(prev => prev + 1);
+                  } else {
+                    setCurrentMonth(prev => addMonths(prev, 1));
+                    setMonthSelectedDay(null);
+                  }
+                }}
+              >
+                <ChevronRight className="h-5 w-5" />
+              </Button>
+              {(viewMode === 'list' ? weekOffset !== 0 : !isSameDay(startOfMonth(currentMonth), startOfMonth(new Date()))) && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    if (viewMode === 'list') {
+                      setWeekOffset(0);
+                    } else {
+                      setCurrentMonth(new Date());
+                      setMonthSelectedDay(null);
+                    }
+                  }}
+                >
+                  Hoje
+                </Button>
+              )}
+            </div>
+          )}
+
+          {/* Week List View */}
+          <TabsContent value="list" className="space-y-3">
+            {Array.from({ length: 7 }, (_, i) => {
+              const date = addDays(weekStart, i);
               const dayMeetings = meetings?.filter((m: any) =>
                 isSameDay(new Date(m.scheduled_at), date)
               ) || [];
+              const isToday = isSameDay(date, new Date());
 
               return (
-                <div key={i} className="bg-white rounded-lg border border-gray-200 shadow-sm">
+                <div key={i} className={`bg-white rounded-lg border shadow-sm ${isToday ? 'ring-2 ring-blue-400 border-blue-300' : 'border-gray-200'}`}>
                   <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
                     <div className="flex items-center gap-3">
-                      <div className="h-10 w-10 rounded-lg bg-gray-100 flex items-center justify-center">
-                        <span className="text-lg font-semibold text-gray-700">{format(date, "dd")}</span>
+                      <div className={`h-10 w-10 rounded-lg flex items-center justify-center ${isToday ? 'bg-blue-100' : 'bg-gray-100'}`}>
+                        <span className={`text-lg font-semibold ${isToday ? 'text-blue-700' : 'text-gray-700'}`}>{format(date, "dd")}</span>
                       </div>
                       <div>
                         <div className="text-sm font-medium text-gray-900 capitalize">
@@ -597,6 +690,7 @@ export default function CalendarPage() {
                           {format(date, "MMMM yyyy", { locale: ptBR })}
                         </div>
                       </div>
+                      {isToday && <Badge className="bg-blue-500 text-xs">Hoje</Badge>}
                     </div>
                     {dayMeetings.length > 0 && (
                       <span className="text-xs text-gray-500">
@@ -616,6 +710,95 @@ export default function CalendarPage() {
                 </div>
               );
             })}
+          </TabsContent>
+
+          {/* Month Grid View */}
+          <TabsContent value="month" className="space-y-4">
+            <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
+              {/* Weekday headers */}
+              <div className="grid grid-cols-7 gap-1 mb-2">
+                {['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'].map((day) => (
+                  <div key={day} className="text-center text-sm font-medium text-gray-500 py-2">
+                    {day}
+                  </div>
+                ))}
+              </div>
+
+              {/* Day cells grid */}
+              <div className="grid grid-cols-7 gap-1">
+                {monthGridDays.map((date) => {
+                  const meetingCount = getMeetingCountForDate(date);
+                  const isCurrentMonth = date.getMonth() === currentMonth.getMonth();
+                  const isToday = isSameDay(date, new Date());
+                  const isSelected = monthSelectedDay ? isSameDay(date, monthSelectedDay) : false;
+
+                  return (
+                    <button
+                      key={date.toISOString()}
+                      onClick={() => setMonthSelectedDay(
+                        monthSelectedDay && isSameDay(date, monthSelectedDay) ? null : date
+                      )}
+                      className={`
+                        relative p-2 min-h-[64px] rounded-lg border text-left transition-colors
+                        ${!isCurrentMonth ? 'opacity-30 bg-gray-50' : 'bg-white hover:bg-blue-50'}
+                        ${isToday ? 'border-blue-500 border-2' : 'border-gray-200'}
+                        ${isSelected ? 'bg-blue-100 border-blue-500 ring-2 ring-blue-200' : ''}
+                      `}
+                    >
+                      <span className={`text-sm font-medium ${isToday ? 'text-blue-600' : ''}`}>
+                        {format(date, 'd')}
+                      </span>
+                      {meetingCount > 0 && (
+                        <div className="flex gap-0.5 mt-1 flex-wrap">
+                          {meetingCount <= 3 ? (
+                            Array.from({ length: meetingCount }).map((_, i) => (
+                              <div key={i} className="w-2 h-2 rounded-full bg-blue-500" />
+                            ))
+                          ) : (
+                            <span className="text-xs text-blue-600 font-semibold">{meetingCount}</span>
+                          )}
+                        </div>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Expanded day meetings panel */}
+            {monthSelectedDay && (
+              <div className="bg-white rounded-lg border border-blue-200 shadow-sm">
+                <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-lg bg-blue-100 flex items-center justify-center">
+                      <span className="text-lg font-semibold text-blue-700">{format(monthSelectedDay, "dd")}</span>
+                    </div>
+                    <div>
+                      <div className="text-sm font-medium text-gray-900 capitalize">
+                        {format(monthSelectedDay, "EEEE", { locale: ptBR })}
+                      </div>
+                      <div className="text-xs text-gray-500 capitalize">
+                        {format(monthSelectedDay, "MMMM yyyy", { locale: ptBR })}
+                      </div>
+                    </div>
+                  </div>
+                  <span className="text-xs text-gray-500">
+                    {getMeetingsForDate(monthSelectedDay).length} reunião{getMeetingsForDate(monthSelectedDay).length !== 1 ? 'es' : ''}
+                  </span>
+                </div>
+                {getMeetingsForDate(monthSelectedDay).length > 0 ? (
+                  <div className="p-3 space-y-2">
+                    {getMeetingsForDate(monthSelectedDay).map((meeting: any) =>
+                      renderMeetingCard(meeting, false)
+                    )}
+                  </div>
+                ) : (
+                  <div className="px-4 py-6 text-center text-sm text-gray-400">
+                    Nenhuma reunião neste dia
+                  </div>
+                )}
+              </div>
+            )}
           </TabsContent>
 
           {/* Status View */}

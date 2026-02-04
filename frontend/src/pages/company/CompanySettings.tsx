@@ -22,10 +22,12 @@ import {
   Trash2,
   Mail,
   MessageSquare,
-  LogOut
+  LogOut,
+  FileText
 } from "lucide-react";
 import { Link } from "wouter";
 import { toast } from "sonner";
+import SignedDocumentsView from "@/components/SignedDocumentsView";
 
 export default function CompanySettings() {
   const { user, loading: authLoading, logout } = useAuth();
@@ -356,6 +358,25 @@ export default function CompanySettings() {
                 )}
               </CardContent>
             </Card>
+        </section>
+
+        {/* Documents Section */}
+        <section>
+          <h2 className="text-xl font-semibold text-gray-900 flex items-center gap-2 mb-4">
+            <FileText className="h-5 w-5 text-blue-600" />
+            Documentos
+          </h2>
+          <Card>
+            <CardHeader>
+              <CardTitle>Documentos Assinados</CardTitle>
+              <CardDescription>
+                Todos os documentos assinados pela sua empresa
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <SignedDocumentsView />
+            </CardContent>
+          </Card>
         </section>
 
         {/* Logout Section */}

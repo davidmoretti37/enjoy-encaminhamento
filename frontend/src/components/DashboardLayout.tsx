@@ -9,7 +9,14 @@ import AgencyFilterHeader from "./AgencyFilterHeader";
 import { trpc } from "@/lib/trpc";
 import { useEffect } from "react";
 
-const getMenuItems = (userRole: string | undefined) => {
+interface MenuItem {
+  icon: any;
+  label: string;
+  path: string;
+  badge?: number;
+}
+
+const getMenuItems = (userRole: string | undefined): { homeHref: string; profileHref: string; items: MenuItem[] } => {
   // Admin menu
   if (userRole === 'admin') {
     return {
@@ -88,6 +95,18 @@ export default function DashboardLayout({
     enabled: !!user && user.role === 'candidate',
   });
 
+  // Payment alert counts for admin/agency
+  const paymentAlertsQuery = trpc.admin.getPaymentAlertCounts.useQuery(undefined, {
+    enabled: !!user && (user.role === 'admin' || user.role === 'agency'),
+    refetchInterval: 60000,
+  });
+
+  // Payment stats for company (to show overdue badge)
+  const companyPaymentStatsQuery = trpc.company.getPaymentStats.useQuery(undefined, {
+    enabled: !!user && user.role === 'company',
+    refetchInterval: 60000,
+  });
+
   // Redirect to onboarding if needed
   useEffect(() => {
     if (!user) return;
@@ -141,11 +160,22 @@ export default function DashboardLayout({
     );
   }
 
+  // Compute payment badge based on role
+  let paymentBadge = 0;
+  if (user.role === 'admin' || user.role === 'agency') {
+    paymentBadge = paymentAlertsQuery.data?.total || 0;
+  } else if (user.role === 'company') {
+    // Show badge if there's overdue amount
+    const overdueAmount = companyPaymentStatsQuery.data?.overdue || 0;
+    paymentBadge = overdueAmount > 0 ? 1 : 0;
+  }
+
   const { homeHref, profileHref, items } = getMenuItems(user?.role ?? undefined);
   const navItems = items.map(item => ({
     label: item.label,
     href: item.path,
     icon: item.icon,
+    badge: item.path.includes('payment') ? paymentBadge : undefined,
   }));
 
   return (

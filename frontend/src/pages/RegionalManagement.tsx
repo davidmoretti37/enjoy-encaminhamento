@@ -49,7 +49,7 @@ export default function RegionalManagement() {
     onSuccess: (data) => {
       if (data.emailSent) {
         toast.success("Convite enviado com sucesso!");
-      } else if (data.emailError) {
+      } else if ('emailError' in data && data.emailError) {
         toast.warning(`Convite criado, mas email falhou: ${data.emailError}`);
       } else {
         toast.success("Convite criado com sucesso!");

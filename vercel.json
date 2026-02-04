@@ -5,5 +5,11 @@
   "rewrites": [
     { "source": "/trpc/:path*", "destination": "/api/trpc" },
     { "source": "/((?!api/).*)", "destination": "/" }
+  ],
+  "crons": [
+    {
+      "path": "/api/cron/update-overdue-payments",
+      "schedule": "0 6 * * *"
+    }
   ]
 }

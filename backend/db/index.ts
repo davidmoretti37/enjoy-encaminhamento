@@ -55,3 +55,6 @@ export * from "./batches";
 
 // Company invitation operations
 export * from "./companyInvitations";
+
+// Document template and signing operations
+export * from "./documents";

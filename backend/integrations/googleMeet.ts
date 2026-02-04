@@ -44,8 +44,7 @@ async function getGoogleAccessToken(): Promise<string> {
 
   const { clientId, clientSecret, refreshToken } = ENV.google;
 
-  console.log("[Google] Using Client ID:", clientId);
-  console.log("[Google] Refresh Token starts with:", refreshToken.substring(0, 20) + "...");
+  console.log("[Google] Using configured OAuth credentials");
 
   // Return cached token if still valid (with 5 min buffer)
   if (cachedToken && cachedToken.expiresAt > Date.now() + 300000) {
