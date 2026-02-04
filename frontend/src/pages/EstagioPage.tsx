@@ -121,15 +121,6 @@ export default function EstagioPage() {
               facilita o processo para estudantes e empresas.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Link href="/login?tab=signup">
-                <Button
-                  size="lg"
-                  className="bg-[#FF6B35] hover:bg-[#FF6B35]/90 text-white px-8 rounded-full"
-                >
-                  Encontre seu Estágio
-                  <ArrowRight className="ml-2 h-5 w-5" />
-                </Button>
-              </Link>
               <Link href="/empresas">
                 <Button
                   size="lg"
@@ -381,15 +372,6 @@ export default function EstagioPage() {
               Cadastre-se gratuitamente e seja conectado com as melhores
               oportunidades de estágio na sua região.
             </p>
-            <Link href="/login?tab=signup">
-              <Button
-                size="lg"
-                className="bg-[#FF6B35] hover:bg-[#FF6B35]/90 text-white px-8 rounded-full"
-              >
-                Criar Meu Perfil — Grátis
-                <ArrowRight className="ml-2 h-5 w-5" />
-              </Button>
-            </Link>
           </motion.div>
         </div>
       </section>

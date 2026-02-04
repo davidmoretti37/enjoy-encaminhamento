@@ -125,15 +125,6 @@ export default function AssessoriaPage() {
               Orientação especializada para candidatos, empresas e instituições de ensino.
               Desenvolvemos talentos e construímos carreiras de sucesso.
             </p>
-            <Link href="/login?tab=signup">
-              <Button
-                size="lg"
-                className="bg-[#FF6B35] hover:bg-[#FF6B35]/90 text-white px-8 rounded-full"
-              >
-                Agende uma Consultoria
-                <ArrowRight className="ml-2 h-5 w-5" />
-              </Button>
-            </Link>
           </motion.div>
         </div>
       </section>
@@ -347,15 +338,6 @@ export default function AssessoriaPage() {
                 Aumente a empregabilidade dos seus alunos e fortaleça o relacionamento
                 da sua instituição com o mercado de trabalho.
               </p>
-              <Link href="/login?tab=signup">
-                <Button
-                  size="lg"
-                  className="bg-[#FF6B35] hover:bg-[#FF6B35]/90 text-white px-8 rounded-full"
-                >
-                  Iniciar Parceria
-                  <ArrowRight className="ml-2 h-5 w-5" />
-                </Button>
-              </Link>
             </motion.div>
           </div>
         </div>
@@ -377,15 +359,6 @@ export default function AssessoriaPage() {
               Entre em contato e descubra como nossa assessoria pode impulsionar
               seus resultados profissionais.
             </p>
-            <Link href="/login?tab=signup">
-              <Button
-                size="lg"
-                className="bg-[#FF6B35] hover:bg-[#FF6B35]/90 text-white px-8 rounded-full"
-              >
-                Fale com Nossa Equipe
-                <ArrowRight className="ml-2 h-5 w-5" />
-              </Button>
-            </Link>
           </motion.div>
         </div>
       </section>

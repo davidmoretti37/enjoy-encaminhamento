@@ -2,14 +2,11 @@ import { motion } from "motion/react";
 import {
   Scale,
   Shield,
-  CheckCircle2,
   ArrowRight,
   Heart,
   DollarSign,
   Clock,
   Umbrella,
-  Users,
-  Accessibility,
   Building2,
   FileText,
 } from "lucide-react";
@@ -61,15 +58,6 @@ const cltRights = [
   },
 ];
 
-const pcdInfo = [
-  "Empresas com 100+ funcionários devem reservar de 2% a 5% das vagas para PCD",
-  "Adaptação do ambiente de trabalho às necessidades do trabalhador",
-  "Proibição de discriminação no processo seletivo e no trabalho",
-  "Jornada flexível quando necessário para tratamento médico",
-  "Estabilidade no emprego conforme legislação específica",
-  "Direito à acessibilidade em todas as dependências da empresa",
-];
-
 const compliancePoints = [
   {
     icon: FileText,
@@ -80,11 +68,6 @@ const compliancePoints = [
     icon: Scale,
     title: "Análise Comportamental",
     description: "Análise do perfil comportamental para melhor adequação à vaga.",
-  },
-  {
-    icon: Users,
-    title: "Inclusão PCD",
-    description: "Assessoria para cumprimento de cotas e adaptação do ambiente de trabalho.",
   },
   {
     icon: Building2,
@@ -111,24 +94,14 @@ export default function CltPcdPage() {
           >
             <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[#0A2342]/10 text-[#0A2342] mb-6">
               <Scale className="h-4 w-4" />
-              <span className="text-sm font-medium">Decreto-Lei nº 5.452 &middot; Lei nº 8.213/91</span>
+              <span className="text-sm font-medium">Decreto-Lei nº 5.452</span>
             </div>
             <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-[#0A2342] mb-4">
-              CLT e <span className="text-gradient">PCD</span>
+              Contratação <span className="text-gradient">CLT</span>
             </h1>
             <p className="text-lg md:text-xl text-slate-600 max-w-2xl mx-auto mb-8">
-              Tudo sobre contratação formal e inclusão de pessoas com deficiência.
-              Conformidade total com a legislação trabalhista brasileira.
+              Tudo sobre contratação formal com conformidade total com a legislação trabalhista brasileira.
             </p>
-            <Link href="/login?tab=signup">
-              <Button
-                size="lg"
-                className="bg-[#FF6B35] hover:bg-[#FF6B35]/90 text-white px-8 rounded-full"
-              >
-                Fale com Nossa Equipe
-                <ArrowRight className="ml-2 h-5 w-5" />
-              </Button>
-            </Link>
           </motion.div>
         </div>
       </section>
@@ -208,51 +181,6 @@ export default function CltPcdPage() {
         </div>
       </section>
 
-      {/* PCD */}
-      <section className="py-20 bg-[#0A2342] text-white">
-        <div className="container mx-auto px-4">
-          <motion.div
-            initial="hidden"
-            whileInView="visible"
-            viewport={{ once: true, amount: 0.2 }}
-            variants={itemVariants}
-            className="text-center mb-14"
-          >
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/10 text-white/80 mb-6">
-              <Accessibility className="h-4 w-4" />
-              <span className="text-sm font-medium">Lei nº 8.213/91</span>
-            </div>
-            <h2 className="text-3xl md:text-4xl font-bold mb-4">
-              Inclusão <span className="text-[#FF6B35]">PCD</span>
-            </h2>
-            <p className="text-lg text-white/60 max-w-3xl mx-auto">
-              A Lei nº 8.213/91 estabelece a obrigatoriedade de contratação de pessoas com
-              deficiência por empresas com 100 ou mais funcionários. A ANEC auxilia empresas
-              no cumprimento dessa legislação e na promoção de um ambiente inclusivo.
-            </p>
-          </motion.div>
-
-          <motion.div
-            className="max-w-3xl mx-auto space-y-4"
-            initial="hidden"
-            whileInView="visible"
-            viewport={{ once: true, amount: 0.1 }}
-            variants={containerVariants}
-          >
-            {pcdInfo.map((info, index) => (
-              <motion.div
-                key={index}
-                variants={itemVariants}
-                className="flex items-start gap-4 p-5 bg-white/5 rounded-xl border border-white/10"
-              >
-                <CheckCircle2 className="h-6 w-6 text-[#FF6B35] shrink-0 mt-0.5" />
-                <span className="text-white/80">{info}</span>
-              </motion.div>
-            ))}
-          </motion.div>
-        </div>
-      </section>
-
       {/* Como a ANEC Garante Conformidade */}
       <section className="py-20 bg-white">
         <div className="container mx-auto px-4">
@@ -315,7 +243,7 @@ export default function CltPcdPage() {
               { value: "44h", label: "Jornada Semanal Máx." },
               { value: "8%", label: "FGTS Mensal" },
               { value: "30 dias", label: "Férias Anuais" },
-              { value: "2% a 5%", label: "Cotas PCD" },
+              { value: "1/3", label: "Adicional de Férias" },
             ].map((stat) => (
               <motion.div
                 key={stat.label}
@@ -351,18 +279,6 @@ export default function CltPcdPage() {
                 <ArrowRight className="h-3.5 w-3.5" />
               </a>
             </div>
-            <div className="p-5 rounded-xl border-2 border-[#0A2342]/10 bg-[#0A2342]/5 text-center">
-              <p className="text-xs text-slate-500 mb-2">Legislação PCD:</p>
-              <a
-                href="https://www.planalto.gov.br/ccivil_03/leis/l8213cons.htm"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 text-sm text-[#0A2342] font-semibold hover:text-[#FF6B35] transition-colors"
-              >
-                Lei nº 8.213/1991 — Planalto.gov.br
-                <ArrowRight className="h-3.5 w-3.5" />
-              </a>
-            </div>
           </div>
         </div>
       </section>
@@ -377,21 +293,12 @@ export default function CltPcdPage() {
             variants={itemVariants}
           >
             <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">
-              Precisa de Suporte em CLT ou Inclusão PCD?
+              Precisa de Suporte em Contratação CLT?
             </h2>
             <p className="text-lg text-slate-600 max-w-xl mx-auto mb-8">
               Nossa equipe está pronta para orientar sua empresa sobre conformidade
               trabalhista e inclusão.
             </p>
-            <Link href="/login?tab=signup">
-              <Button
-                size="lg"
-                className="bg-[#FF6B35] hover:bg-[#FF6B35]/90 text-white px-8 rounded-full"
-              >
-                Fale com Nossa Equipe
-                <ArrowRight className="ml-2 h-5 w-5" />
-              </Button>
-            </Link>
           </motion.div>
         </div>
       </section>

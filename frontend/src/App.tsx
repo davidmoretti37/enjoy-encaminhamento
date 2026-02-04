@@ -75,7 +75,7 @@ function Router() {
       <Route path={"/jovem-aprendiz"} component={JovemAprendizPage} />
       <Route path={"/empresas"} component={EmpresasPage} />
       <Route path={"/assessoria"} component={AssessoriaPage} />
-      <Route path={"/clt-pcd"} component={CltPcdPage} />
+      <Route path={"/clt"} component={CltPcdPage} />
       <Route path={"/estagio"} component={EstagioPage} />
       <Route path={"/vagas"} component={PublicVagasPage} />
       <Route path={"/login"} component={Login} />

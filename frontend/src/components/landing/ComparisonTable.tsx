@@ -130,7 +130,7 @@ export default function ComparisonTable({ highlight }: ComparisonTableProps) {
           {/* Links to each page */}
           <div className="flex flex-wrap justify-center gap-4 mt-8">
             <Link
-              href="/clt-pcd"
+              href="/clt"
               className="inline-flex items-center gap-2 text-sm font-medium text-[#0A2342] hover:text-[#FF6B35] transition-colors"
             >
               Saiba mais sobre CLT <ArrowRight className="h-3.5 w-3.5" />

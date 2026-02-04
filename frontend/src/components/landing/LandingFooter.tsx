@@ -5,7 +5,7 @@ const serviceLinks = [
   { label: "Jovem Aprendiz", href: "/jovem-aprendiz" },
   { label: "Empresas", href: "/empresas" },
   { label: "Assessoria", href: "/assessoria" },
-  { label: "CLT e PCD", href: "/clt-pcd" },
+  { label: "CLT", href: "/clt" },
   { label: "Estágio", href: "/estagio" },
 ];
 

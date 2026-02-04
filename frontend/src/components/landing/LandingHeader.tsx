@@ -11,7 +11,7 @@ const navLinks = [
   { label: "ASSESSORIA", href: "/assessoria" },
   { label: "JOVEM APRENDIZ", href: "/jovem-aprendiz" },
   { label: "ESTÁGIO", href: "/estagio" },
-  { label: "CLT E PCD", href: "/clt-pcd" },
+  { label: "CLT", href: "/clt" },
   { label: "VAGAS", href: "/vagas", highlighted: true },
 ];
 
@@ -43,9 +43,9 @@ export default function LandingHeader() {
         }`}
       >
         <div className="container mx-auto px-4">
-          <div className="flex items-center justify-between h-16 md:h-20">
+          <div className="relative flex items-center justify-between h-16 md:h-20">
             {/* Logo */}
-            <Link href="/" className="flex items-center gap-2 shrink-0">
+            <Link href="/" className="flex items-center gap-2 shrink-0 relative z-10">
               <img
                 src={APP_LOGO}
                 alt="ANEC"
@@ -56,8 +56,8 @@ export default function LandingHeader() {
               </span>
             </Link>
 
-            {/* Desktop Navigation */}
-            <nav className="hidden lg:flex items-center gap-1">
+            {/* Desktop Navigation — absolutely centered */}
+            <nav className="hidden lg:flex items-center gap-1 absolute left-1/2 -translate-x-1/2">
               {navLinks.map((link) => (
                 <Link
                   key={link.href}
@@ -75,23 +75,6 @@ export default function LandingHeader() {
               ))}
             </nav>
 
-            {/* Desktop CTAs */}
-            <div className="hidden lg:flex items-center gap-4 shrink-0">
-              <Link
-                href="/login"
-                className="text-sm font-medium text-slate-600 hover:text-[#FF6B35] transition-colors"
-              >
-                Entrar
-              </Link>
-              <Link href="/login?tab=signup">
-                <Button
-                  size="sm"
-                  className="bg-[#0A2342] hover:bg-[#0A2342]/90 text-white px-6"
-                >
-                  Cadastrar
-                </Button>
-              </Link>
-            </div>
 
             {/* Mobile Menu Button */}
             <button
@@ -165,21 +148,6 @@ export default function LandingHeader() {
                 </div>
               </nav>
 
-              {/* Mobile CTAs */}
-              <div className="p-4 border-t space-y-3">
-                <Link
-                  href="/login"
-                  onClick={() => setIsMobileMenuOpen(false)}
-                  className="block w-full text-center py-3 rounded-lg border border-slate-200 text-slate-600 font-medium hover:bg-slate-50 transition-colors"
-                >
-                  Entrar
-                </Link>
-                <Link href="/login?tab=signup" onClick={() => setIsMobileMenuOpen(false)}>
-                  <Button className="w-full bg-[#0A2342] hover:bg-[#0A2342]/90 text-white">
-                    Cadastrar
-                  </Button>
-                </Link>
-              </div>
             </div>
           </motion.div>
         )}

@@ -139,15 +139,6 @@ export default function EmpresasPage() {
               Combinamos inteligência artificial com curadoria humana para conectar sua empresa
               aos melhores profissionais de estágio, CLT e jovem aprendiz.
             </p>
-            <Link href="/login?tab=signup">
-              <Button
-                size="lg"
-                className="bg-[#FF6B35] hover:bg-[#FF6B35]/90 text-white px-8 rounded-full"
-              >
-                Começar a Contratar
-                <ArrowRight className="ml-2 h-5 w-5" />
-              </Button>
-            </Link>
           </motion.div>
         </div>
       </section>
@@ -315,15 +306,6 @@ export default function EmpresasPage() {
             <p className="text-lg text-white/60 max-w-xl mx-auto mb-8">
               Publique sua primeira vaga e receba candidatos pré-selecionados em dias.
             </p>
-            <Link href="/login?tab=signup">
-              <Button
-                size="lg"
-                className="bg-[#FF6B35] hover:bg-[#FF6B35]/90 text-white px-8 rounded-full"
-              >
-                Criar Conta Empresarial
-                <ArrowRight className="ml-2 h-5 w-5" />
-              </Button>
-            </Link>
           </motion.div>
         </div>
       </section>

@@ -35,7 +35,7 @@ const services = [
     title: "Gestão Contratual",
     description:
       "Realizamos toda a documentação e gestão contratual de estagiários e jovens aprendizes com total conformidade legal.",
-    href: "/clt-pcd",
+    href: "/clt",
   },
 ];
 

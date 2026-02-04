@@ -180,14 +180,6 @@ export default function PublicVagasPage() {
                             )}
                           </div>
                         </div>
-                        <Link href="/login?tab=signup">
-                          <Button
-                            variant="outline"
-                            className="border-[#FF6B35] text-[#FF6B35] hover:bg-[#FF6B35] hover:text-white shrink-0"
-                          >
-                            Candidatar-se
-                          </Button>
-                        </Link>
                       </div>
                     </motion.div>
                   );
@@ -202,21 +194,6 @@ export default function PublicVagasPage() {
             )}
           </div>
 
-          {/* More jobs CTA */}
-          <div className="text-center mt-12">
-            <p className="text-slate-600 mb-4">
-              Cadastre-se para ver todas as vagas e receber notificações de novas oportunidades.
-            </p>
-            <Link href="/login?tab=signup">
-              <Button
-                size="lg"
-                className="bg-[#FF6B35] hover:bg-[#FF6B35]/90 text-white px-8 rounded-full"
-              >
-                Criar Meu Perfil — Grátis
-                <ArrowRight className="ml-2 h-5 w-5" />
-              </Button>
-            </Link>
-          </div>
         </div>
       </section>
     </PublicLayout>

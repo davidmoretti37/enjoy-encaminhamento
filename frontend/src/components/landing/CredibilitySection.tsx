@@ -18,10 +18,10 @@ const itemVariants = {
 const legalTopics = [
   {
     icon: Scale,
-    title: "CLT e PCD",
+    title: "CLT",
     description:
       "Direitos, benefícios e regulamentações para emprego formal. Conformidade total com o Decreto-Lei nº 5.452.",
-    href: "/clt-pcd",
+    href: "/clt",
     reference: "Decreto-Lei nº 5.452",
   },
   {
