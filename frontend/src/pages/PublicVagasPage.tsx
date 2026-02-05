@@ -49,7 +49,7 @@ interface Job {
   work_type: string | null;
   location: string | null;
   salary: number | null;
-  hours_per_week: number | null;
+  work_schedule: string | null;
   published_at: string | null;
 }
 
@@ -192,10 +192,10 @@ export default function PublicVagasPage() {
                                 {job.location}
                               </span>
                             )}
-                            {job.hours_per_week && (
+                            {job.work_schedule && (
                               <span className="inline-flex items-center gap-1.5">
                                 <Clock className="h-3.5 w-3.5" />
-                                {job.hours_per_week}h/semana
+                                {job.work_schedule}
                               </span>
                             )}
                             {job.work_type && (
