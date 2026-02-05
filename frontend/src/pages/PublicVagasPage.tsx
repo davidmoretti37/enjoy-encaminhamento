@@ -1,17 +1,13 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "motion/react";
 import {
   Briefcase,
   MapPin,
   Clock,
-  ArrowRight,
   Filter,
   Loader2,
 } from "lucide-react";
-import { Link } from "wouter";
-import { Button } from "@/components/ui/button";
 import PublicLayout from "@/components/landing/PublicLayout";
-import { trpc } from "@/lib/trpc";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
@@ -46,8 +42,22 @@ const workTypeMap: Record<string, string> = {
   hibrido: "Híbrido",
 };
 
+interface Job {
+  id: string;
+  title: string;
+  contract_type: string;
+  work_type: string | null;
+  location: string | null;
+  salary: number | null;
+  hours_per_week: number | null;
+  published_at: string | null;
+}
+
 export default function PublicVagasPage() {
   const [activeFilter, setActiveFilter] = useState("Todas");
+  const [jobs, setJobs] = useState<Job[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const filterValue =
     activeFilter === "Todas"
@@ -58,9 +68,30 @@ export default function PublicVagasPage() {
           ? "clt"
           : "menor-aprendiz";
 
-  const { data: jobs, isLoading } = trpc.job.getPublicJobs.useQuery(
-    filterValue ? { contractType: filterValue } : undefined
-  );
+  useEffect(() => {
+    const fetchJobs = async () => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const url = filterValue
+          ? `/api/public-jobs?contractType=${filterValue}`
+          : "/api/public-jobs";
+        const response = await fetch(url);
+        if (!response.ok) {
+          throw new Error(`HTTP error: ${response.status}`);
+        }
+        const data = await response.json();
+        setJobs(data);
+      } catch (err: any) {
+        console.error("[PublicVagasPage] Error fetching jobs:", err);
+        setError(err.message || "Failed to load jobs");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchJobs();
+  }, [filterValue]);
 
   return (
     <PublicLayout>
@@ -119,6 +150,12 @@ export default function PublicVagasPage() {
             {isLoading ? (
               <div className="flex items-center justify-center py-20">
                 <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
+              </div>
+            ) : error ? (
+              <div className="text-center py-16">
+                <Briefcase className="h-12 w-12 text-red-300 mx-auto mb-4" />
+                <p className="text-red-500 text-lg">Erro ao carregar vagas</p>
+                <p className="text-slate-400 text-sm mt-2">{error}</p>
               </div>
             ) : jobs && jobs.length > 0 ? (
               <motion.div
