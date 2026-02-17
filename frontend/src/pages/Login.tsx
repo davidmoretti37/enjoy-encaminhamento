@@ -113,7 +113,7 @@ export default function Login() {
       await signUp(signupEmail, signupPassword, {
         name: signupName,
         role: signupRole,
-        agency_id: signupAgencyId,
+        agency_id: signupAgencyId || null,
       });
       toast.success('Conta criada com sucesso!');
 
@@ -322,7 +322,7 @@ export default function Login() {
                     </p>
                   </div>
 
-                  <Button type="submit" className="w-full" disabled={loading || !signupAgencyId}>
+                  <Button type="submit" className="w-full" disabled={loading}>
                     {loading ? (
                       <>
                         <ClassicLoader />
