@@ -42,10 +42,15 @@ export default function AdminAgencies() {
   const createInvitationMutation = trpc.affiliate.createAgencyInvitation.useMutation({
     onSuccess: (data) => {
       const inviteLink = `${window.location.origin}/register/agency?token=${data.token}`;
-      toast.success('Convite criado! Compartilhe o link com a agência.', { duration: 10000 });
-      navigator.clipboard.writeText(inviteLink).then(() => {
-        toast.info('Link copiado para a área de transferência!', { duration: 5000 });
-      });
+      const subject = encodeURIComponent('Convite para Cadastro - ANEC Recrutamento');
+      const body = encodeURIComponent(
+        `Olá!\n\nVocê foi convidado(a) por ${data.affiliateName} para cadastrar sua agência em nossa plataforma de recrutamento.\n\n${inviteNotes ? `Mensagem: ${inviteNotes}\n\n` : ''}Clique no link abaixo para completar seu cadastro:\n${inviteLink}\n\nEste link é válido por 7 dias e é exclusivo para ${inviteEmail}.`
+      );
+      const gmailUrl = `https://mail.google.com/mail/?view=cm&to=${encodeURIComponent(inviteEmail)}&su=${subject}&body=${body}`;
+      window.open(gmailUrl, '_blank');
+
+      navigator.clipboard.writeText(inviteLink);
+      toast.success('Convite criado! Gmail aberto para envio. Link também copiado.', { duration: 8000 });
       setIsInviteDialogOpen(false);
       setInviteEmail("");
       setInviteNotes("");

@@ -158,37 +158,7 @@ export const affiliateRouter = router({
         input.notes
       );
 
-      // Send invitation email via SMTP
-      const baseUrl = ENV.appUrl;
-      const inviteLink = `${baseUrl}/register/agency?token=${result.token}`;
-
-      const htmlBody = `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <h2 style="color: #1e293b;">Convite para Cadastro na Plataforma</h2>
-          <p>Olá!</p>
-          <p>Você foi convidado(a) por <strong>${affiliate.name}</strong> para cadastrar sua agência em nossa plataforma de recrutamento.</p>
-          ${input.notes ? `<p><strong>Mensagem:</strong> ${input.notes}</p>` : ''}
-          <p>Clique no botão abaixo para completar seu cadastro:</p>
-          <div style="margin: 30px 0; text-align: center;">
-            <a href="${inviteLink}" style="background-color: #2563eb; color: white; padding: 14px 28px; text-decoration: none; border-radius: 8px; font-weight: bold; display: inline-block;">
-              Cadastrar Agência
-            </a>
-          </div>
-          <p style="color: #666; font-size: 14px;">Este link é válido por 7 dias e é exclusivo para ${input.email}.</p>
-        </div>
-      `;
-
-      try {
-        await sendEmail(
-          input.email,
-          'Convite para Cadastro - Currículos MVP',
-          htmlBody
-        );
-      } catch (emailError) {
-        console.warn('[Invitation] Email failed to send, but invitation was created:', emailError);
-      }
-
-      return result;
+      return { ...result, affiliateName: affiliate.name };
     }),
 
   // Update agency status (admins can approve/suspend agencies in their region)
