@@ -178,11 +178,15 @@ export const affiliateRouter = router({
         </div>
       `;
 
-      await sendEmail(
-        input.email,
-        'Convite para Cadastro - Currículos MVP',
-        htmlBody
-      );
+      try {
+        await sendEmail(
+          input.email,
+          'Convite para Cadastro - Currículos MVP',
+          htmlBody
+        );
+      } catch (emailError) {
+        console.warn('[Invitation] Email failed to send, but invitation was created:', emailError);
+      }
 
       return result;
     }),

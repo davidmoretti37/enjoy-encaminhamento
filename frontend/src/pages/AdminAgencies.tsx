@@ -40,14 +40,18 @@ export default function AdminAgencies() {
   const { data: agencies, isLoading, refetch } = trpc.affiliate.getAgencies.useQuery();
 
   const createInvitationMutation = trpc.affiliate.createAgencyInvitation.useMutation({
-    onSuccess: () => {
-      toast.success('Convite enviado com sucesso!');
+    onSuccess: (data) => {
+      const inviteLink = `${window.location.origin}/register/agency?token=${data.token}`;
+      toast.success('Convite criado! Compartilhe o link com a agência.', { duration: 10000 });
+      navigator.clipboard.writeText(inviteLink).then(() => {
+        toast.info('Link copiado para a área de transferência!', { duration: 5000 });
+      });
       setIsInviteDialogOpen(false);
       setInviteEmail("");
       setInviteNotes("");
     },
     onError: (error) => {
-      toast.error(error.message || 'Erro ao enviar convite');
+      toast.error(error.message || 'Erro ao criar convite');
     }
   });
 
