@@ -315,6 +315,18 @@ export interface Database {
           status: 'active' | 'inactive' | 'employed'
           created_at: string
           updated_at: string
+          summary: string | null
+          summary_generated_at: string | null
+          disc_dominante: number | null
+          disc_influente: number | null
+          disc_estavel: number | null
+          disc_conforme: number | null
+          disc_completed_at: string | null
+          pdp_competencies: Json | null
+          pdp_intrapersonal: Json | null
+          pdp_interpersonal: Json | null
+          pdp_skills: Json | null
+          pdp_completed_at: string | null
         }
         Insert: {
           id?: string
@@ -350,6 +362,18 @@ export interface Database {
           status?: 'active' | 'inactive' | 'employed'
           created_at?: string
           updated_at?: string
+          summary?: string | null
+          summary_generated_at?: string | null
+          disc_dominante?: number | null
+          disc_influente?: number | null
+          disc_estavel?: number | null
+          disc_conforme?: number | null
+          disc_completed_at?: string | null
+          pdp_competencies?: Json | null
+          pdp_intrapersonal?: Json | null
+          pdp_interpersonal?: Json | null
+          pdp_skills?: Json | null
+          pdp_completed_at?: string | null
         }
         Update: {
           id?: string
@@ -385,6 +409,18 @@ export interface Database {
           status?: 'active' | 'inactive' | 'employed'
           created_at?: string
           updated_at?: string
+          summary?: string | null
+          summary_generated_at?: string | null
+          disc_dominante?: number | null
+          disc_influente?: number | null
+          disc_estavel?: number | null
+          disc_conforme?: number | null
+          disc_completed_at?: string | null
+          pdp_competencies?: Json | null
+          pdp_intrapersonal?: Json | null
+          pdp_interpersonal?: Json | null
+          pdp_skills?: Json | null
+          pdp_completed_at?: string | null
         }
       }
       jobs: {
@@ -695,7 +731,7 @@ export interface Database {
         }
         Insert: {
           id?: string
-          contract_id: string
+          contract_id?: string | null
           company_id: string
           amount: number
           payment_type: 'monthly-fee' | 'setup-fee' | 'insurance-fee' | 'penalty' | 'refund'
@@ -1200,6 +1236,109 @@ export interface Database {
           updated_at?: string
         }
       }
+      interview_sessions: {
+        Row: {
+          id: string
+          batch_id: string | null
+          job_id: string
+          company_id: string
+          interview_type: 'online' | 'in_person'
+          scheduled_at: string
+          duration_minutes: number
+          location_address: string | null
+          location_city: string | null
+          location_state: string | null
+          location_notes: string | null
+          meeting_link: string | null
+          status: 'scheduled' | 'completed' | 'cancelled'
+          notes: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          batch_id?: string | null
+          job_id: string
+          company_id: string
+          interview_type: 'online' | 'in_person'
+          scheduled_at: string
+          duration_minutes?: number
+          location_address?: string | null
+          location_city?: string | null
+          location_state?: string | null
+          location_notes?: string | null
+          meeting_link?: string | null
+          status?: 'scheduled' | 'completed' | 'cancelled'
+          notes?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          batch_id?: string | null
+          job_id?: string
+          company_id?: string
+          interview_type?: 'online' | 'in_person'
+          scheduled_at?: string
+          duration_minutes?: number
+          location_address?: string | null
+          location_city?: string | null
+          location_state?: string | null
+          location_notes?: string | null
+          meeting_link?: string | null
+          status?: 'scheduled' | 'completed' | 'cancelled'
+          notes?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      interview_participants: {
+        Row: {
+          id: string
+          interview_session_id: string
+          candidate_id: string
+          application_id: string
+          status: 'pending' | 'confirmed' | 'reschedule_requested' | 'declined' | 'no_show' | 'attended'
+          reschedule_reason: string | null
+          invitation_sent_at: string | null
+          responded_at: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          interview_session_id: string
+          candidate_id: string
+          application_id: string
+          status?: 'pending' | 'confirmed' | 'reschedule_requested' | 'declined' | 'no_show' | 'attended'
+          reschedule_reason?: string | null
+          invitation_sent_at?: string | null
+          responded_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          interview_session_id?: string
+          candidate_id?: string
+          application_id?: string
+          status?: 'pending' | 'confirmed' | 'reschedule_requested' | 'declined' | 'no_show' | 'attended'
+          reschedule_reason?: string | null
+          invitation_sent_at?: string | null
+          responded_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+      }
     }
   }
 }
+
+// Type aliases for interview tables
+export type InterviewSession = Database['public']['Tables']['interview_sessions']['Row'];
+export type InsertInterviewSession = Database['public']['Tables']['interview_sessions']['Insert'];
+export type UpdateInterviewSession = Database['public']['Tables']['interview_sessions']['Update'];
+
+export type InterviewParticipant = Database['public']['Tables']['interview_participants']['Row'];
+export type InsertInterviewParticipant = Database['public']['Tables']['interview_participants']['Insert'];
+export type UpdateInterviewParticipant = Database['public']['Tables']['interview_participants']['Update'];

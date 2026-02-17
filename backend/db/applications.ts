@@ -4,7 +4,7 @@ import { supabase, supabaseAdmin } from "../supabase";
 import type { Application, InsertApplication } from "./types";
 
 export async function createApplication(application: InsertApplication): Promise<string> {
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from("applications")
     .insert(application)
     .select("id")
@@ -15,7 +15,7 @@ export async function createApplication(application: InsertApplication): Promise
 }
 
 export async function getApplicationsByJobId(jobId: string): Promise<Application[]> {
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from("applications")
     .select("*")
     .eq("job_id", jobId)
@@ -41,7 +41,7 @@ export async function getApplicationsByCandidateId(candidateId: string): Promise
         company_id,
         companies (
           id,
-          name
+          company_name
         )
       )
     `)
@@ -56,9 +56,78 @@ export async function updateApplication(
   id: string,
   data: Partial<InsertApplication>
 ): Promise<void> {
-  const { error } = await supabase.from("applications").update(data).eq("id", id);
+  const { error } = await supabaseAdmin.from("applications").update(data).eq("id", id);
 
   if (error) throw error;
+}
+
+// Get candidate IDs who applied to a specific job (for matching pipeline)
+export async function getApplicantCandidateIds(jobId: string): Promise<string[]> {
+  const { data, error } = await supabaseAdmin
+    .from("applications")
+    .select("candidate_id")
+    .eq("job_id", jobId);
+
+  if (error) {
+    console.error("[Database] Failed to get applicant IDs:", error);
+    return [];
+  }
+  return data?.map(a => a.candidate_id) || [];
+}
+
+export async function updateApplicationsByCandidateIds(
+  jobId: string,
+  candidateIds: string[],
+  status: string
+): Promise<void> {
+  if (candidateIds.length === 0) return;
+
+  const { error } = await supabaseAdmin
+    .from("applications")
+    .update({ status, reviewed_at: new Date().toISOString() })
+    .eq("job_id", jobId)
+    .in("candidate_id", candidateIds);
+
+  if (error) {
+    console.error("[Database] Failed to update applications by candidate IDs:", error);
+    throw error;
+  }
+}
+
+export async function getApplicationByJobAndCandidate(
+  jobId: string,
+  candidateId: string
+): Promise<Application | null> {
+  const { data, error } = await supabaseAdmin
+    .from("applications")
+    .select("*")
+    .eq("job_id", jobId)
+    .eq("candidate_id", candidateId)
+    .single();
+
+  if (error) {
+    if (error.code === "PGRST116") return null;
+    console.error("[Database] Failed to get application:", error);
+    return null;
+  }
+
+  return data;
+}
+
+export async function getApplicationById(applicationId: string): Promise<Application | null> {
+  const { data, error } = await supabaseAdmin
+    .from("applications")
+    .select("*")
+    .eq("id", applicationId)
+    .single();
+
+  if (error) {
+    if (error.code === "PGRST116") return null;
+    console.error("[Database] Failed to get application by ID:", error);
+    return null;
+  }
+
+  return data;
 }
 
 export async function getApplicationWithDetails(applicationId: string): Promise<any | null> {

@@ -15,6 +15,22 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { trpc } from "@/lib/trpc";
 import {
   Users,
@@ -35,6 +51,10 @@ import {
   ChevronUp,
   MapPin,
   GraduationCap,
+  Trash2,
+  Phone,
+  Mail,
+  Copy,
 } from "lucide-react";
 import DashboardLayout from "@/components/DashboardLayout";
 import ImportCandidatesModal from "@/components/ImportCandidatesModal";
@@ -42,7 +62,17 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 // Sub-component to display candidate list inside a batch
-function BatchCandidateList({ candidateIds }: { candidateIds: string[] }) {
+function BatchCandidateList({
+  candidateIds,
+  selectable = false,
+  selectedIds = [],
+  onSelectionChange,
+}: {
+  candidateIds: string[];
+  selectable?: boolean;
+  selectedIds?: string[];
+  onSelectionChange?: (ids: string[]) => void;
+}) {
   // Fetch candidates for this batch
   const allCandidatesQuery = trpc.candidate.getByIds.useQuery(
     { ids: candidateIds },
@@ -50,6 +80,24 @@ function BatchCandidateList({ candidateIds }: { candidateIds: string[] }) {
   );
 
   const batchCandidates = allCandidatesQuery.data || [];
+
+  const toggleCandidate = (candidateId: string) => {
+    if (!onSelectionChange) return;
+    if (selectedIds.includes(candidateId)) {
+      onSelectionChange(selectedIds.filter(id => id !== candidateId));
+    } else {
+      onSelectionChange([...selectedIds, candidateId]);
+    }
+  };
+
+  const toggleAll = () => {
+    if (!onSelectionChange) return;
+    if (selectedIds.length === batchCandidates.length) {
+      onSelectionChange([]);
+    } else {
+      onSelectionChange(batchCandidates.map((c: any) => c.id));
+    }
+  };
 
   if (allCandidatesQuery.isLoading) {
     return (
@@ -73,8 +121,31 @@ function BatchCandidateList({ candidateIds }: { candidateIds: string[] }) {
 
   return (
     <div className="space-y-1">
+      {selectable && batchCandidates.length > 1 && (
+        <button
+          onClick={toggleAll}
+          className="text-xs text-blue-600 hover:text-blue-700 font-medium mb-2"
+        >
+          {selectedIds.length === batchCandidates.length ? 'Desmarcar todos' : 'Selecionar todos'}
+        </button>
+      )}
       {batchCandidates.map((candidate: any) => (
-        <div key={candidate.id} className="flex items-center gap-3 p-2 rounded-lg hover:bg-white">
+        <div
+          key={candidate.id}
+          className={`flex items-center gap-3 p-2 rounded-lg transition-colors ${
+            selectable ? 'cursor-pointer hover:bg-white' : 'hover:bg-white'
+          } ${selectable && selectedIds.includes(candidate.id) ? 'bg-blue-50 ring-1 ring-blue-200' : ''}`}
+          onClick={() => selectable && toggleCandidate(candidate.id)}
+        >
+          {selectable && (
+            <input
+              type="checkbox"
+              checked={selectedIds.includes(candidate.id)}
+              onChange={() => toggleCandidate(candidate.id)}
+              onClick={(e) => e.stopPropagation()}
+              className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+            />
+          )}
           <div className="h-8 w-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-xs font-medium shrink-0">
             {candidate.full_name?.charAt(0)?.toUpperCase() || '?'}
           </div>
@@ -101,6 +172,96 @@ function BatchCandidateList({ candidateIds }: { candidateIds: string[] }) {
   );
 }
 
+// Modal to show contact info for selected candidates
+function ContactInfoModal({
+  open,
+  onClose,
+  candidateIds,
+}: {
+  open: boolean;
+  onClose: () => void;
+  candidateIds: string[];
+}) {
+  const candidatesQuery = trpc.candidate.getByIds.useQuery(
+    { ids: candidateIds },
+    { enabled: open && candidateIds.length > 0 }
+  );
+
+  const candidates = candidatesQuery.data || [];
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    toast.success("Copiado!");
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Calendar className="h-5 w-5" />
+            Contatos dos Candidatos
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3 max-h-96 overflow-y-auto">
+          {candidatesQuery.isLoading ? (
+            <div className="space-y-3">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="p-3 bg-gray-50 rounded-lg animate-pulse">
+                  <div className="h-4 w-32 bg-gray-200 rounded mb-2" />
+                  <div className="h-3 w-48 bg-gray-200 rounded mb-1" />
+                  <div className="h-3 w-36 bg-gray-200 rounded" />
+                </div>
+              ))}
+            </div>
+          ) : candidates.length === 0 ? (
+            <p className="text-sm text-gray-500 text-center py-4">
+              Nenhum candidato selecionado
+            </p>
+          ) : (
+            candidates.map((candidate: any) => (
+              <div key={candidate.id} className="p-3 bg-gray-50 rounded-lg">
+                <p className="font-medium text-gray-900 mb-2">{candidate.full_name}</p>
+                {candidate.email && (
+                  <div className="flex items-center justify-between text-sm mb-1">
+                    <span className="flex items-center gap-2 text-gray-600">
+                      <Mail className="h-3.5 w-3.5" />
+                      {candidate.email}
+                    </span>
+                    <button
+                      onClick={() => copyToClipboard(candidate.email)}
+                      className="text-blue-600 hover:text-blue-700"
+                    >
+                      <Copy className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                )}
+                {candidate.phone && (
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="flex items-center gap-2 text-gray-600">
+                      <Phone className="h-3.5 w-3.5" />
+                      {candidate.phone}
+                    </span>
+                    <button
+                      onClick={() => copyToClipboard(candidate.phone)}
+                      className="text-blue-600 hover:text-blue-700"
+                    >
+                      <Copy className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                )}
+                {!candidate.email && !candidate.phone && (
+                  <p className="text-xs text-gray-400">Sem informações de contato</p>
+                )}
+              </div>
+            ))
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export default function CandidatePage() {
   const { user, loading: authLoading } = useAuth();
   const { currentAgency, isAllAgenciesMode } = useAgencyContext();
@@ -112,6 +273,9 @@ export default function CandidatePage() {
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
   const [appStatusFilter, setAppStatusFilter] = useState<string | null>(null);
   const [expandedBatchId, setExpandedBatchId] = useState<string | null>(null);
+  const [batchToDelete, setBatchToDelete] = useState<string | null>(null);
+  const [batchSelections, setBatchSelections] = useState<Record<string, string[]>>({});
+  const [contactModalBatchId, setContactModalBatchId] = useState<string | null>(null);
 
   const smartSearchMutation = trpc.candidate.smartSearch.useMutation({
     onSuccess: (results) => {
@@ -157,8 +321,9 @@ export default function CandidatePage() {
   const agencyCandidatesQuery = trpc.agency.getCandidates.useQuery(undefined, { enabled: isAgency });
 
   // Batch queries for Processos Seletivos
+  // Admins always see ALL batches regardless of agency filter
   const affiliateBatchesQuery = trpc.batch.getAffiliateBatches.useQuery(
-    { agencyId: currentAgency?.id ?? null },
+    { agencyId: null },
     { enabled: isAffiliate }
   );
   const agencyBatchesQuery = trpc.batch.getAgencyBatches.useQuery(
@@ -177,6 +342,57 @@ export default function CandidatePage() {
   const updateCandidateStatusMutation = trpc.candidate.updateStatus.useMutation({
     onSuccess: () => refetchCandidates()
   });
+
+  const cancelBatchMutation = trpc.batch.cancelBatch.useMutation({
+    onSuccess: () => {
+      toast.success("Grupo cancelado com sucesso");
+      setBatchToDelete(null);
+      affiliateBatchesQuery.refetch();
+      agencyBatchesQuery.refetch();
+    },
+    onError: (error) => {
+      toast.error(error.message || "Erro ao cancelar grupo");
+    }
+  });
+
+  const sendBatchMutation = trpc.batch.sendBatchToCompany.useMutation({
+    onSuccess: () => {
+      toast.success("Grupo enviado para a empresa!");
+      // Clear selection state for this batch
+      setExpandedBatchId(null);
+      affiliateBatchesQuery.refetch();
+      agencyBatchesQuery.refetch();
+    },
+    onError: (error) => {
+      toast.error(error.message || "Erro ao enviar grupo");
+    }
+  });
+
+  const handleDeleteBatch = (batchId: string) => {
+    setBatchToDelete(batchId);
+  };
+
+  const confirmDeleteBatch = () => {
+    if (batchToDelete) {
+      cancelBatchMutation.mutate({ batchId: batchToDelete });
+    }
+  };
+
+  const handleSendBatchToCompany = (batchId: string, jobId: string) => {
+    const selectedCandidates = batchSelections[batchId] || [];
+
+    if (selectedCandidates.length === 0) {
+      toast.error("Selecione pelo menos um candidato");
+      return;
+    }
+
+    sendBatchMutation.mutate({
+      batchId,
+      jobId,
+      candidateIds: selectedCandidates,
+      unlockFee: 0,
+    });
+  };
 
   const isLoading = authLoading || candidatesLoading;
 
@@ -229,9 +445,9 @@ export default function CandidatePage() {
 
   const getBatchStatusBadge = (status: string) => {
     const configs: Record<string, { className: string; label: string }> = {
-      draft: { className: 'bg-gray-100 text-gray-600 border-gray-200', label: 'Rascunho' },
+      draft: { className: 'bg-gray-100 text-gray-600 border-gray-200', label: 'Ativo' },
       sent: { className: 'bg-blue-100 text-blue-700 border-blue-200', label: 'Enviado' },
-      unlocked: { className: 'bg-green-100 text-green-700 border-green-200', label: 'Desbloqueado' },
+      unlocked: { className: 'bg-green-100 text-green-700 border-green-200', label: 'Enviado' },
       meeting_scheduled: { className: 'bg-amber-100 text-amber-700 border-amber-200', label: 'Reunião Agendada' },
       completed: { className: 'bg-emerald-100 text-emerald-700 border-emerald-200', label: 'Concluído' },
       cancelled: { className: 'bg-red-100 text-red-700 border-red-200', label: 'Cancelado' },
@@ -260,10 +476,11 @@ export default function CandidatePage() {
   // Batch counts
   const batchCounts = {
     total: batches?.length || 0,
-    draft: batches?.filter((b: any) => b.status === 'draft').length || 0,
-    sent: batches?.filter((b: any) => b.status === 'sent').length || 0,
-    active: batches?.filter((b: any) => ['unlocked', 'meeting_scheduled'].includes(b.status)).length || 0,
+    ativo: batches?.filter((b: any) => b.status === 'draft').length || 0,
+    enviado: batches?.filter((b: any) => b.status === 'unlocked').length || 0,
+    active: batches?.filter((b: any) => b.status === 'meeting_scheduled').length || 0,
     completed: batches?.filter((b: any) => b.status === 'completed').length || 0,
+    cancelled: batches?.filter((b: any) => b.status === 'cancelled').length || 0,
   };
 
   // Filter candidates
@@ -289,8 +506,10 @@ export default function CandidatePage() {
   const filteredBatches = batches?.filter((batch: any) => {
     // Status filter
     if (appStatusFilter) {
-      if (appStatusFilter === 'active') {
-        if (!['unlocked', 'meeting_scheduled'].includes(batch.status)) return false;
+      if (appStatusFilter === 'enviado') {
+        if (batch.status !== 'unlocked') return false;
+      } else if (appStatusFilter === 'active') {
+        if (batch.status !== 'meeting_scheduled') return false;
       } else if (batch.status !== appStatusFilter) {
         return false;
       }
@@ -546,10 +765,11 @@ export default function CandidatePage() {
 
               <div className="flex items-center gap-2 flex-wrap">
                 <FilterBadge label="Todos" count={batchCounts.total} value={null} active={appStatusFilter === null} onClick={() => setAppStatusFilter(null)} />
-                <FilterBadge label="Rascunho" count={batchCounts.draft} value="draft" active={appStatusFilter === 'draft'} onClick={() => setAppStatusFilter(appStatusFilter === 'draft' ? null : 'draft')} />
-                <FilterBadge label="Enviado" count={batchCounts.sent} value="sent" active={appStatusFilter === 'sent'} onClick={() => setAppStatusFilter(appStatusFilter === 'sent' ? null : 'sent')} />
+                <FilterBadge label="Ativo" count={batchCounts.ativo} value="draft" active={appStatusFilter === 'draft'} onClick={() => setAppStatusFilter(appStatusFilter === 'draft' ? null : 'draft')} />
+                <FilterBadge label="Enviado" count={batchCounts.enviado} value="enviado" active={appStatusFilter === 'enviado'} onClick={() => setAppStatusFilter(appStatusFilter === 'enviado' ? null : 'enviado')} />
                 <FilterBadge label="Em andamento" count={batchCounts.active} value="active" active={appStatusFilter === 'active'} onClick={() => setAppStatusFilter(appStatusFilter === 'active' ? null : 'active')} />
                 <FilterBadge label="Concluído" count={batchCounts.completed} value="completed" active={appStatusFilter === 'completed'} onClick={() => setAppStatusFilter(appStatusFilter === 'completed' ? null : 'completed')} />
+                <FilterBadge label="Cancelados" count={batchCounts.cancelled} value="cancelled" active={appStatusFilter === 'cancelled'} onClick={() => setAppStatusFilter(appStatusFilter === 'cancelled' ? null : 'cancelled')} />
               </div>
             </div>
 
@@ -627,10 +847,80 @@ export default function CandidatePage() {
                       {/* Expanded - candidate list */}
                       {isExpanded && (
                         <div className="border-t bg-gray-50/50 px-4 py-3">
-                          <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">
-                            Candidatos no Grupo
-                          </p>
-                          <BatchCandidateList candidateIds={candidateIds} />
+                          <div className="flex items-center justify-between mb-2">
+                            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+                              Candidatos no Grupo
+                              {batch.status === 'draft' && batchSelections[batch.id]?.length > 0 && (
+                                <span className="ml-2 text-blue-600">
+                                  ({batchSelections[batch.id].length} selecionado{batchSelections[batch.id].length !== 1 ? 's' : ''})
+                                </span>
+                              )}
+                            </p>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteBatch(batch.id);
+                              }}
+                              disabled={cancelBatchMutation.isPending}
+                            >
+                              <Trash2 className="h-4 w-4 mr-1" />
+                              Excluir Grupo
+                            </Button>
+                          </div>
+                          <BatchCandidateList
+                            candidateIds={candidateIds}
+                            selectable={batch.status === 'draft'}
+                            selectedIds={batchSelections[batch.id] || []}
+                            onSelectionChange={(ids) => setBatchSelections(prev => ({ ...prev, [batch.id]: ids }))}
+                          />
+
+                          {/* Send to company UI - only for draft batches */}
+                          {batch.status === 'draft' && (
+                            <div className="border-t mt-3 pt-3">
+                              <div className="flex items-center justify-between">
+                                <div>
+                                  {(!batchSelections[batch.id]?.length) && (
+                                    <p className="text-xs text-amber-600">
+                                      Selecione os candidatos que deseja enviar para a empresa
+                                    </p>
+                                  )}
+                                </div>
+                                <div className="flex gap-2">
+                                  <Button
+                                    variant="outline"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setContactModalBatchId(batch.id);
+                                    }}
+                                    disabled={!batchSelections[batch.id]?.length}
+                                    className="h-9"
+                                  >
+                                    <Calendar className="h-4 w-4 mr-1" />
+                                    Fazer Reunião
+                                  </Button>
+                                  <Button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleSendBatchToCompany(batch.id, batch.job?.id);
+                                    }}
+                                    disabled={
+                                      sendBatchMutation.isPending ||
+                                      !batchSelections[batch.id]?.length
+                                    }
+                                    className="h-9"
+                                  >
+                                    {sendBatchMutation.isPending ? (
+                                      <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                                    ) : null}
+                                    Enviar para Empresa
+                                  </Button>
+                                </div>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       )}
                     </Card>
@@ -668,6 +958,34 @@ export default function CandidatePage() {
           }}
         />
       )}
+
+      {/* Delete Batch Confirmation Dialog */}
+      <AlertDialog open={!!batchToDelete} onOpenChange={(open) => !open && setBatchToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir Grupo</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja excluir este grupo? Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmDeleteBatch}
+              className="bg-red-600 hover:bg-red-700 focus:ring-red-600"
+            >
+              {cancelBatchMutation.isPending ? "Excluindo..." : "Excluir"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Contact Info Modal */}
+      <ContactInfoModal
+        open={!!contactModalBatchId}
+        onClose={() => setContactModalBatchId(null)}
+        candidateIds={contactModalBatchId ? (batchSelections[contactModalBatchId] || []) : []}
+      />
     </DashboardLayout>
   );
 }

@@ -81,7 +81,7 @@ export default function ServicesOverviewSection() {
               >
                 <Link href={service.href} className="block h-full">
                   <div className="h-full p-8 rounded-2xl bg-white border border-slate-200 hover:border-[#FF6B35]/30 hover:shadow-lg transition-all cursor-pointer">
-                    <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-[#0A2342] to-[#FF6B35] flex items-center justify-center mb-6">
+                    <div className="w-12 h-12 rounded-lg bg-[#0A2342] flex items-center justify-center mb-6">
                       <Icon className="h-6 w-6 text-white" />
                     </div>
                     <h3 className="text-xl font-bold text-[#0A2342] mb-3">

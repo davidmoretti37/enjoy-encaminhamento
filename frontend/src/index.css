@@ -188,11 +188,11 @@
 
   .text-gradient {
     @apply bg-clip-text text-transparent;
-    background-image: linear-gradient(135deg, #0A2342, #FF6B35);
+    background-image: linear-gradient(135deg, #1B4D7A, #FF6B35);
   }
 
   .bg-gradient-brand {
-    background-image: linear-gradient(135deg, #0A2342, #FF6B35);
+    background-image: linear-gradient(135deg, #1B4D7A, #FF6B35);
   }
 
   .bg-anec-navy {

@@ -58,3 +58,9 @@ export * from "./companyInvitations";
 
 // Document template and signing operations
 export * from "./documents";
+
+// Interview scheduling operations
+export * from "./interviews";
+
+// Hiring process operations
+export * from "./hiring";

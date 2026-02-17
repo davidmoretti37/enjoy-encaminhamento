@@ -148,6 +148,7 @@ export async function getSignedDocuments(filters: {
   companyId?: string;
   agencyId?: string;
   contractId?: string;
+  candidateId?: string;
   category?: string;
 }): Promise<any[]> {
   let query = supabaseAdmin
@@ -161,6 +162,7 @@ export async function getSignedDocuments(filters: {
   if (filters.companyId) query = query.eq("company_id", filters.companyId);
   if (filters.agencyId) query = query.eq("agency_id", filters.agencyId);
   if (filters.contractId) query = query.eq("contract_id", filters.contractId);
+  if (filters.candidateId) query = query.eq("candidate_id", filters.candidateId);
   if (filters.category) query = query.eq("category", filters.category);
 
   const { data, error } = await query;

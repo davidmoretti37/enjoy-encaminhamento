@@ -6,6 +6,7 @@ import { TRPCError } from "@trpc/server";
 import { protectedProcedure } from "../_core/trpc";
 import { adminProcedure, companyProcedure, candidateProcedure } from "./procedures";
 import * as db from "../db";
+import * as hiringDb from "../db/hiring";
 
 export const contractRouter = router({
   // Create contract
@@ -268,5 +269,163 @@ export const contractRouter = router({
         contractId: input.contractId,
         signerUserId: ctx.user.id,
       });
+    }),
+
+  // ============================================
+  // Candidate Document Signing
+  // ============================================
+
+  // Get contract documents for candidate based on hiring type
+  getCandidateContractDocuments: candidateProcedure
+    .input(z.object({
+      hiringProcessId: z.string().uuid(),
+    }))
+    .query(async ({ ctx, input }) => {
+      const candidate = await db.getCandidateByUserId(ctx.user.id);
+      if (!candidate) {
+        return { templates: [], total: 0, signedCount: 0, allSigned: true };
+      }
+
+      // Get hiring process and verify it belongs to this candidate
+      const hp = await db.getHiringProcessById(input.hiringProcessId);
+      if (!hp || hp.candidate_id !== candidate.id) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Processo não encontrado' });
+      }
+
+      // Get agency_id from the company
+      const company = await db.getCompanyById(hp.company_id);
+      const agencyId = company?.agency_id;
+      if (!agencyId) {
+        return { templates: [], total: 0, signedCount: 0, allSigned: true };
+      }
+
+      // Map hiring_type to document category
+      const categoryMap: Record<string, string> = {
+        'estagio': 'estagio',
+        'clt': 'clt',
+        'menor-aprendiz': 'menor_aprendiz',
+      };
+      const category = categoryMap[hp.hiring_type] || hp.hiring_type;
+
+      const templates = await db.getDocumentTemplates(agencyId, category);
+      const templateIds = templates.map((t: any) => t.id);
+
+      let signedDocs: any[] = [];
+      if (templateIds.length > 0) {
+        signedDocs = await db.getSignedDocumentsByTemplateIds(
+          null,
+          templateIds,
+          undefined,
+          ctx.user.id
+        );
+      }
+
+      const signedTemplateIds = new Set(signedDocs.map((s: any) => s.template_id));
+
+      return {
+        templates: templates.map((t: any) => ({
+          ...t,
+          isSigned: signedTemplateIds.has(t.id),
+        })),
+        total: templates.length,
+        signedCount: signedDocs.length,
+        allSigned: templates.length === 0 || signedDocs.length >= templates.length,
+      };
+    }),
+
+  // Sign a document as candidate
+  signDocumentAsCandidate: candidateProcedure
+    .input(z.object({
+      templateId: z.string().uuid(),
+      hiringProcessId: z.string().uuid(),
+      signerName: z.string().min(1),
+      signerCpf: z.string().min(11),
+      signature: z.string().min(1),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const candidate = await db.getCandidateByUserId(ctx.user.id);
+      if (!candidate) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Candidato não encontrado' });
+      }
+
+      // Verify hiring process belongs to candidate
+      const hp = await db.getHiringProcessById(input.hiringProcessId);
+      if (!hp || hp.candidate_id !== candidate.id) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Processo não encontrado' });
+      }
+
+      const company = await db.getCompanyById(hp.company_id);
+      const agencyId = company?.agency_id;
+      if (!agencyId) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Agência não vinculada' });
+      }
+
+      // Verify template belongs to the agency
+      const template = await db.getDocumentTemplateById(input.templateId);
+      if (!template || template.agency_id !== agencyId) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Documento não pertence à agência' });
+      }
+
+      const result = await db.createSignedDocument({
+        templateId: input.templateId,
+        agencyId: template.agency_id,
+        companyId: company?.id || null,
+        signerUserId: ctx.user.id,
+        category: template.category,
+        candidateId: candidate.id,
+        signerName: input.signerName,
+        signerCpf: input.signerCpf,
+        signature: input.signature,
+      });
+
+      // Generate signed PDF with embedded signature
+      try {
+        const { embedSignatureInPdf } = await import('../lib/signPdf');
+        const { storagePut } = await import('../storage');
+
+        const signedPdfBytes = await embedSignatureInPdf(
+          template.file_url,
+          input.signature,
+          input.signerName,
+          input.signerCpf
+        );
+
+        const pdfKey = `signed-docs/${result.id}.pdf`;
+        const { url: signedPdfUrl } = await storagePut(pdfKey, signedPdfBytes, 'application/pdf');
+        await db.updateSignedDocumentUrl(result.id, signedPdfUrl);
+      } catch (err) {
+        console.error(`[Contract] Failed to generate signed PDF for ${result.id}:`, err);
+      }
+
+      // Check remaining unsigned
+      const categoryMap: Record<string, string> = {
+        'estagio': 'estagio',
+        'clt': 'clt',
+        'menor-aprendiz': 'menor_aprendiz',
+      };
+      const category = categoryMap[hp.hiring_type] || hp.hiring_type;
+
+      const status = await db.checkAllDocumentsSigned({
+        agencyId: template.agency_id,
+        companyId: null,
+        category,
+        signerUserId: ctx.user.id,
+      });
+
+      // Mark candidate_signed on hiring process when all documents are signed
+      if (status.allSigned) {
+        await hiringDb.updateHiringProcess(input.hiringProcessId, {
+          candidate_signed: true,
+          candidate_signed_at: new Date().toISOString(),
+          candidate_signer_cpf: input.signerCpf,
+        } as any);
+      }
+
+      return {
+        success: true,
+        signedDocumentId: result.id,
+        remainingUnsigned: status.total - status.signed,
+        allSigned: status.allSigned,
+      };
     }),
 });

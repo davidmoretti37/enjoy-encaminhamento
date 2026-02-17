@@ -50,7 +50,7 @@ export async function getAllOpenJobs(): Promise<Job[]> {
 }
 
 export async function updateJob(id: string, data: Partial<InsertJob>): Promise<void> {
-  const { error } = await supabase.from("jobs").update(data).eq("id", id);
+  const { error } = await supabaseAdmin.from("jobs").update(data).eq("id", id);
 
   if (error) throw error;
 }
@@ -168,8 +168,8 @@ export async function createJobForOnboarding(
       specific_requirements: data.requirements || null,
       openings: data.openings || 1,
       filled_positions: 0,
-      status: data.status || "draft",
-      published_at: data.published_at || null,
+      status: data.status || "open",
+      published_at: data.published_at || new Date().toISOString(),
     })
     .select("id")
     .single();

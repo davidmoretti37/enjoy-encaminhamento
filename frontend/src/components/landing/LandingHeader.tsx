@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { APP_LOGO } from "@/const";
-import { Menu, X } from "lucide-react";
+import { Menu, X, LogIn } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
 const navLinks = [
@@ -76,6 +76,15 @@ export default function LandingHeader() {
             </nav>
 
 
+            {/* Desktop Login Button */}
+            <Link
+              href="/login"
+              className="hidden lg:inline-flex items-center gap-1.5 text-xs font-semibold px-4 py-2 rounded-full border border-[#0A2342] text-[#0A2342] hover:bg-[#0A2342] hover:text-white transition-all"
+            >
+              <LogIn className="h-3.5 w-3.5" />
+              ENTRAR
+            </Link>
+
             {/* Mobile Menu Button */}
             <button
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
@@ -147,6 +156,18 @@ export default function LandingHeader() {
                   ))}
                 </div>
               </nav>
+
+              {/* Mobile Login Button */}
+              <div className="p-4 border-t">
+                <Link
+                  href="/login"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className="flex items-center justify-center gap-2 w-full px-4 py-3 rounded-lg font-semibold border border-[#0A2342] text-[#0A2342] hover:bg-[#0A2342] hover:text-white transition-all"
+                >
+                  <LogIn className="h-4 w-4" />
+                  Entrar
+                </Link>
+              </div>
 
             </div>
           </motion.div>

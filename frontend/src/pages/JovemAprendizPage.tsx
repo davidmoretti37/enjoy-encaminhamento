@@ -276,7 +276,7 @@ export default function JovemAprendizPage() {
                 variants={itemVariants}
                 className="flex gap-5 p-6 bg-white rounded-xl border border-slate-200"
               >
-                <div className="w-12 h-12 rounded-full bg-gradient-to-br from-[#0A2342] to-[#FF6B35] flex items-center justify-center shrink-0">
+                <div className="w-12 h-12 rounded-full bg-[#0A2342] flex items-center justify-center shrink-0">
                   <span className="text-white font-bold text-sm">{step.number}</span>
                 </div>
                 <div>

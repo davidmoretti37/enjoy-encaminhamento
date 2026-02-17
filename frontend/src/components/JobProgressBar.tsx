@@ -19,6 +19,7 @@ export const statusToStep: Record<string, number> = {
   searching: 1,
   candidates_found: 2,
   in_selection: 3,
+  list_sent: 4,
   filled: 4,
   paused: 1,
 };

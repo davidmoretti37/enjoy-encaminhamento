@@ -16,12 +16,13 @@ import CompanySelection from "./pages/company/CompanySelection";
 import CompanyEmployees from "./pages/company/CompanyEmployees";
 import CompanyEmployeeDetail from "./pages/company/CompanyEmployeeDetail";
 import CompanyPayments from "./pages/company/CompanyPayments";
-import CompanySettings from "./pages/company/CompanySettings";
+import CompanySettingsScreen from "./pages/company/CompanySettingsScreen";
 // Candidate Portal Pages
 import CandidateHome from "./pages/candidate/CandidateHome";
 import CandidateJobs from "./pages/candidate/CandidateJobs";
-import CandidateProfile from "./pages/candidate/CandidateProfile";
+import CandidateSettingsScreen from "./pages/candidate/CandidateSettingsScreen";
 import CandidateApplications from "./pages/candidate/CandidateApplications";
+import CandidateSignContract from "./pages/candidate/CandidateSignContract";
 // New merged role-aware pages
 import CandidatePage from "./pages/CandidatePage";
 import CompanyPage from "./pages/CompanyPage";
@@ -36,6 +37,7 @@ import AdminAgencies from "./pages/AdminAgencies";
 import AgencyRegistration from "./pages/AgencyRegistration";
 import AgencyDashboard from "./pages/AgencyDashboard";
 import AgencyJobDescriptions from "./pages/agency/AgencyJobDescriptions";
+import AgencyPortal from "./pages/agency/AgencyPortal";
 import Login from "./pages/Login";
 import PublicBooking from "./pages/PublicBooking";
 import CompanyForm from "./pages/CompanyForm";
@@ -56,6 +58,11 @@ import AssessoriaPage from "./pages/AssessoriaPage";
 import CltPcdPage from "./pages/CltPcdPage";
 import EstagioPage from "./pages/EstagioPage";
 import PublicVagasPage from "./pages/PublicVagasPage";
+import NotificationsScreen from "./pages/NotificationsScreen";
+import ExternalSigningPage from "./pages/signing/ExternalSigningPage";
+// New Funnel Portals
+import EmpresaPortal from "./pages/EmpresaPortal";
+import CandidatoPortal from "./pages/CandidatoPortal";
 
 function ScrollToTop() {
   const [location] = useLocation();
@@ -89,54 +96,60 @@ function Router() {
       <Route path={"/book/:adminId"} component={PublicBooking} />
       <Route path={"/form/:adminId"} component={CompanyForm} />
       <Route path={"/company/invite/:token"} component={CompanyInviteAccept} />
+      <Route path={"/assinar/:token"} component={ExternalSigningPage} />
       <Route path={"/404"} component={NotFound} />
 
       {/* All other routes require authentication */}
       <Route>
         <AuthGuard>
           <Switch>
-            <Route path={"/empresa/vagas"} component={CompanyVagasPage} />
-            <Route path={"/empresa/vagas/:jobId"} component={VagasPage} />
-
             {/* Admin routes */}
             <Route path={"/admin/dashboard"} component={AffiliateDashboard} />
             <Route path={"/admin/agencies"} component={AdminAgencies} />
             <Route path={"/admin/regional"} component={RegionalManagement} />
             <Route path={"/admin/feedback"} component={FeedbackManagement} />
 
-            {/* Agency routes */}
-            <Route path={"/agency/dashboard"} component={AgencyDashboard} />
+            {/* Agency routes - New Portal is default */}
+            <Route path={"/agency/portal"} component={AgencyPortal} />
+            <Route path={"/agency/dashboard"} component={AgencyPortal} />
+            <Route path={"/companies"} component={AgencyPortal} />
             <Route path={"/agency/job-descriptions/:companyId"} component={AgencyJobDescriptions} />
 
-            {/* Simplified role-aware pages (all roles use same URL) */}
+            {/* Simplified role-aware pages */}
             <Route path={"/candidates"} component={CandidatePage} />
-            <Route path={"/companies"} component={CompanyPage} />
             <Route path={"/jobs"} component={JobPage} />
             <Route path={"/contracts"} component={ContractPage} />
             <Route path={"/payments"} component={PaymentPage} />
             <Route path={"/calendar"} component={CalendarPage} />
             <Route path={"/settings"} component={SettingsPage} />
-            <Route path={"/company/dashboard"} component={CompanyPortalDashboard} />
+            <Route path={"/notifications"} component={NotificationsScreen} />
 
             {/* Onboarding Routes */}
             <Route path={"/company/onboarding"} component={CompanyOnboarding} />
             <Route path={"/candidate/onboarding"} component={CandidateOnboarding} />
 
-            {/* Candidate Portal Routes */}
-            <Route path={"/candidate"} component={CandidateHome} />
-            <Route path={"/candidate/vagas"} component={CandidateJobs} />
-            <Route path={"/candidate/perfil"} component={CandidateProfile} />
-            <Route path={"/candidate/candidaturas"} component={CandidateApplications} />
+            {/* NEW: Company Funnel Portal - replaces all old company routes */}
+            <Route path={"/company/portal"} component={EmpresaPortal} />
+            <Route path={"/company/dashboard"} component={EmpresaPortal} />
+            <Route path={"/company/jobs"} component={EmpresaPortal} />
+            <Route path={"/company/scheduling"} component={EmpresaPortal} />
+            <Route path={"/company/selection"} component={EmpresaPortal} />
+            <Route path={"/company/employees"} component={EmpresaPortal} />
+            <Route path={"/company/employees/:employeeId"} component={EmpresaPortal} />
+            <Route path={"/company/payments"} component={EmpresaPortal} />
+            <Route path={"/company/settings"} component={CompanySettingsScreen} />
+            <Route path={"/empresa"} component={EmpresaPortal} />
+            <Route path={"/empresa/vagas"} component={CompanyVagasPage} />
+            <Route path={"/empresa/vagas/:jobId"} component={VagasPage} />
 
-            {/* Company Portal Routes */}
-            <Route path={"/company/portal"} component={CompanyPortalDashboard} />
-            <Route path={"/company/jobs"} component={CompanyJobs} />
-            <Route path={"/company/scheduling"} component={CompanyScheduling} />
-            <Route path={"/company/selection"} component={CompanySelection} />
-            <Route path={"/company/employees"} component={CompanyEmployees} />
-            <Route path={"/company/employees/:employeeId"} component={CompanyEmployeeDetail} />
-            <Route path={"/company/payments"} component={CompanyPayments} />
-            <Route path={"/company/settings"} component={CompanySettings} />
+            {/* NEW: Candidate Funnel Portal - replaces all old candidate routes */}
+            <Route path={"/candidate"} component={CandidatoPortal} />
+            <Route path={"/candidate/vagas"} component={CandidatoPortal} />
+            <Route path={"/candidate/perfil"} component={CandidateSettingsScreen} />
+            <Route path={"/candidate/settings"} component={CandidateSettingsScreen} />
+            <Route path={"/candidate/candidaturas"} component={CandidatoPortal} />
+            <Route path={"/candidate/contratos"} component={CandidatoPortal} />
+            <Route path={"/candidato"} component={CandidatoPortal} />
 
             <Route component={NotFound} />
           </Switch>

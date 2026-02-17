@@ -196,6 +196,9 @@ export const agencyRouter = router({
       city: z.string().optional(),
       state: z.string().optional(),
       postal_code: z.string().optional(),
+      pix_key: z.string().optional(),
+      pix_key_type: z.enum(['cpf', 'cnpj', 'email', 'phone', 'random']).optional(),
+      payment_instructions: z.string().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       const agency = await db.getAgencyForUserContext(ctx.user.id, ctx.user.role);
@@ -267,6 +270,24 @@ export const agencyRouter = router({
       throw new TRPCError({ code: 'NOT_FOUND', message: 'Agency not found. Please select an agency first.' });
     }
     return await db.getPaymentsByAgencyId(agency.id);
+  }),
+
+  // Get payments grouped by company for dashboard
+  getPaymentsGroupedByCompany: agencyProcedure.query(async ({ ctx }) => {
+    const agency = await db.getAgencyForUserContext(ctx.user.id, ctx.user.role);
+    if (!agency) {
+      throw new TRPCError({ code: 'NOT_FOUND', message: 'Agency not found. Please select an agency first.' });
+    }
+    return await db.getPaymentsGroupedByCompany(agency.id);
+  }),
+
+  // Get overdue payments for alerts
+  getOverduePayments: agencyProcedure.query(async ({ ctx }) => {
+    const agency = await db.getAgencyForUserContext(ctx.user.id, ctx.user.role);
+    if (!agency) {
+      throw new TRPCError({ code: 'NOT_FOUND', message: 'Agency not found. Please select an agency first.' });
+    }
+    return await db.getOverduePayments(agency.id);
   }),
 
   // Get meetings for the agency's affiliate

@@ -1,15 +1,7 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import ClassicLoader from "@/components/ui/ClassicLoader";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import {
@@ -26,7 +18,6 @@ import {
   Building,
   CheckCircle,
   XCircle,
-  Eye,
   Search,
   Ban,
   Mail,
@@ -139,13 +130,13 @@ export default function AdminAgencies() {
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'active':
-        return <Badge className="bg-green-500">Ativa</Badge>;
+        return <Badge className="bg-green-500 text-white">Ativa</Badge>;
       case 'pending':
-        return <Badge className="bg-amber-500">Pendente</Badge>;
+        return <Badge className="bg-orange-500 text-white">Pendente</Badge>;
       case 'suspended':
-        return <Badge className="bg-red-500">Suspensa</Badge>;
+        return <Badge className="bg-red-500 text-white">Suspensa</Badge>;
       default:
-        return <Badge>{status}</Badge>;
+        return <Badge className="bg-slate-500 text-white">{status}</Badge>;
     }
   };
 
@@ -162,117 +153,131 @@ export default function AdminAgencies() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-8">
-        {/* Header */}
-        <div className="flex items-center justify-between py-4">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">Agências</h1>
-            <p className="text-gray-500 mt-1">Gerencie as agências da sua região</p>
-          </div>
-          <Button onClick={() => setIsInviteDialogOpen(true)}>
-            <Mail className="h-4 w-4 mr-2" />
-            Convidar Agência
-          </Button>
+      <div className="space-y-6">
+        {/* Centered Header */}
+        <div className="text-center mb-6">
+          <h2 className="text-2xl font-bold text-[#0A2342]">Agências</h2>
+          <p className="text-slate-600 mt-1">Gerencie as agências da sua região</p>
         </div>
 
-        {/* Agencies Table */}
-        <Card className="shadow-lg">
-          <CardHeader>
-            <CardTitle>Agências</CardTitle>
-            <CardDescription>
-              Gerencie as agências da sua região
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {filteredAgencies && filteredAgencies.length > 0 ? (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Nome</TableHead>
-                    <TableHead>Cidade</TableHead>
-                    <TableHead>Email</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Ações</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredAgencies.map((agency: any) => (
-                    <TableRow key={agency.id}>
-                      <TableCell className="font-medium">
-                        {agency.agency_name}
-                      </TableCell>
-                      <TableCell>{agency.city || 'N/A'}</TableCell>
-                      <TableCell>{agency.email}</TableCell>
-                      <TableCell>{getStatusBadge(agency.status)}</TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-2">
-                          {agency.status === 'pending' && (
-                            <>
-                              <Button
-                                size="sm"
-                                variant="default"
-                                onClick={() => handleApprove(agency.id)}
-                                disabled={updateStatusMutation.isPending}
-                              >
-                                <CheckCircle className="h-4 w-4 mr-1" />
-                                Aprovar
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="destructive"
-                                onClick={() => openRejectDialog(agency)}
-                                disabled={updateStatusMutation.isPending}
-                              >
-                                <XCircle className="h-4 w-4 mr-1" />
-                                Rejeitar
-                              </Button>
-                            </>
-                          )}
-                          {agency.status === 'active' && (
-                            <Button
-                              size="sm"
-                              variant="destructive"
-                              onClick={() => handleSuspend(agency.id)}
-                              disabled={updateStatusMutation.isPending}
-                            >
-                              <Ban className="h-4 w-4 mr-1" />
-                              Suspender
-                            </Button>
-                          )}
-                          {agency.status === 'suspended' && (
-                            <Button
-                              size="sm"
-                              variant="default"
-                              onClick={() => handleReactivate(agency.id)}
-                              disabled={updateStatusMutation.isPending}
-                            >
-                              <CheckCircle className="h-4 w-4 mr-1" />
-                              Reativar
-                            </Button>
-                          )}
-                          <Button
-                            size="sm"
-                            variant="outline"
-                          >
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            ) : (
-              <div className="flex flex-col items-center justify-center py-12">
-                <div className="w-20 h-24 border-2 border-dashed border-gray-300 rounded-xl bg-gray-50/50 flex flex-col items-center justify-center gap-2 mb-6">
-                  <Building className="h-8 w-8 text-gray-300" />
+        {/* Invite Button */}
+        <div className="flex justify-center">
+          <button
+            onClick={() => setIsInviteDialogOpen(true)}
+            className="flex items-center gap-2 px-6 py-3 rounded-full bg-gradient-to-br from-[#1B4D7A] to-[#FF6B35] text-white font-medium shadow-lg shadow-[#0A2342]/25 hover:shadow-xl transition-all"
+          >
+            <Mail className="h-4 w-4" />
+            Convidar Agência
+          </button>
+        </div>
+
+        {/* Search Bar */}
+        <div className="relative max-w-md mx-auto">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+          <Input
+            placeholder="Buscar agências..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="pl-9"
+          />
+        </div>
+
+        {/* Agencies Grid */}
+        {filteredAgencies && filteredAgencies.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {filteredAgencies.map((agency: any) => (
+              <div
+                key={agency.id}
+                className="bg-white rounded-lg border-2 border-slate-200 hover:border-orange-300 hover:shadow-lg transition-all p-4 flex flex-col h-full"
+              >
+                {/* Agency Avatar */}
+                <div className="mb-3">
+                  <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-[#1B4D7A] to-[#FF6B35] flex items-center justify-center">
+                    <span className="text-white text-lg font-bold">
+                      {agency.agency_name?.charAt(0)?.toUpperCase() || 'A'}
+                    </span>
+                  </div>
                 </div>
-                <h3 className="text-lg font-medium text-gray-500 mb-1">Nenhuma agência encontrada</h3>
-                <p className="text-gray-400 text-sm">Convide agências para se juntarem à sua rede</p>
+
+                {/* Agency Info */}
+                <h3 className="text-base font-semibold text-[#0A2342] mb-1">
+                  {agency.agency_name}
+                </h3>
+                {agency.city && (
+                  <p className="text-xs text-slate-600 mb-2">{agency.city}</p>
+                )}
+                <p className="text-xs text-slate-500 mb-3 truncate">{agency.email}</p>
+
+                {/* Status Badge */}
+                <div className="mb-3">
+                  {getStatusBadge(agency.status)}
+                </div>
+
+                {/* Actions */}
+                <div className="mt-auto space-y-2">
+                  {agency.status === 'pending' && (
+                    <>
+                      <Button
+                        size="sm"
+                        className="w-full bg-gradient-to-br from-[#1B4D7A] to-[#FF6B35] hover:shadow-lg shadow-[#0A2342]/25"
+                        onClick={() => handleApprove(agency.id)}
+                        disabled={updateStatusMutation.isPending}
+                      >
+                        <CheckCircle className="h-4 w-4 mr-1" />
+                        Aprovar
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="w-full border-red-300 text-red-600 hover:bg-red-50"
+                        onClick={() => openRejectDialog(agency)}
+                        disabled={updateStatusMutation.isPending}
+                      >
+                        <XCircle className="h-4 w-4 mr-1" />
+                        Rejeitar
+                      </Button>
+                    </>
+                  )}
+                  {agency.status === 'active' && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="w-full border-red-300 text-red-600 hover:bg-red-50"
+                      onClick={() => handleSuspend(agency.id)}
+                      disabled={updateStatusMutation.isPending}
+                    >
+                      <Ban className="h-4 w-4 mr-1" />
+                      Suspender
+                    </Button>
+                  )}
+                  {agency.status === 'suspended' && (
+                    <Button
+                      size="sm"
+                      className="w-full bg-gradient-to-br from-[#1B4D7A] to-[#FF6B35] hover:shadow-lg shadow-[#0A2342]/25"
+                      onClick={() => handleReactivate(agency.id)}
+                      disabled={updateStatusMutation.isPending}
+                    >
+                      <CheckCircle className="h-4 w-4 mr-1" />
+                      Reativar
+                    </Button>
+                  )}
+                </div>
               </div>
-            )}
-          </CardContent>
-        </Card>
+            ))}
+          </div>
+        ) : (
+          <div className="flex flex-col items-center justify-center py-16 text-center">
+            <div className="w-20 h-20 rounded-2xl bg-white border-2 border-slate-200 flex items-center justify-center mb-6 shadow-sm">
+              <Building className="w-10 h-10 text-slate-400" />
+            </div>
+            <h3 className="text-xl font-semibold text-[#0A2342] mb-2">
+              {searchTerm ? 'Nenhuma agência encontrada' : 'Nenhuma agência cadastrada'}
+            </h3>
+            <p className="text-slate-600 max-w-sm">
+              {searchTerm ? 'Tente ajustar sua busca' : 'Convide agências para se juntarem à sua rede'}
+            </p>
+          </div>
+        )}
 
         {/* Rejection Dialog */}
         <Dialog open={isRejectDialogOpen} onOpenChange={setIsRejectDialogOpen}>

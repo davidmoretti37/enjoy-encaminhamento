@@ -1,6 +1,5 @@
 // @ts-nocheck
 import { useAuth } from "@/_core/hooks/useAuth";
-import ClassicLoader from "@/components/ui/ClassicLoader";
 import DashboardLayout from "@/components/DashboardLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -69,14 +68,6 @@ export default function CandidateHome() {
   const hasPreSelected = applications.some((a: any) => a.status === 'screening');
   const hasInterviewScheduled = applications.some((a: any) => a.status === 'interview-scheduled');
   const isHired = applications.some((a: any) => a.status === 'selected');
-
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <ClassicLoader />
-      </div>
-    );
-  }
 
   if (!user || user.role !== 'candidate') {
     return (

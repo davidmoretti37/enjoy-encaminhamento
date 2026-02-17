@@ -346,6 +346,112 @@ export async function getPaymentAlertCounts(): Promise<{
   };
 }
 
+// ============================================
+// Agency payment tracking (per-company breakdown)
+// ============================================
+
+export async function getPaymentsGroupedByCompany(agencyId: string) {
+  // Get all payments for companies belonging to this agency
+  const { data, error } = await supabaseAdmin
+    .from("payments")
+    .select(`
+      *,
+      companies!inner(id, company_name, agency_id)
+    `)
+    .eq("companies.agency_id", agencyId)
+    .order("due_date", { ascending: true });
+
+  if (error) {
+    console.error("[Database] Failed to get payments grouped by company:", error);
+    return [];
+  }
+
+  // Group by company
+  const grouped: Record<string, {
+    companyId: string;
+    companyName: string;
+    totalDue: number;
+    totalPaid: number;
+    overdueCount: number;
+    overdueAmount: number;
+    pendingCount: number;
+    pendingAmount: number;
+    nextPaymentDate: string | null;
+    payments: any[];
+  }> = {};
+
+  const now = new Date();
+
+  for (const payment of data || []) {
+    const companyId = payment.companies?.id;
+    const companyName = payment.companies?.company_name || "N/A";
+
+    if (!companyId) continue;
+
+    if (!grouped[companyId]) {
+      grouped[companyId] = {
+        companyId,
+        companyName,
+        totalDue: 0,
+        totalPaid: 0,
+        overdueCount: 0,
+        overdueAmount: 0,
+        pendingCount: 0,
+        pendingAmount: 0,
+        nextPaymentDate: null,
+        payments: [],
+      };
+    }
+
+    const g = grouped[companyId];
+    g.payments.push(payment);
+
+    if (payment.status === "paid") {
+      g.totalPaid += payment.amount || 0;
+    } else if (payment.status === "overdue") {
+      g.overdueCount++;
+      g.overdueAmount += payment.amount || 0;
+      g.totalDue += payment.amount || 0;
+    } else if (payment.status === "pending") {
+      g.pendingCount++;
+      g.pendingAmount += payment.amount || 0;
+      g.totalDue += payment.amount || 0;
+
+      // Track next payment date (earliest pending)
+      if (payment.due_date && (!g.nextPaymentDate || payment.due_date < g.nextPaymentDate)) {
+        g.nextPaymentDate = payment.due_date;
+      }
+    }
+  }
+
+  return Object.values(grouped).sort((a, b) => {
+    // Sort: overdue first, then by next payment date
+    if (a.overdueCount > 0 && b.overdueCount === 0) return -1;
+    if (b.overdueCount > 0 && a.overdueCount === 0) return 1;
+    if (a.nextPaymentDate && b.nextPaymentDate) return a.nextPaymentDate.localeCompare(b.nextPaymentDate);
+    return 0;
+  });
+}
+
+export async function getOverduePayments(agencyId: string) {
+  const { data, error } = await supabaseAdmin
+    .from("payments")
+    .select(`
+      *,
+      companies!inner(id, company_name, agency_id)
+    `)
+    .eq("companies.agency_id", agencyId)
+    .eq("status", "overdue")
+    .order("due_date", { ascending: true });
+
+  if (error) {
+    console.error("[Database] Failed to get overdue payments:", error);
+    return [];
+  }
+
+  return data || [];
+}
+
 export async function getPaymentsPendingReview(): Promise<any[]> {
   const { data, error } = await supabaseAdmin
     .from("payments")

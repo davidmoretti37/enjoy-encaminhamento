@@ -205,6 +205,44 @@ export const candidateRouter = router({
     return candidate;
   }),
 
+  // Regenerate AI summary for existing candidate
+  regenerateSummary: candidateProcedure.mutation(async ({ ctx }) => {
+    const candidate = await db.getCandidateByUserId(ctx.user.id);
+    if (!candidate) {
+      throw new TRPCError({ code: "NOT_FOUND", message: "Candidate not found" });
+    }
+
+    const summary = await generateCandidateSummary({
+      fullName: candidate.full_name,
+      city: candidate.city || 'Não informado',
+      state: candidate.state || 'Não informado',
+      educationLevel: candidate.education_level || 'Não informado',
+      institution: candidate.institution || undefined,
+      course: candidate.course || undefined,
+      skills: (candidate.skills as string[]) || [],
+      languages: (candidate.languages as string[]) || [],
+      discInfluente: candidate.disc_influente || undefined,
+      discEstavel: candidate.disc_estavel || undefined,
+      discDominante: candidate.disc_dominante || undefined,
+      discConforme: candidate.disc_conforme || undefined,
+      pdpIntrapersonal: candidate.pdp_intrapersonal as any,
+      pdpInterpersonal: candidate.pdp_interpersonal as any,
+      pdpSkills: candidate.pdp_skills as any,
+      pdpCompetencies: (candidate.pdp_competencies as string[]) || [],
+    });
+
+    if (summary) {
+      await db.updateCandidate(candidate.id, {
+        summary,
+        summary_generated_at: new Date().toISOString(),
+      });
+      // Generate embedding from summary
+      await generateCandidateEmbedding(candidate.id);
+    }
+
+    return { success: true, summary };
+  }),
+
   // Create candidate profile
   createProfile: protectedProcedure
     .input(z.object({
@@ -263,6 +301,7 @@ export const candidateRouter = router({
       skills: z.array(z.string()).optional(),
       languages: z.array(z.string()).optional(),
       profile_summary: z.string().optional(),
+      summary: z.string().optional(),
       available_for_clt: z.boolean().optional(),
       available_for_internship: z.boolean().optional(),
       available_for_apprentice: z.boolean().optional(),
@@ -515,4 +554,13 @@ export const candidateRouter = router({
       const candidates = await db.getCandidatesByIds(input.ids);
       return candidates;
     }),
+
+  // Get all signed documents for the current candidate
+  getMyDocuments: candidateProcedure.query(async ({ ctx }) => {
+    const candidate = await db.getCandidateByUserId(ctx.user.id);
+    if (!candidate) {
+      throw new TRPCError({ code: "NOT_FOUND", message: "Candidate not found" });
+    }
+    return db.getSignedDocuments({ candidateId: candidate.id });
+  }),
 });

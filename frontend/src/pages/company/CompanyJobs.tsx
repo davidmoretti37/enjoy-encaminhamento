@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import DashboardLayout from "@/components/DashboardLayout";
 import ClassicLoader from "@/components/ui/ClassicLoader";
-import { Skeleton } from "@/components/ui/skeleton";
+import { WorkSchedulePicker } from "@/components/ui/WorkSchedulePicker";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -36,10 +36,12 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
 const jobStatusConfig: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
-  pending_review: { label: 'Aguardando análise', color: 'bg-yellow-100 text-yellow-800', icon: <Clock className="h-3 w-3" /> },
+  open: { label: 'Publicada', color: 'bg-green-100 text-green-800', icon: <CheckCircle className="h-3 w-3" /> },
+  pending_review: { label: 'Rascunho', color: 'bg-gray-100 text-gray-800', icon: <Clock className="h-3 w-3" /> },
   searching: { label: 'Buscando candidatos', color: 'bg-blue-100 text-blue-800', icon: <Search className="h-3 w-3" /> },
   candidates_found: { label: 'Candidatos encontrados', color: 'bg-green-100 text-green-800', icon: <Users className="h-3 w-3" /> },
   in_selection: { label: 'Em processo seletivo', color: 'bg-purple-100 text-purple-800', icon: <Calendar className="h-3 w-3" /> },
+  list_sent: { label: 'Lista enviada', color: 'bg-emerald-100 text-emerald-800', icon: <CheckCircle className="h-3 w-3" /> },
   filled: { label: 'Vaga preenchida', color: 'bg-emerald-100 text-emerald-800', icon: <CheckCircle className="h-3 w-3" /> },
   paused: { label: 'Pausada', color: 'bg-gray-100 text-gray-800', icon: <Pause className="h-3 w-3" /> },
 };
@@ -51,8 +53,7 @@ export default function CompanyJobs() {
   const [formData, setFormData] = useState({
     title: '',
     contract_type: '',
-    salary_min: '',
-    salary_max: '',
+    salary: '',
     description: '',
     requirements: '',
     work_schedule: '',
@@ -76,8 +77,7 @@ export default function CompanyJobs() {
       setFormData({
         title: '',
         contract_type: '',
-        salary_min: '',
-        salary_max: '',
+        salary: '',
         description: '',
         requirements: '',
         work_schedule: '',
@@ -113,14 +113,6 @@ export default function CompanyJobs() {
     },
   });
 
-  if (authLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <ClassicLoader />
-      </div>
-    );
-  }
-
   if (!user || user.role !== 'company') {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -155,8 +147,8 @@ export default function CompanyJobs() {
       title: formData.title,
       description: formData.description,
       contract_type: formData.contract_type as 'estagio' | 'clt' | 'menor-aprendiz',
-      salary_min: formData.salary_min ? parseFloat(formData.salary_min) : undefined,
-      salary_max: formData.salary_max ? parseFloat(formData.salary_max) : undefined,
+      salary_min: formData.salary ? parseFloat(formData.salary) : undefined,
+      salary_max: formData.salary ? parseFloat(formData.salary) : undefined,
       work_schedule: formData.work_schedule || undefined,
       requirements: formData.requirements || undefined,
     });
@@ -207,36 +199,22 @@ export default function CompanyJobs() {
                     </Select>
                   </div>
                   <div className="grid gap-2">
-                    <Label htmlFor="work_schedule">Horário de trabalho</Label>
+                    <Label htmlFor="salary">Salario (R$)</Label>
                     <Input
-                      id="work_schedule"
-                      placeholder="Ex: 08:00 às 14:00"
-                      value={formData.work_schedule}
-                      onChange={(e) => setFormData(prev => ({ ...prev, work_schedule: e.target.value }))}
+                      id="salary"
+                      type="number"
+                      placeholder="1500"
+                      value={formData.salary}
+                      onChange={(e) => setFormData(prev => ({ ...prev, salary: e.target.value }))}
                     />
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="grid gap-2">
-                    <Label htmlFor="salary_min">Salário mínimo (R$)</Label>
-                    <Input
-                      id="salary_min"
-                      type="number"
-                      placeholder="1200"
-                      value={formData.salary_min}
-                      onChange={(e) => setFormData(prev => ({ ...prev, salary_min: e.target.value }))}
-                    />
-                  </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="salary_max">Salário máximo (R$)</Label>
-                    <Input
-                      id="salary_max"
-                      type="number"
-                      placeholder="1500"
-                      value={formData.salary_max}
-                      onChange={(e) => setFormData(prev => ({ ...prev, salary_max: e.target.value }))}
-                    />
-                  </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="work_schedule">Horario de trabalho</Label>
+                  <WorkSchedulePicker
+                    value={formData.work_schedule}
+                    onChange={(value) => setFormData(prev => ({ ...prev, work_schedule: value }))}
+                  />
                 </div>
                 <div className="grid gap-2">
                   <Label htmlFor="description">Descrição das atividades *</Label>
@@ -273,60 +251,9 @@ export default function CompanyJobs() {
         {/* Jobs List */}
         <div className="space-y-6">
           {isLoading ? (
-            // Skeleton loading cards
-            <>
-              {[1, 2].map((i) => (
-                <Card key={i} className="overflow-hidden">
-                  <CardContent className="p-0">
-                    <div className="p-6 pb-4">
-                      {/* Header skeleton */}
-                      <div className="flex items-start justify-between mb-4">
-                        <div>
-                          <Skeleton className="h-6 w-48 mb-2" />
-                          <Skeleton className="h-5 w-20" />
-                        </div>
-                        <Skeleton className="h-6 w-32" />
-                      </div>
-
-                      {/* Info grid skeleton */}
-                      <div className="grid grid-cols-3 gap-4 mb-4">
-                        {[1, 2, 3].map((j) => (
-                          <div key={j} className="bg-gray-50 rounded-lg p-3">
-                            <Skeleton className="h-3 w-16 mb-2" />
-                            <Skeleton className="h-4 w-24" />
-                          </div>
-                        ))}
-                      </div>
-
-                      {/* Description skeleton */}
-                      <div className="mb-4">
-                        <Skeleton className="h-3 w-20 mb-2" />
-                        <Skeleton className="h-4 w-full mb-1" />
-                        <Skeleton className="h-4 w-3/4" />
-                      </div>
-                    </div>
-
-                    {/* Progress section skeleton */}
-                    <div className="border-t bg-gray-50/50 p-6">
-                      <Skeleton className="h-3 w-40 mb-4" />
-                      <div className="flex items-center justify-between">
-                        {[1, 2, 3, 4].map((j) => (
-                          <div key={j} className="flex items-center flex-1 last:flex-none">
-                            <Skeleton className="h-5 w-5 rounded-full" />
-                            {j < 4 && <Skeleton className="flex-1 h-1 mx-1" />}
-                          </div>
-                        ))}
-                      </div>
-                      <div className="flex justify-between mt-3">
-                        {[1, 2, 3, 4].map((j) => (
-                          <Skeleton key={j} className="h-3 w-16" />
-                        ))}
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </>
+            <div className="flex justify-center py-12">
+              <ClassicLoader />
+            </div>
           ) : jobs && jobs.length > 0 ? (
             jobs.map((job: any) => {
               const statusConfig = jobStatusConfig[job.status] || jobStatusConfig.pending_review;
@@ -361,12 +288,8 @@ export default function CompanyJobs() {
                             Salário
                           </div>
                           <p className="text-gray-900 font-medium text-sm">
-                            {job.salary_min || job.salary_max ? (
-                              <>
-                                {job.salary_min && `R$ ${job.salary_min.toLocaleString('pt-BR')}`}
-                                {job.salary_min && job.salary_max && ' - '}
-                                {job.salary_max && `R$ ${job.salary_max.toLocaleString('pt-BR')}`}
-                              </>
+                            {job.salary_min ? (
+                              `R$ ${job.salary_min.toLocaleString('pt-BR')}`
                             ) : (
                               <span className="text-gray-400">A combinar</span>
                             )}

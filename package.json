@@ -10,7 +10,7 @@
     "check": "tsc --noEmit",
     "format": "prettier --write .",
     "test": "vitest run",
-    "db:push": "echo 'Run migrations manually in Supabase dashboard'"
+    "db:push": "tsx backend/scripts/run-migrations.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.693.0",
@@ -72,6 +72,7 @@
     "ogl": "^1.0.11",
     "openai": "^4.67.0",
     "pdf-lib": "^1.17.1",
+    "pg": "^8.18.0",
     "react": "^19.1.1",
     "react-day-picker": "^9.11.1",
     "react-dom": "^19.1.1",
@@ -97,6 +98,7 @@
     "@types/express": "4.17.21",
     "@types/google.maps": "^3.58.1",
     "@types/node": "^24.7.0",
+    "@types/pg": "^8.16.0",
     "@types/react": "^19.1.16",
     "@types/react-dom": "^19.1.9",
     "@vercel/node": "^5.5.16",

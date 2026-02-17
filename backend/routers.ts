@@ -27,6 +27,9 @@ import {
   batchRouter,
   matchingRouter,
   companyInvitationRouter,
+  interviewRouter,
+  hiringRouter,
+  publicSigningRouter,
 } from "./routers/index";
 
 // Assemble the main application router
@@ -49,6 +52,9 @@ export const appRouter = router({
   batch: batchRouter,
   matching: matchingRouter,
   companyInvitation: companyInvitationRouter,
+  interview: interviewRouter,
+  hiring: hiringRouter,
+  publicSigning: publicSigningRouter,
 });
 
 export type AppRouter = typeof appRouter;

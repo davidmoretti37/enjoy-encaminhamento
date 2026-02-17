@@ -31,3 +31,5 @@ export { adminRouter } from "./admin";
 export { batchRouter } from "./batch";
 export { matchingRouter } from "./matching";
 export { companyInvitationRouter } from "./companyInvitation";
+export { interviewRouter } from "./interview";
+export { hiringRouter, publicSigningRouter } from "./hiring";

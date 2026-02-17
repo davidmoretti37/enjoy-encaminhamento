@@ -445,3 +445,90 @@ export async function bulkCreateCandidates(
 
   return { created, errors };
 }
+
+/**
+ * Get candidate profile for a company
+ * Only returns profile if candidate is in an unlocked batch for this company
+ */
+export async function getCandidateProfileForCompany(
+  candidateId: string,
+  companyId: string
+): Promise<any | null> {
+  // Check if candidate is in an unlocked batch for this company
+  const { data: batches, error: batchError } = await supabaseAdmin
+    .from("candidate_batches")
+    .select("candidate_ids")
+    .eq("company_id", companyId)
+    .eq("unlocked", true);
+
+  if (batchError || !batches) return null;
+
+  // Check if candidateId is in any of the batches
+  const isInBatch = batches.some(batch =>
+    batch.candidate_ids?.includes(candidateId)
+  );
+
+  if (!isInBatch) return null;
+
+  // Get full candidate profile
+  const { data, error } = await supabaseAdmin
+    .from("candidates")
+    .select("*")
+    .eq("id", candidateId)
+    .single();
+
+  if (error || !data) return null;
+
+  // Calculate age from birth_date
+  let age = null;
+  if (data.birth_date || data.date_of_birth) {
+    const birthDate = new Date(data.birth_date || data.date_of_birth);
+    const today = new Date();
+    age = today.getFullYear() - birthDate.getFullYear();
+    const monthDiff = today.getMonth() - birthDate.getMonth();
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+      age--;
+    }
+  }
+
+  return {
+    id: data.id,
+    name: data.full_name,
+    city: data.city,
+    state: data.state,
+    age,
+    // Education
+    education: data.education_level,
+    institution: data.institution,
+    course: data.course,
+    currently_studying: data.currently_studying,
+    // Skills & Languages
+    skills: data.skills || [],
+    languages: data.languages || [],
+    // Experience
+    has_work_experience: data.has_work_experience,
+    experience: data.experience || [],
+    // Summary (AI generated)
+    summary: data.summary,
+    profile_summary: data.profile_summary,
+    // Availability
+    available_for_internship: data.available_for_internship,
+    available_for_clt: data.available_for_clt,
+    available_for_apprentice: data.available_for_apprentice,
+    preferred_work_type: data.preferred_work_type,
+    // DISC Profile
+    disc_dominante: data.disc_dominante,
+    disc_influente: data.disc_influente,
+    disc_estavel: data.disc_estavel,
+    disc_conforme: data.disc_conforme,
+    // PDP Profile
+    pdp_competencies: data.pdp_competencies,
+    pdp_top_10_competencies: data.pdp_top_10_competencies,
+    pdp_develop_competencies: data.pdp_develop_competencies,
+    pdp_skills: data.pdp_skills,
+    pdp_action_plans: data.pdp_action_plans,
+    // Photo & Resume
+    photo_url: data.photo_url,
+    resume_url: data.resume_url,
+  };
+}

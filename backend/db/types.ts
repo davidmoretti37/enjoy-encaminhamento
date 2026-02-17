@@ -34,5 +34,11 @@ export type InsertCandidateBatch = Database["public"]["Tables"]["candidate_batch
 export type AgencyEmployeeTypeSetting = Database["public"]["Tables"]["agency_employee_type_settings"]["Row"];
 export type InsertAgencyEmployeeTypeSetting = Database["public"]["Tables"]["agency_employee_type_settings"]["Insert"];
 
+// Interview types
+export type InterviewSession = Database["public"]["Tables"]["interview_sessions"]["Row"];
+export type InsertInterviewSession = Database["public"]["Tables"]["interview_sessions"]["Insert"];
+export type InterviewParticipant = Database["public"]["Tables"]["interview_participants"]["Row"];
+export type InsertInterviewParticipant = Database["public"]["Tables"]["interview_participants"]["Insert"];
+
 // Re-export Database type for modules that need it
 export type { Database };

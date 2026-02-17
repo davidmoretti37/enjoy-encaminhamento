@@ -17,6 +17,8 @@ import {
   Plus,
   ExternalLink,
   FolderOpen,
+  CreditCard,
+  Save,
 } from "lucide-react";
 import { useState, useRef } from "react";
 import { toast } from "sonner";
@@ -47,6 +49,11 @@ export default function SettingsPage() {
   const [docDeleteConfirm, setDocDeleteConfirm] = useState<string | null>(null);
   const [docName, setDocName] = useState("");
   const [uploadCategory, setUploadCategory] = useState<string | null>(null);
+  const [pixKey, setPixKey] = useState("");
+  const [pixKeyType, setPixKeyType] = useState("cnpj");
+  const [paymentInstructions, setPaymentInstructions] = useState("");
+  const [paymentInfoLoaded, setPaymentInfoLoaded] = useState(false);
+  const [savingPaymentInfo, setSavingPaymentInfo] = useState(false);
 
   // Detect role
   const isAffiliate = user?.role === "admin";
@@ -89,6 +96,39 @@ export default function SettingsPage() {
       setDocDeleting(null);
     },
   });
+
+  // Agency profile (for payment info)
+  const agencyProfileQuery = trpc.agency.getProfile.useQuery(undefined, {
+    enabled: canManageDocs,
+    onSuccess: (data: any) => {
+      if (!paymentInfoLoaded && data) {
+        setPixKey(data.pix_key || "");
+        setPixKeyType(data.pix_key_type || "cnpj");
+        setPaymentInstructions(data.payment_instructions || "");
+        setPaymentInfoLoaded(true);
+      }
+    },
+  });
+
+  const updateProfileMutation = trpc.agency.updateProfile.useMutation({
+    onSuccess: () => {
+      toast.success("Informacoes de pagamento salvas!");
+      setSavingPaymentInfo(false);
+    },
+    onError: (error: any) => {
+      toast.error(`Erro ao salvar: ${error.message}`);
+      setSavingPaymentInfo(false);
+    },
+  });
+
+  const handleSavePaymentInfo = () => {
+    setSavingPaymentInfo(true);
+    updateProfileMutation.mutate({
+      pix_key: pixKey || undefined,
+      pix_key_type: (pixKeyType as any) || undefined,
+      payment_instructions: paymentInstructions || undefined,
+    });
+  };
 
   if (authLoading) {
     return (
@@ -327,6 +367,73 @@ export default function SettingsPage() {
             )}
           </CardContent>
         </Card>
+
+        {/* Payment Info Section */}
+        {canManageDocs && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <CreditCard className="h-5 w-5" />
+                Informacoes de Pagamento
+              </CardTitle>
+              <CardDescription>
+                Configure os dados de pagamento que serao exibidos para as empresas
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="md:col-span-1">
+                  <label className="text-sm font-medium text-gray-700 mb-1 block">Tipo de Chave PIX</label>
+                  <select
+                    value={pixKeyType}
+                    onChange={(e) => setPixKeyType(e.target.value)}
+                    className="w-full px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                  >
+                    <option value="cnpj">CNPJ</option>
+                    <option value="cpf">CPF</option>
+                    <option value="email">E-mail</option>
+                    <option value="phone">Telefone</option>
+                    <option value="random">Chave aleatoria</option>
+                  </select>
+                </div>
+                <div className="md:col-span-2">
+                  <label className="text-sm font-medium text-gray-700 mb-1 block">Chave PIX</label>
+                  <input
+                    type="text"
+                    value={pixKey}
+                    onChange={(e) => setPixKey(e.target.value)}
+                    placeholder={pixKeyType === 'cnpj' ? '00.000.000/0001-00' : pixKeyType === 'cpf' ? '000.000.000-00' : pixKeyType === 'email' ? 'email@exemplo.com' : pixKeyType === 'phone' ? '(00) 00000-0000' : 'Chave aleatoria'}
+                    className="w-full px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="text-sm font-medium text-gray-700 mb-1 block">Instrucoes de Pagamento (opcional)</label>
+                <textarea
+                  value={paymentInstructions}
+                  onChange={(e) => setPaymentInstructions(e.target.value)}
+                  placeholder="Ex: Realizar pagamento via PIX ate o dia do vencimento. Em caso de duvidas, entre em contato..."
+                  rows={3}
+                  className="w-full px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ring resize-none"
+                />
+              </div>
+              <div className="flex justify-end">
+                <Button
+                  onClick={handleSavePaymentInfo}
+                  disabled={savingPaymentInfo}
+                  className="gap-2"
+                >
+                  {savingPaymentInfo ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Save className="h-4 w-4" />
+                  )}
+                  Salvar
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Logout Section */}
         <Card>

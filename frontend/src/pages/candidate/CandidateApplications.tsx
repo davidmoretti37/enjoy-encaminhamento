@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import ClassicLoader from "@/components/ui/ClassicLoader";
 import DashboardLayout from "@/components/DashboardLayout";
@@ -18,10 +18,16 @@ import {
   Building2,
   MapPin,
   ChevronRight,
-  PartyPopper
+  PartyPopper,
+  Video,
+  CalendarCheck,
+  AlertCircle,
+  Loader2
 } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { toast } from "sonner";
 
 // Application status configuration
 const STATUS_CONFIG: Record<string, { label: string; color: string; icon: any; step: number }> = {
@@ -45,14 +51,72 @@ export default function CandidateApplications() {
   const [selectedApplication, setSelectedApplication] = useState<any>(null);
   const [showDetailDialog, setShowDetailDialog] = useState(false);
   const [filter, setFilter] = useState<'all' | 'active' | 'finished'>('all');
+  const [rescheduleDialogOpen, setRescheduleDialogOpen] = useState(false);
+  const [rescheduleParticipantId, setRescheduleParticipantId] = useState<string | null>(null);
+  const [rescheduleReason, setRescheduleReason] = useState('');
+
+  // Track sessions where meeting was started (persisted in localStorage)
+  const [startedSessions, setStartedSessions] = useState<Set<string>>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('startedCandidateInterviews');
+      return saved ? new Set(JSON.parse(saved)) : new Set();
+    }
+    return new Set();
+  });
+
+  // Save started sessions to localStorage
+  useEffect(() => {
+    localStorage.setItem('startedCandidateInterviews', JSON.stringify([...startedSessions]));
+  }, [startedSessions]);
+
+  const markSessionStarted = (sessionId: string) => {
+    setStartedSessions(prev => new Set([...prev, sessionId]));
+  };
+
+  const utils = trpc.useUtils();
 
   // Fetch candidate applications
   const applicationsQuery = trpc.application.getByCandidate.useQuery(undefined, {
     enabled: !!user,
   });
 
+  // Fetch candidate interviews
+  const interviewsQuery = trpc.interview.getMyInterviews.useQuery(undefined, {
+    enabled: !!user,
+  });
+
+  // Confirm interview mutation
+  const confirmInterviewMutation = trpc.interview.confirmAttendance.useMutation({
+    onSuccess: () => {
+      toast.success('Presença confirmada!');
+      utils.interview.getMyInterviews.invalidate();
+    },
+    onError: (error) => {
+      toast.error(error.message || 'Erro ao confirmar presença');
+    },
+  });
+
+  // Request reschedule mutation
+  const rescheduleInterviewMutation = trpc.interview.requestReschedule.useMutation({
+    onSuccess: () => {
+      toast.success('Solicitação de reagendamento enviada');
+      setRescheduleDialogOpen(false);
+      setRescheduleParticipantId(null);
+      setRescheduleReason('');
+      utils.interview.getMyInterviews.invalidate();
+    },
+    onError: (error) => {
+      toast.error(error.message || 'Erro ao solicitar reagendamento');
+    },
+  });
+
   const isLoading = authLoading || applicationsQuery.isLoading;
   const applications = applicationsQuery.data || [];
+  const interviews = interviewsQuery.data || [];
+
+  // Filter pending interviews (status = pending)
+  const pendingInterviews = interviews.filter((i: any) => i.status === 'pending');
+  const confirmedInterviews = interviews.filter((i: any) => i.status === 'confirmed');
 
   // Filter applications
   const filteredApplications = applications.filter((app: any) => {
@@ -108,6 +172,205 @@ export default function CandidateApplications() {
           <h1 className="text-3xl font-bold text-gray-900">Minhas Candidaturas</h1>
           <p className="text-gray-500 mt-1">Acompanhe o status de suas candidaturas</p>
         </div>
+
+        {/* Pending Interviews Section */}
+        {pendingInterviews.length > 0 && (
+          <Card className="border-amber-200 bg-amber-50/30">
+            <CardHeader className="pb-3">
+              <div className="flex items-center gap-2">
+                <AlertCircle className="h-5 w-5 text-amber-600" />
+                <CardTitle className="text-lg">Entrevistas Pendentes</CardTitle>
+              </div>
+              <CardDescription>
+                Confirme sua presença nas entrevistas agendadas
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {pendingInterviews.map((interview: any) => {
+                const session = interview.session;
+                const isOnline = session?.interview_type === 'online';
+
+                return (
+                  <div key={interview.id} className="bg-white rounded-lg p-4 border border-amber-200">
+                    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                      <div className="space-y-2">
+                        <h4 className="font-semibold">{session?.job?.title || 'Vaga'}</h4>
+                        <div className="flex flex-wrap gap-3 text-sm text-muted-foreground">
+                          <span className="flex items-center gap-1">
+                            <Calendar className="h-4 w-4" />
+                            {session?.scheduled_at && format(new Date(session.scheduled_at), "dd 'de' MMMM 'às' HH:mm", { locale: ptBR })}
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <Clock className="h-4 w-4" />
+                            {session?.duration_minutes || 30} min
+                          </span>
+                          <Badge variant={isOnline ? "secondary" : "outline"} className="flex items-center gap-1">
+                            {isOnline ? <Video className="h-3 w-3" /> : <Building2 className="h-3 w-3" />}
+                            {isOnline ? 'Online' : 'Presencial'}
+                          </Badge>
+                        </div>
+
+                        {/* Location/Link info */}
+                        {isOnline && session?.meeting_link && (
+                          <a
+                            href={session.meeting_link}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-sm text-blue-600 hover:underline flex items-center gap-1"
+                          >
+                            <Video className="h-4 w-4" />
+                            Acessar reunião
+                          </a>
+                        )}
+                        {!isOnline && session?.location_address && (
+                          <div className="text-sm text-muted-foreground flex items-center gap-1">
+                            <MapPin className="h-4 w-4" />
+                            {session.location_address}, {session.location_city} - {session.location_state}
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setRescheduleParticipantId(interview.id);
+                            setRescheduleDialogOpen(true);
+                          }}
+                        >
+                          Solicitar Reagendamento
+                        </Button>
+                        <Button
+                          size="sm"
+                          onClick={() => confirmInterviewMutation.mutate({ participantId: interview.id })}
+                          disabled={confirmInterviewMutation.isPending}
+                        >
+                          {confirmInterviewMutation.isPending ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <>
+                              <CalendarCheck className="h-4 w-4 mr-2" />
+                              Confirmar Presença
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Confirmed Interviews Section */}
+        {confirmedInterviews.length > 0 && (() => {
+          // Separate past/started and upcoming interviews
+          const now = new Date();
+          const upcomingInterviews = confirmedInterviews.filter((i: any) => {
+            const isPast = new Date(i.session?.scheduled_at) <= now;
+            const wasStarted = startedSessions.has(i.session?.id);
+            return !isPast && !wasStarted;
+          });
+          const waitingInterviews = confirmedInterviews.filter((i: any) => {
+            const isPast = new Date(i.session?.scheduled_at) <= now;
+            const wasStarted = startedSessions.has(i.session?.id);
+            return isPast || wasStarted;
+          });
+
+          return (
+            <>
+              {/* Upcoming Interviews - Green */}
+              {upcomingInterviews.length > 0 && (
+                <Card className="border-green-200 bg-green-50/30">
+                  <CardHeader className="pb-3">
+                    <div className="flex items-center gap-2">
+                      <CalendarCheck className="h-5 w-5 text-green-600" />
+                      <CardTitle className="text-lg">Entrevistas Confirmadas</CardTitle>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    {upcomingInterviews.map((interview: any) => {
+                      const session = interview.session;
+                      const isOnline = session?.interview_type === 'online';
+
+                      return (
+                        <div key={interview.id} className="bg-white rounded-lg p-4 border border-green-200">
+                          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                            <div className="space-y-1">
+                              <h4 className="font-semibold">{session?.job?.title || 'Vaga'}</h4>
+                              <div className="flex flex-wrap gap-3 text-sm text-muted-foreground">
+                                <span className="flex items-center gap-1">
+                                  <Calendar className="h-4 w-4" />
+                                  {session?.scheduled_at && format(new Date(session.scheduled_at), "dd 'de' MMMM 'às' HH:mm", { locale: ptBR })}
+                                </span>
+                                <Badge variant="outline" className="bg-green-100 text-green-700 border-green-300">
+                                  Confirmado
+                                </Badge>
+                              </div>
+                            </div>
+                            {isOnline && session?.meeting_link && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  markSessionStarted(session.id);
+                                  window.open(session.meeting_link, '_blank');
+                                }}
+                              >
+                                <Video className="h-4 w-4 mr-2" />
+                                Acessar Reunião
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Waiting for Result - after meeting started or time passed */}
+              {waitingInterviews.length > 0 && (
+                <Card className="border-amber-200 bg-amber-50/30">
+                  <CardHeader className="pb-3">
+                    <div className="flex items-center gap-2">
+                      <Clock className="h-5 w-5 text-amber-600" />
+                      <CardTitle className="text-lg">Aguardando Resultado</CardTitle>
+                    </div>
+                    <p className="text-sm text-amber-600">A empresa está avaliando os candidatos</p>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    {waitingInterviews.map((interview: any) => {
+                      const session = interview.session;
+
+                      return (
+                        <div key={interview.id} className="bg-white rounded-lg p-4 border border-amber-200">
+                          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                            <div className="space-y-1">
+                              <h4 className="font-semibold">{session?.job?.title || 'Vaga'}</h4>
+                              <div className="flex flex-wrap gap-3 text-sm text-muted-foreground">
+                                <span className="flex items-center gap-1">
+                                  <Calendar className="h-4 w-4" />
+                                  Entrevista realizada em {session?.scheduled_at && format(new Date(session.scheduled_at), "dd 'de' MMMM", { locale: ptBR })}
+                                </span>
+                                <Badge variant="outline" className="bg-amber-100 text-amber-700 border-amber-300">
+                                  <Clock className="h-3 w-3 mr-1" />
+                                  Aguardando
+                                </Badge>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </CardContent>
+                </Card>
+              )}
+            </>
+          );
+        })()}
 
         {/* Filter Tabs */}
         <div className="flex justify-center">
@@ -419,6 +682,57 @@ export default function CandidateApplications() {
                 </>
               );
             })()}
+          </DialogContent>
+        </Dialog>
+
+        {/* Reschedule Request Dialog */}
+        <Dialog open={rescheduleDialogOpen} onOpenChange={setRescheduleDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Solicitar Reagendamento</DialogTitle>
+              <DialogDescription>
+                Explique o motivo pelo qual você não pode comparecer na data agendada.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="py-4">
+              <Textarea
+                value={rescheduleReason}
+                onChange={(e) => setRescheduleReason(e.target.value)}
+                placeholder="Ex: Tenho um compromisso inadiável neste horário. Estou disponível na parte da tarde ou em outro dia desta semana."
+                rows={4}
+              />
+              <p className="text-xs text-muted-foreground mt-2">
+                Mínimo de 10 caracteres
+              </p>
+            </div>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setRescheduleDialogOpen(false);
+                  setRescheduleReason('');
+                }}
+              >
+                Cancelar
+              </Button>
+              <Button
+                onClick={() => {
+                  if (rescheduleParticipantId) {
+                    rescheduleInterviewMutation.mutate({
+                      participantId: rescheduleParticipantId,
+                      reason: rescheduleReason,
+                    });
+                  }
+                }}
+                disabled={rescheduleReason.length < 10 || rescheduleInterviewMutation.isPending}
+              >
+                {rescheduleInterviewMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  'Enviar Solicitação'
+                )}
+              </Button>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
       </div>

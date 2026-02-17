@@ -76,6 +76,12 @@ export default function CompanyDocumentsModal({
     emails: false,
   });
   const [isUploading, setIsUploading] = useState(false);
+  const [viewingSignature, setViewingSignature] = useState<{
+    name: string;
+    role: string;
+    date: string;
+    signature: string | null;
+  } | null>(null);
 
   const toggleSection = (section: string) => {
     setOpenSections(prev => ({ ...prev, [section]: !prev[section] }));
@@ -134,6 +140,8 @@ export default function CompanyDocumentsModal({
   const companyData = historyData?.company;
   const contracts = historyData?.contracts || [];
   const emails = historyData?.emails || [];
+  const hiringProcesses = historyData?.hiringProcesses || [];
+  const signingInvitations = historyData?.signingInvitations || [];
 
   // Use company data if form data doesn't exist (for companies that went through onboarding)
   const displayData = formData || (companyData ? {
@@ -169,7 +177,7 @@ export default function CompanyDocumentsModal({
   const realMeeting = historyData?.meeting;
 
   // Contract data can come from meeting (outreach flow), company (onboarding flow), or signed_documents
-  const latestSignedDoc = historyData?.signedContratoInicial?.[0];
+  const latestSignedDoc = (historyData as any)?.signedContratoInicial?.[0];
 
   const contractData = {
     signed_at: companyData?.contract_signed_at || realMeeting?.contract_signed_at || latestSignedDoc?.signed_at,
@@ -533,33 +541,125 @@ export default function CompanyDocumentsModal({
                       <Users className="h-5 w-5 text-orange-600" />
                       <span className="font-medium">Contratos de Funcionários</span>
                     </div>
-                    <Badge variant="secondary">{contracts.length}</Badge>
+                    <Badge variant="secondary">{hiringProcesses.length}</Badge>
                   </div>
                 </CollapsibleTrigger>
                 <CollapsibleContent>
                   <div className="px-4 py-3 ml-8 border-l-2 border-gray-200">
-                    {contracts.length > 0 ? (
-                      <div className="space-y-2">
-                        {contracts.map((contract: any) => (
-                          <div
-                            key={contract.id}
-                            className="flex items-center justify-between p-3 rounded-lg border bg-gray-50"
-                          >
-                            <div>
-                              <p className="font-medium">{contract.candidate?.full_name || "Candidato"}</p>
-                              <p className="text-sm text-muted-foreground">{contract.job?.title || "Vaga"}</p>
+                    {hiringProcesses.length > 0 ? (
+                      <div className="space-y-4">
+                        {hiringProcesses.map((hp: any) => {
+                          const hpInvitations = signingInvitations.filter(
+                            (inv: any) => inv.hiring_process_id === hp.id
+                          );
+                          const typeLabels: Record<string, string> = {
+                            estagio: "Estágio",
+                            clt: "CLT",
+                            menor_aprendiz: "Jovem Aprendiz",
+                            "menor-aprendiz": "Jovem Aprendiz",
+                          };
+                          const statusLabels: Record<string, string> = {
+                            active: "Ativo",
+                            pending_signatures: "Aguardando Assinaturas",
+                            pending_payment: "Aguardando Pagamento",
+                            completed: "Concluído",
+                          };
+                          const roleLabels: Record<string, string> = {
+                            candidate: "Candidato",
+                            parent_guardian: "Responsável",
+                            educational_institution: "Inst. de Ensino",
+                          };
+                          return (
+                            <div key={hp.id} className="rounded-lg border bg-gray-50 p-3 space-y-3">
+                              <div className="flex items-center justify-between">
+                                <div>
+                                  <p className="font-medium">{hp.candidate?.full_name || "Candidato"}</p>
+                                  <p className="text-sm text-muted-foreground">
+                                    {hp.job?.title || "Vaga"} · {typeLabels[hp.hiring_type] || hp.hiring_type}
+                                  </p>
+                                </div>
+                                <Badge
+                                  className={
+                                    hp.status === "active"
+                                      ? "bg-green-100 text-green-700"
+                                      : "bg-amber-100 text-amber-700"
+                                  }
+                                >
+                                  {statusLabels[hp.status] || hp.status}
+                                </Badge>
+                              </div>
+
+                              {/* Signing status for each party */}
+                              <div className="space-y-1.5 pl-3 border-l-2 border-gray-300">
+                                {/* Company signature (from hiring_processes fields) */}
+                                <div
+                                  className={`flex items-center justify-between text-sm ${hp.company_signed ? "cursor-pointer hover:bg-gray-100 -mx-1 px-1 rounded" : ""}`}
+                                  onClick={() => hp.company_signed && setViewingSignature({
+                                    name: hp.company_signer_name || "Empresa",
+                                    role: "Empresa",
+                                    date: hp.company_signed_at ? new Date(hp.company_signed_at).toLocaleDateString("pt-BR") : "",
+                                    signature: hp.company_signature || null,
+                                  })}
+                                >
+                                  <div className="flex items-center gap-2">
+                                    {hp.company_signed ? (
+                                      <CheckCircle2 className="h-3.5 w-3.5 text-green-600 shrink-0" />
+                                    ) : (
+                                      <Clock className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+                                    )}
+                                    <span className="text-gray-700">
+                                      Empresa
+                                      {hp.company_signer_name && (
+                                        <span className="text-gray-500"> — {hp.company_signer_name}</span>
+                                      )}
+                                    </span>
+                                  </div>
+                                  {hp.company_signed_at && (
+                                    <span className="text-xs text-gray-500">
+                                      {new Date(hp.company_signed_at).toLocaleDateString("pt-BR")}
+                                    </span>
+                                  )}
+                                  {!hp.company_signed && (
+                                    <span className="text-xs text-amber-600">Pendente</span>
+                                  )}
+                                </div>
+
+                                {/* Candidate, Parent, School signatures (from signing_invitations) */}
+                                {hpInvitations.map((inv: any) => (
+                                  <div
+                                    key={inv.id}
+                                    className={`flex items-center justify-between text-sm ${inv.signed_at ? "cursor-pointer hover:bg-gray-100 -mx-1 px-1 rounded" : ""}`}
+                                    onClick={() => inv.signed_at && setViewingSignature({
+                                      name: inv.signer_name,
+                                      role: roleLabels[inv.signer_role] || inv.signer_role,
+                                      date: new Date(inv.signed_at).toLocaleDateString("pt-BR"),
+                                      signature: inv.signature || null,
+                                    })}
+                                  >
+                                    <div className="flex items-center gap-2">
+                                      {inv.signed_at ? (
+                                        <CheckCircle2 className="h-3.5 w-3.5 text-green-600 shrink-0" />
+                                      ) : (
+                                        <Clock className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+                                      )}
+                                      <span className="text-gray-700">
+                                        {roleLabels[inv.signer_role] || inv.signer_role}
+                                        <span className="text-gray-500"> — {inv.signer_name}</span>
+                                      </span>
+                                    </div>
+                                    {inv.signed_at ? (
+                                      <span className="text-xs text-gray-500">
+                                        {new Date(inv.signed_at).toLocaleDateString("pt-BR")}
+                                      </span>
+                                    ) : (
+                                      <span className="text-xs text-amber-600">Pendente</span>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
                             </div>
-                            <Badge
-                              className={
-                                contract.status === "active"
-                                  ? "bg-green-100 text-green-700"
-                                  : "bg-gray-100 text-gray-700"
-                              }
-                            >
-                              {contract.status === "active" ? "Ativo" : contract.status}
-                            </Badge>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     ) : (
                       <p className="text-sm text-muted-foreground">
@@ -986,6 +1086,36 @@ export default function CompanyDocumentsModal({
                 )}
               </div>
             </ScrollArea>
+          </DialogContent>
+        </Dialog>
+        {/* Signature Viewing Dialog */}
+        <Dialog open={!!viewingSignature} onOpenChange={() => setViewingSignature(null)}>
+          <DialogContent className="!max-w-sm">
+            <DialogHeader>
+              <DialogTitle>Assinatura</DialogTitle>
+            </DialogHeader>
+            {viewingSignature && (
+              <div className="space-y-4">
+                <div className="text-sm space-y-1">
+                  <p><span className="text-muted-foreground">Assinante:</span> {viewingSignature.name}</p>
+                  <p><span className="text-muted-foreground">Papel:</span> {viewingSignature.role}</p>
+                  <p><span className="text-muted-foreground">Data:</span> {viewingSignature.date}</p>
+                </div>
+                {viewingSignature.signature ? (
+                  <div className="border rounded-lg p-4 bg-white">
+                    <img
+                      src={viewingSignature.signature.startsWith("data:") ? viewingSignature.signature : `data:image/png;base64,${viewingSignature.signature}`}
+                      alt="Assinatura"
+                      className="w-full h-auto max-h-48 object-contain"
+                    />
+                  </div>
+                ) : (
+                  <div className="border rounded-lg p-6 bg-gray-50 text-center">
+                    <p className="text-sm text-muted-foreground">Imagem da assinatura não disponível</p>
+                  </div>
+                )}
+              </div>
+            )}
           </DialogContent>
         </Dialog>
       </DialogContent>

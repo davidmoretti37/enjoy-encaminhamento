@@ -3,6 +3,7 @@
 // 4-Stage matching: Vector Retrieval → Soft Scoring → Bidirectional → LLM Re-Ranking
 
 import { supabaseAdmin } from '../../supabase';
+import { getApplicantCandidateIds } from '../../db/applications';
 import {
   calculateAllFactorsBatch,
   calculateDataCompleteness,
@@ -56,6 +57,7 @@ export interface MatchResult {
   explanation?: MatchExplanation;
   finalScore: number;
   rank: number;
+  applied?: boolean; // True if candidate applied directly to this job
 }
 
 export interface MatchingPipelineResult {
@@ -289,12 +291,44 @@ export async function runMatchingPipeline(
 
   // STAGE 1: Vector Retrieval
   console.log(`[Matching] Stage 1: Retrieving candidates for job ${jobId}`);
-  const candidates = await retrieveCandidatesBroad(jobId, {
+  let candidates = await retrieveCandidatesBroad(jobId, {
     threshold: cfg.vectorThreshold,
     limit: cfg.vectorRecallLimit,
     useHybridSearch: cfg.useHybridSearch,
   });
-  console.log(`[Matching] Retrieved ${candidates.length} candidates`);
+  console.log(`[Matching] Retrieved ${candidates.length} candidates from vector search`);
+
+  // Fetch candidates who applied directly to this job
+  const applicantIds = await getApplicantCandidateIds(jobId);
+  const applicantIdSet = new Set(applicantIds);
+  console.log(`[Matching] Found ${applicantIds.length} candidates who applied directly`);
+
+  // Merge applicants who weren't already retrieved
+  if (applicantIds.length > 0) {
+    const existingIds = new Set(candidates.map(c => c.id));
+    const missingApplicantIds = applicantIds.filter(id => !existingIds.has(id));
+
+    if (missingApplicantIds.length > 0) {
+      console.log(`[Matching] Fetching ${missingApplicantIds.length} additional applicants not in vector results`);
+      const { data: missingApplicants } = await supabaseAdmin
+        .from('candidates')
+        .select('*')
+        .in('id', missingApplicantIds)
+        .eq('status', 'active');
+
+      if (missingApplicants && missingApplicants.length > 0) {
+        const formattedApplicants = missingApplicants.map(c => ({
+          ...c,
+          skills: Array.isArray(c.skills) ? c.skills : [],
+          languages: Array.isArray(c.languages) ? c.languages : [],
+          experience: Array.isArray(c.experience) ? c.experience : [],
+          semantic_similarity: 0.5, // Default similarity for applicants not in vector search
+        }));
+        candidates = [...candidates, ...formattedApplicants];
+        console.log(`[Matching] Total candidates after merging applicants: ${candidates.length}`);
+      }
+    }
+  }
 
   if (candidates.length === 0) {
     return {
@@ -356,6 +390,7 @@ export async function runMatchingPipeline(
         explanation,
         finalScore,
         rank: index + 1,
+        applied: applicantIdSet.has(sc.candidate.id), // Mark if candidate applied directly
       };
     });
 
@@ -416,6 +451,7 @@ export async function saveMatchResults(
     concerns: r.explanation?.concerns || [],
     explanation_summary: r.explanation?.summary || null,
     data_completeness: r.explanation?.dataCompleteness || null,
+    applied_to_job: r.applied || false, // Track if candidate applied directly
     algorithm_version: ALGORITHM_VERSION,
     updated_at: new Date().toISOString(),
   }));
@@ -538,6 +574,7 @@ export async function getMatchResults(
     } : undefined,
     finalScore: row.llm_refined_score || row.composite_score,
     rank: index + 1,
+    applied: row.applied_to_job || false,
   }));
 }
 

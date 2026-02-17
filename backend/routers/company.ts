@@ -466,7 +466,26 @@ export const companyRouter = router({
       if (!company) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Company not found' });
       }
-      const jobId = await db.createJobRequest(company.id, input);
+
+      if (!company.agency_id) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Company must be associated with an agency' });
+      }
+
+      // Create job directly in jobs table
+      const jobId = await db.createJobForOnboarding(company.id, {
+        title: input.title,
+        description: input.description,
+        contract_type: input.contract_type,
+        work_type: 'presencial',
+        salary_min: input.salary_min || null,
+        salary_max: input.salary_max || null,
+        work_schedule: input.work_schedule,
+        location: input.city,
+        requirements: input.requirements,
+        status: 'open',
+        agency_id: company.agency_id,
+      });
+
       return { jobId };
     }),
 
@@ -592,6 +611,16 @@ export const companyRouter = router({
       return await db.getCompanyContractsWithDetails(company.id, input?.status);
     }),
 
+  getContractDocuments: companyProcedure
+    .input(z.object({
+      category: z.enum(["estagio", "clt", "menor_aprendiz"]),
+    }))
+    .query(async ({ ctx, input }) => {
+      const company = await db.getCompanyByUserId(ctx.user.id);
+      if (!company || !company.agency_id) return [];
+      return await db.getDocumentTemplates(company.agency_id, input.category);
+    }),
+
   getExpiringContracts: companyProcedure.query(async ({ ctx }) => {
     const company = await db.getCompanyByUserId(ctx.user.id);
     if (!company) return [];
@@ -677,6 +706,22 @@ export const companyRouter = router({
       if (!company) return [];
       return await db.getCompanyPayments(company.id, input?.filter);
     }),
+
+  getAgencyPaymentInfo: companyProcedure.query(async ({ ctx }) => {
+    const company = await db.getCompanyByUserId(ctx.user.id);
+    if (!company || !company.agency_id) {
+      return { pix_key: null, pix_key_type: null, payment_instructions: null };
+    }
+    const agency = await db.getAgencyById(company.agency_id);
+    if (!agency) {
+      return { pix_key: null, pix_key_type: null, payment_instructions: null };
+    }
+    return {
+      pix_key: agency.pix_key || null,
+      pix_key_type: agency.pix_key_type || null,
+      payment_instructions: agency.payment_instructions || null,
+    };
+  }),
 
   confirmPaymentMade: companyProcedure
     .input(z.object({ paymentId: z.string() }))

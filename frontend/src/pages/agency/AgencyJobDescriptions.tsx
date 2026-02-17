@@ -10,7 +10,8 @@ import { useState } from 'react';
 import { useRoute, useLocation } from 'wouter';
 import { trpc } from '@/lib/trpc';
 import DashboardLayout from '@/components/DashboardLayout';
-import { Skeleton } from '@/components/ui/skeleton';
+import ClassicLoader from '@/components/ui/ClassicLoader';
+import { WorkSchedulePicker } from '@/components/ui/WorkSchedulePicker';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -151,19 +152,8 @@ function MatchedCandidatesList({ jobId }: { jobId: string }) {
           <Users className="h-4 w-4 text-gray-500" />
           <h4 className="text-sm font-medium text-gray-700">Candidatos Compatíveis</h4>
         </div>
-        <div className="space-y-2">
-          {[1, 2, 3, 4].map((i) => (
-            <Card key={i} className="p-4">
-              <div className="flex items-center gap-3">
-                <Skeleton className="h-10 w-10 rounded-full" />
-                <div className="flex-1">
-                  <Skeleton className="h-4 w-40 mb-1" />
-                  <Skeleton className="h-3 w-28" />
-                </div>
-                <Skeleton className="h-6 w-12 rounded-full" />
-              </div>
-            </Card>
-          ))}
+        <div className="flex justify-center py-8">
+          <ClassicLoader />
         </div>
       </div>
     );
@@ -255,6 +245,12 @@ function MatchedCandidatesList({ jobId }: { jobId: string }) {
                     <p className="font-medium text-gray-900 text-sm truncate">
                       {match.candidateName}
                     </p>
+                    {match.applied && (
+                      <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-green-50 text-green-700 border-green-200">
+                        <UserCheck className="h-2.5 w-2.5 mr-0.5" />
+                        Candidatou-se
+                      </Badge>
+                    )}
                     {recLabel && (
                       <Badge variant="secondary" className={`text-[10px] px-1.5 py-0 ${recLabel.className}`}>
                         {recLabel.label}
@@ -639,8 +635,7 @@ export default function AgencyJobDescriptions() {
     contract_type: '',
     work_type: 'presencial',
     work_schedule: '',
-    salary_min: '',
-    salary_max: '',
+    salary: '',
     description: '',
     requirements: '',
     openings: '1',
@@ -664,8 +659,7 @@ export default function AgencyJobDescriptions() {
         contract_type: '',
         work_type: 'presencial',
         work_schedule: '',
-        salary_min: '',
-        salary_max: '',
+        salary: '',
         description: '',
         requirements: '',
         openings: '1',
@@ -690,8 +684,8 @@ export default function AgencyJobDescriptions() {
       contractType: formData.contract_type as 'estagio' | 'clt' | 'menor-aprendiz',
       workType: formData.work_type as 'presencial' | 'remoto' | 'hibrido',
       workSchedule: formData.work_schedule || undefined,
-      salaryMin: formData.salary_min ? parseFloat(formData.salary_min) : undefined,
-      salaryMax: formData.salary_max ? parseFloat(formData.salary_max) : undefined,
+      salaryMin: formData.salary ? parseFloat(formData.salary) : undefined,
+      salaryMax: formData.salary ? parseFloat(formData.salary) : undefined,
       requirements: formData.requirements || undefined,
       openings: formData.openings ? parseInt(formData.openings) : 1,
     });
@@ -791,16 +785,17 @@ export default function AgencyJobDescriptions() {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="grid gap-2">
-                  <Label htmlFor="work_schedule">Horário de trabalho</Label>
+                  <Label htmlFor="salary">Salario (R$)</Label>
                   <Input
-                    id="work_schedule"
-                    placeholder="Ex: Segunda a Sexta, 08:00 às 14:00"
-                    value={formData.work_schedule}
-                    onChange={(e) => setFormData(prev => ({ ...prev, work_schedule: e.target.value }))}
+                    id="salary"
+                    type="number"
+                    placeholder="1500"
+                    value={formData.salary}
+                    onChange={(e) => setFormData(prev => ({ ...prev, salary: e.target.value }))}
                   />
                 </div>
                 <div className="grid gap-2">
-                  <Label htmlFor="openings">Número de vagas</Label>
+                  <Label htmlFor="openings">Numero de vagas</Label>
                   <Input
                     id="openings"
                     type="number"
@@ -811,27 +806,12 @@ export default function AgencyJobDescriptions() {
                   />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="grid gap-2">
-                  <Label htmlFor="salary_min">Salário mínimo (R$)</Label>
-                  <Input
-                    id="salary_min"
-                    type="number"
-                    placeholder="1200"
-                    value={formData.salary_min}
-                    onChange={(e) => setFormData(prev => ({ ...prev, salary_min: e.target.value }))}
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="salary_max">Salário máximo (R$)</Label>
-                  <Input
-                    id="salary_max"
-                    type="number"
-                    placeholder="1500"
-                    value={formData.salary_max}
-                    onChange={(e) => setFormData(prev => ({ ...prev, salary_max: e.target.value }))}
-                  />
-                </div>
+              <div className="grid gap-2">
+                <Label htmlFor="work_schedule">Horario de trabalho</Label>
+                <WorkSchedulePicker
+                  value={formData.work_schedule}
+                  onChange={(value) => setFormData(prev => ({ ...prev, work_schedule: value }))}
+                />
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="description">Descrição das atividades *</Label>
@@ -868,63 +848,9 @@ export default function AgencyJobDescriptions() {
         {/* Jobs List */}
         <div className="space-y-6">
           {jobsLoading ? (
-            // Skeleton loading cards - matches company portal style
-            <>
-              {[1, 2].map((i) => (
-                <Card key={i} className="overflow-hidden">
-                  <CardContent className="p-0">
-                    <div className="p-6 pb-4">
-                      {/* Header skeleton */}
-                      <div className="flex items-start justify-between mb-4">
-                        <div>
-                          <Skeleton className="h-6 w-48 mb-2" />
-                          <Skeleton className="h-5 w-20" />
-                        </div>
-                        <Skeleton className="h-6 w-32" />
-                      </div>
-
-                      {/* Info grid skeleton */}
-                      <div className="grid grid-cols-3 gap-4 mb-4">
-                        {[1, 2, 3].map((j) => (
-                          <div key={j} className="bg-gray-50 rounded-lg p-3">
-                            <Skeleton className="h-3 w-16 mb-2" />
-                            <Skeleton className="h-4 w-24" />
-                          </div>
-                        ))}
-                      </div>
-
-                      {/* Description skeleton */}
-                      <div className="mb-4">
-                        <Skeleton className="h-3 w-20 mb-2" />
-                        <Skeleton className="h-4 w-full mb-1" />
-                        <Skeleton className="h-4 w-3/4" />
-                      </div>
-
-                      {/* Requirements skeleton */}
-                      <div className="mb-4">
-                        <Skeleton className="h-3 w-20 mb-2" />
-                        <Skeleton className="h-4 w-full mb-1" />
-                        <Skeleton className="h-4 w-2/3" />
-                      </div>
-                    </div>
-
-                    {/* Footer section skeleton */}
-                    <div className="border-t bg-gray-50/50 p-6">
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <Skeleton className="h-3 w-16 mb-2" />
-                          <Skeleton className="h-4 w-24" />
-                        </div>
-                        <div>
-                          <Skeleton className="h-3 w-16 mb-2" />
-                          <Skeleton className="h-4 w-20" />
-                        </div>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </>
+            <div className="flex justify-center py-12">
+              <ClassicLoader />
+            </div>
           ) : jobs && jobs.length > 0 ? (
             jobs.map((job: any) => {
               const statusConfig = jobStatusConfig[job.status] || jobStatusConfig.open;
@@ -958,15 +884,10 @@ export default function AgencyJobDescriptions() {
                             Salário
                           </div>
                           <p className="text-gray-900 font-medium text-sm">
-                            {job.salary_min || job.salary_max || job.salary ? (
-                              <>
-                                {job.salary_min && `R$ ${job.salary_min.toLocaleString('pt-BR')}`}
-                                {job.salary_min && job.salary_max && ' - '}
-                                {job.salary_max && `R$ ${job.salary_max.toLocaleString('pt-BR')}`}
-                                {!job.salary_min && !job.salary_max && job.salary &&
-                                  `R$ ${(job.salary / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
-                                }
-                              </>
+                            {job.salary_min || job.salary ? (
+                              job.salary_min
+                                ? `R$ ${job.salary_min.toLocaleString('pt-BR')}`
+                                : `R$ ${(job.salary / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
                             ) : (
                               <span className="text-gray-400">A combinar</span>
                             )}

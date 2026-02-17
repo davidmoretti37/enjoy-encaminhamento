@@ -18,7 +18,12 @@ import {
   Clock,
   CheckCircle,
   User,
-  FileCheck
+  FileCheck,
+  PenLine,
+  CalendarClock,
+  CreditCard,
+  RefreshCw,
+  Send,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { format, differenceInDays } from "date-fns";
@@ -49,6 +54,23 @@ export default function CompanyEmployees() {
     undefined,
     { enabled: !!user && user.role === 'company' }
   );
+
+  // Fetch hiring processes (pending signatures)
+  const { data: hiringProcesses, isLoading: hiringLoading } = trpc.hiring.getCompanyHiringProcesses.useQuery(
+    undefined,
+    { enabled: !!user && user.role === 'company' }
+  );
+
+  // Resend invitation mutation
+  const resendInvitationMutation = trpc.hiring.resendSigningInvitation.useMutation({
+    onSuccess: () => {
+      toast.success('Convite reenviado com sucesso!');
+      utils.hiring.getCompanyHiringProcesses.invalidate();
+    },
+    onError: (error) => {
+      toast.error(error.message || 'Erro ao reenviar convite');
+    },
+  });
 
   const submitReportMutation = trpc.company.submitMonthlyReport.useMutation({
     onSuccess: () => {
@@ -124,6 +146,31 @@ export default function CompanyEmployees() {
   const activeContracts = contracts?.filter((c: any) => c.status === 'active') || [];
   const endedContracts = contracts?.filter((c: any) => c.status !== 'active') || [];
 
+  // Pending hiring processes (waiting for signatures)
+  const pendingHiring = hiringProcesses?.filter((h: any) => h.status === 'pending_signatures') || [];
+
+  // Helper to get signature progress
+  const getSignatureProgress = (process: any) => {
+    if (process.hiring_type !== 'estagio') return null;
+    const signed = [
+      process.company_signed,
+      process.candidate_signed,
+      process.parent_signed,
+      process.school_signed,
+    ].filter(Boolean).length;
+    return { signed, total: 4 };
+  };
+
+  // Helper to get pending signers
+  const getPendingSigners = (process: any) => {
+    const pending: string[] = [];
+    if (!process.company_signed) pending.push('Empresa');
+    if (!process.candidate_signed) pending.push('Candidato');
+    if (!process.parent_signed) pending.push('Responsável');
+    if (!process.school_signed) pending.push('Instituição');
+    return pending;
+  };
+
   return (
     <DashboardLayout>
       <div className="space-y-6">
@@ -158,10 +205,114 @@ export default function CompanyEmployees() {
           <div className="text-center py-8"><ClassicLoader /></div>
         ) : (
           <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList className="grid w-full grid-cols-2">
+            <TabsList className={`grid w-full ${pendingHiring.length > 0 ? 'grid-cols-3' : 'grid-cols-2'}`}>
+              {pendingHiring.length > 0 && (
+                <TabsTrigger value="pending" className="relative">
+                  Em Contratação ({pendingHiring.length})
+                  <span className="absolute -top-1 -right-1 h-2 w-2 bg-amber-500 rounded-full animate-pulse" />
+                </TabsTrigger>
+              )}
               <TabsTrigger value="active">Ativos ({activeContracts.length})</TabsTrigger>
               <TabsTrigger value="ended">Encerrados ({endedContracts.length})</TabsTrigger>
             </TabsList>
+
+            {/* Pending Hiring Processes */}
+            <TabsContent value="pending" className="space-y-4">
+              {pendingHiring.length > 0 ? (
+                pendingHiring.map((process: any) => {
+                  const progress = getSignatureProgress(process);
+                  const pendingSigners = getPendingSigners(process);
+
+                  return (
+                    <Card key={process.id} className="border-amber-200">
+                      <CardContent className="p-6">
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-3 mb-2">
+                              <PenLine className="h-5 w-5 text-amber-500" />
+                              <h3 className="text-lg font-semibold text-gray-900">
+                                {process.candidate?.full_name || 'Candidato'}
+                              </h3>
+                              <Badge className="bg-amber-100 text-amber-700">
+                                Aguardando Assinaturas
+                              </Badge>
+                            </div>
+                            <p className="text-gray-600">
+                              {process.job?.title} • {contractTypeLabels[process.hiring_type] || process.hiring_type}
+                            </p>
+                            <p className="text-sm text-gray-500 mt-1">
+                              Início previsto: {process.start_date && format(new Date(process.start_date), 'dd/MM/yyyy', { locale: ptBR })}
+                            </p>
+
+                            {/* Signature Progress */}
+                            {progress && (
+                              <div className="mt-3">
+                                <div className="flex items-center gap-2 mb-2">
+                                  <span className="text-sm text-gray-600">Assinaturas:</span>
+                                  <Badge variant="outline">
+                                    {progress.signed}/{progress.total}
+                                  </Badge>
+                                </div>
+                                <div className="flex gap-2">
+                                  {[
+                                    { key: 'company_signed', label: 'Empresa' },
+                                    { key: 'candidate_signed', label: 'Candidato' },
+                                    { key: 'parent_signed', label: 'Responsável' },
+                                    { key: 'school_signed', label: 'Instituição' },
+                                  ].map(({ key, label }) => (
+                                    <Badge
+                                      key={key}
+                                      variant={process[key] ? 'default' : 'outline'}
+                                      className={process[key] ? 'bg-green-100 text-green-700' : 'text-gray-500'}
+                                    >
+                                      {process[key] ? <CheckCircle className="h-3 w-3 mr-1" /> : <Clock className="h-3 w-3 mr-1" />}
+                                      {label}
+                                    </Badge>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Resend Invitations */}
+                            {process.signing_invitations?.filter((i: any) => !i.signed_at).length > 0 && (
+                              <div className="mt-3 pt-3 border-t">
+                                <span className="text-sm text-gray-600 block mb-2">Reenviar convite:</span>
+                                <div className="flex flex-wrap gap-2">
+                                  {process.signing_invitations
+                                    ?.filter((i: any) => !i.signed_at)
+                                    .map((invitation: any) => (
+                                      <Button
+                                        key={invitation.id}
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => resendInvitationMutation.mutate({ invitationId: invitation.id })}
+                                        disabled={resendInvitationMutation.isPending}
+                                      >
+                                        <Send className="h-3 w-3 mr-1" />
+                                        {invitation.signer_role === 'parent_guardian' ? 'Responsável' :
+                                         invitation.signer_role === 'educational_institution' ? 'Instituição' :
+                                         invitation.signer_role === 'candidate' ? 'Candidato' : invitation.signer_name}
+                                      </Button>
+                                    ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })
+              ) : (
+                <div className="flex flex-col items-center justify-center py-16">
+                  <div className="w-20 h-24 border-2 border-dashed border-gray-300 rounded-xl bg-gray-50/50 flex flex-col items-center justify-center gap-2 mb-6">
+                    <PenLine className="h-8 w-8 text-gray-300" />
+                  </div>
+                  <h3 className="text-lg font-medium text-gray-500 mb-1">Nenhum processo em andamento</h3>
+                  <p className="text-gray-400 text-sm">Contratações pendentes de assinatura aparecerão aqui</p>
+                </div>
+              )}
+            </TabsContent>
 
             {/* Active Contracts */}
             <TabsContent value="active" className="space-y-4">
@@ -196,6 +347,23 @@ export default function CompanyEmployees() {
                               <p className="text-sm text-gray-500">
                                 Salário: R$ {contract.monthly_salary.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                               </p>
+                            )}
+
+                            {/* Days until expiration for estágio */}
+                            {contract.end_date && contract.job?.contract_type === 'estagio' && (
+                              <div className="mt-2">
+                                {differenceInDays(new Date(contract.end_date), new Date()) <= 30 ? (
+                                  <Badge className="bg-amber-100 text-amber-700">
+                                    <CalendarClock className="h-3 w-3 mr-1" />
+                                    Expira em {differenceInDays(new Date(contract.end_date), new Date())} dias
+                                  </Badge>
+                                ) : (
+                                  <Badge variant="outline" className="text-gray-500">
+                                    <CalendarClock className="h-3 w-3 mr-1" />
+                                    {differenceInDays(new Date(contract.end_date), new Date())} dias restantes
+                                  </Badge>
+                                )}
+                              </div>
                             )}
 
                             {/* Report Status */}

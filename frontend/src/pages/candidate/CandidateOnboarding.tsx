@@ -58,6 +58,7 @@ export default function CandidateOnboarding() {
   const { user, loading: authLoading } = useAuth();
   const [step, setStep] = useState(1);
   const [submitting, setSubmitting] = useState(false);
+  const [calendarMonth, setCalendarMonth] = useState<Date>(new Date(2000, 0));
 
   // Form state - Step 1 (Personal + Education merged)
   const [formData, setFormData] = useState({
@@ -81,7 +82,7 @@ export default function CandidateOnboarding() {
   const calculateAge = (birthDate: string): number | null => {
     if (!birthDate) return null;
     const today = new Date();
-    const birth = new Date(birthDate);
+    const birth = new Date(birthDate + 'T12:00:00');
     let age = today.getFullYear() - birth.getFullYear();
     const monthDiff = today.getMonth() - birth.getMonth();
     if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
@@ -291,7 +292,7 @@ export default function CandidateOnboarding() {
     submitOnboarding.mutate({
       ...formData,
       cpf: formData.cpf.replace(/\D/g, ""),
-      experience: [],
+      experience: formData.experiences,
       // DISC results
       disc_influente: discResults.influente,
       disc_estavel: discResults.estavel,
@@ -442,7 +443,7 @@ export default function CandidateOnboarding() {
                         >
                           <CalendarIcon className="mr-2 h-4 w-4" />
                           {formData.date_of_birth ? (
-                            format(new Date(formData.date_of_birth), "dd/MM/yyyy", { locale: ptBR })
+                            format(new Date(formData.date_of_birth + 'T12:00:00'), "dd/MM/yyyy", { locale: ptBR })
                           ) : (
                             <span>Selecione uma data</span>
                           )}
@@ -450,18 +451,36 @@ export default function CandidateOnboarding() {
                       </PopoverTrigger>
                       <PopoverContent className="w-auto p-0" align="start">
                         <div className="p-3 space-y-3">
-                          {/* Year quick selector */}
+                          {/* Month and Year selectors */}
                           <div className="flex items-center justify-center gap-2">
-                            <Label className="text-xs text-muted-foreground">Ano:</Label>
                             <Select
-                              value={formData.date_of_birth ? new Date(formData.date_of_birth).getFullYear().toString() : "2000"}
-                              onValueChange={(year) => {
-                                const currentDate = formData.date_of_birth ? new Date(formData.date_of_birth) : new Date(2000, 0, 1);
-                                currentDate.setFullYear(parseInt(year));
-                                handleInputChange('date_of_birth', currentDate.toISOString().split('T')[0]);
+                              value={calendarMonth.getMonth().toString()}
+                              onValueChange={(month) => {
+                                const newDate = new Date(calendarMonth);
+                                newDate.setMonth(parseInt(month));
+                                setCalendarMonth(newDate);
                               }}
                             >
-                              <SelectTrigger className="w-[100px] h-8">
+                              <SelectTrigger className="w-[120px] h-8">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'].map((month, index) => (
+                                  <SelectItem key={index} value={index.toString()}>
+                                    {month}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <Select
+                              value={calendarMonth.getFullYear().toString()}
+                              onValueChange={(year) => {
+                                const newMonth = new Date(calendarMonth);
+                                newMonth.setFullYear(parseInt(year));
+                                setCalendarMonth(newMonth);
+                              }}
+                            >
+                              <SelectTrigger className="w-[90px] h-8">
                                 <SelectValue />
                               </SelectTrigger>
                               <SelectContent className="max-h-[200px]">
@@ -475,17 +494,24 @@ export default function CandidateOnboarding() {
                           </div>
                           <Calendar
                             mode="single"
-                            selected={formData.date_of_birth ? new Date(formData.date_of_birth) : undefined}
-                            onSelect={(date) => handleInputChange('date_of_birth', date ? date.toISOString().split('T')[0] : '')}
+                            selected={formData.date_of_birth ? new Date(formData.date_of_birth + 'T12:00:00') : undefined}
+                            onSelect={(date) => {
+                              if (date) {
+                                // Format as YYYY-MM-DD using local timezone (not UTC)
+                                const year = date.getFullYear();
+                                const month = String(date.getMonth() + 1).padStart(2, '0');
+                                const day = String(date.getDate()).padStart(2, '0');
+                                handleInputChange('date_of_birth', `${year}-${month}-${day}`);
+                                setCalendarMonth(date);
+                              } else {
+                                handleInputChange('date_of_birth', '');
+                              }
+                            }}
                             disabled={(date) =>
                               date > new Date() || date < new Date("1950-01-01")
                             }
-                            month={formData.date_of_birth ? new Date(formData.date_of_birth) : new Date(2000, 0)}
-                            onMonthChange={(month) => {
-                              if (!formData.date_of_birth) {
-                                handleInputChange('date_of_birth', month.toISOString().split('T')[0]);
-                              }
-                            }}
+                            month={calendarMonth}
+                            onMonthChange={setCalendarMonth}
                             locale={ptBR}
                           />
                         </div>

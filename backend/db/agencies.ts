@@ -275,15 +275,15 @@ export async function getPaymentsByAgencyId(agencyId: string) {
     .select(
       `
       *,
+      companies!inner(id, company_name, agency_id),
       contracts(
-        id,
-        candidates(id, full_name, agency_id),
-        companies(id, company_name)
+        id, contract_number,
+        candidate:candidates(id, full_name)
       )
     `
     )
-    .eq("contracts.candidates.agency_id", agencyId)
-    .order("created_at", { ascending: false });
+    .eq("companies.agency_id", agencyId)
+    .order("due_date", { ascending: false });
 
   if (error) {
     console.error("[Database] Failed to get payments by agency:", error);

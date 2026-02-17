@@ -545,39 +545,31 @@ export async function getPaymentsByAffiliateId(
   affiliateId: string,
   agencyId?: string | null
 ): Promise<any[]> {
-  const contracts = await getContractsByAffiliateId(affiliateId, agencyId);
-  const contractIds = contracts.map((contract) => contract.id);
+  // Get agencies for this affiliate
+  const agencies = await getAgenciesByAffiliateId(affiliateId);
+  let agencyIds = agencies.map((a: any) => a.id);
 
-  if (contractIds.length === 0) {
+  // Filter to specific agency if provided
+  if (agencyId) {
+    agencyIds = agencyIds.filter((id: string) => id === agencyId);
+  }
+
+  if (agencyIds.length === 0) {
     return [];
   }
 
+  // Query payments through companies belonging to these agencies
   const { data, error } = await supabaseAdmin
     .from("payments")
     .select(
       `
       *,
-      contract:contracts!payments_contract_id_fkey (
-        id,
-        application:applications!contracts_application_id_fkey (
-          candidate:candidates!applications_candidate_id_fkey (
-            id,
-            full_name
-          ),
-          job:jobs!applications_job_id_fkey (
-            id,
-            title,
-            company:companies (
-              id,
-              company_name
-            )
-          )
-        )
-      )
+      companies!inner(id, company_name, agency_id),
+      contracts(id, contract_number)
     `
     )
-    .in("contract_id", contractIds)
-    .order("payment_date", { ascending: false });
+    .in("companies.agency_id", agencyIds)
+    .order("due_date", { ascending: false });
 
   if (error) {
     console.error("Error fetching affiliate payments:", error);

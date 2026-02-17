@@ -121,14 +121,10 @@ export default function CompanyJobsModal({
                               {job.vacancies} vaga(s)
                             </div>
                           )}
-                          {(job.salary_min || job.salary_max) && (
+                          {job.salary_min && (
                             <div className="flex items-center gap-2 text-muted-foreground">
                               <DollarSign className="h-4 w-4" />
-                              {job.salary_min && job.salary_max
-                                ? `R$ ${job.salary_min.toLocaleString("pt-BR")} - ${job.salary_max.toLocaleString("pt-BR")}`
-                                : job.salary_min
-                                  ? `A partir de R$ ${job.salary_min.toLocaleString("pt-BR")}`
-                                  : `Até R$ ${job.salary_max.toLocaleString("pt-BR")}`}
+                              R$ {job.salary_min.toLocaleString("pt-BR")}
                             </div>
                           )}
                           {job.created_at && (

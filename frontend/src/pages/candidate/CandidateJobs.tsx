@@ -64,7 +64,13 @@ export default function CandidateJobs() {
       applicationsQuery.refetch();
     },
     onError: (error) => {
-      toast.error(error.message || "Erro ao enviar candidatura");
+      // Handle duplicate application error with friendly message
+      if (error.message?.includes('duplicate key') || error.message?.includes('unique constraint')) {
+        toast.error("Você já se candidatou a esta vaga");
+        applicationsQuery.refetch(); // Refresh to update UI
+      } else {
+        toast.error(error.message || "Erro ao enviar candidatura");
+      }
     },
   });
 
@@ -100,6 +106,9 @@ export default function CandidateJobs() {
   const submitApplication = async () => {
     if (!selectedJob) return;
 
+    console.log("[CandidateJobs] Selected job:", selectedJob);
+    console.log("[CandidateJobs] Job ID:", selectedJob.id);
+
     setApplying(true);
     try {
       await createApplication.mutateAsync({
@@ -132,9 +141,11 @@ export default function CandidateJobs() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <ClassicLoader />
-      </div>
+      <DashboardLayout>
+        <div className="flex justify-center py-20">
+          <ClassicLoader />
+        </div>
+      </DashboardLayout>
     );
   }
 
@@ -271,10 +282,10 @@ export default function CandidateJobs() {
                           Ver Mais
                         </Button>
                         {hasApplied ? (
-                          <Button disabled variant="secondary">
-                            <CheckCircle className="h-4 w-4 mr-2" />
-                            Candidatado
-                          </Button>
+                          <Badge className="bg-green-100 text-green-700 border-green-200 px-3 py-2">
+                            <CheckCircle className="h-4 w-4 mr-1" />
+                            Já candidatado
+                          </Badge>
                         ) : (
                           <Button onClick={() => handleApply(job)}>
                             Candidatar-se
@@ -439,7 +450,7 @@ export default function CandidateJobs() {
                   <Button onClick={submitApplication} disabled={applying}>
                     {applying ? (
                       <>
-                        <ClassicLoader />
+                        <ClassicLoader size="sm" className="mr-2" />
                         Enviando...
                       </>
                     ) : (

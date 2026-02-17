@@ -17,7 +17,7 @@ export const notificationRouter = router({
 
   // Mark as read
   markAsRead: protectedProcedure
-    .input(z.object({ id: z.number() }))
+    .input(z.object({ id: z.string().uuid() }))
     .mutation(async ({ input }) => {
       await db.markNotificationAsRead(input.id);
       return { success: true };

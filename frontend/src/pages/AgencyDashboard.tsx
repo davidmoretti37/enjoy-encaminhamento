@@ -27,7 +27,7 @@ export default function AgencyDashboard() {
 
   if (authLoading || statsLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-orange-50 via-amber-50 to-orange-50">
         <div className="text-center">
           <div className="flex justify-center mb-4">
             <ClassicLoader />
@@ -40,7 +40,7 @@ export default function AgencyDashboard() {
 
   if (!user || user.role !== 'agency') {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-orange-50 via-amber-50 to-orange-50">
         <Card className="max-w-md shadow-xl">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -115,17 +115,17 @@ export default function AgencyDashboard() {
             </CardContent>
           </Card>
 
-          <Link href="/companies">
-            <Card className="hover:border-blue-500 hover:shadow-lg transition-all cursor-pointer bg-gradient-to-br from-blue-50 to-indigo-50">
+          <Link href="/agency/portal">
+            <Card className="hover:border-orange-500 hover:shadow-lg transition-all cursor-pointer bg-gradient-to-br from-orange-50 to-amber-50">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium text-blue-900">Vagas e Candidatos</CardTitle>
-                <div className="h-9 w-9 rounded-lg bg-blue-600 flex items-center justify-center">
+                <CardTitle className="text-sm font-medium text-orange-900">Vagas e Candidatos</CardTitle>
+                <div className="h-9 w-9 rounded-lg bg-orange-600 flex items-center justify-center">
                   <Briefcase className="h-5 w-5 text-white" />
                 </div>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold text-blue-900">Gerenciar</div>
-                <p className="text-sm text-blue-700 mt-1">
+                <div className="text-2xl font-bold text-orange-900">Gerenciar</div>
+                <p className="text-sm text-orange-700 mt-1">
                   Ver vagas de empresas parceiras
                 </p>
               </CardContent>

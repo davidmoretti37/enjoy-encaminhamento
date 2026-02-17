@@ -222,7 +222,7 @@ export default function EmpresasPage() {
                   variants={itemVariants}
                   className="flex gap-5 p-6 bg-white rounded-xl border border-slate-200 hover:shadow-md transition-shadow"
                 >
-                  <div className="w-14 h-14 rounded-full bg-gradient-to-br from-[#0A2342] to-[#FF6B35] flex items-center justify-center shrink-0">
+                  <div className="w-14 h-14 rounded-full bg-[#0A2342] flex items-center justify-center shrink-0">
                     <Icon className="h-6 w-6 text-white" />
                   </div>
                   <div>

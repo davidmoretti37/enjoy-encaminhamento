@@ -1,8 +1,8 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import { getLoginUrl } from "@/const";
-import { Users, Building, Briefcase, FileCheck, DollarSign, Calendar, MapPin, UserCheck } from "lucide-react";
+import { Users, Building, Briefcase, FileCheck, DollarSign, Calendar, MapPin, UserCheck, Bell, Home, Settings } from "lucide-react";
 import { useLocation } from "wouter";
-import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
+import ClassicLoader from "./ui/ClassicLoader";
 import { Button } from "./ui/button";
 import LumaBar from "./ui/LumaBar";
 import AgencyFilterHeader from "./AgencyFilterHeader";
@@ -20,14 +20,15 @@ const getMenuItems = (userRole: string | undefined): { homeHref: string; profile
   // Admin menu
   if (userRole === 'admin') {
     return {
-      homeHref: "/admin/dashboard",
+      homeHref: "/agency/portal",
       profileHref: "/settings",
       items: [
         { icon: Calendar, label: "Agenda", path: "/calendar" },
-        { icon: Building, label: "Empresas", path: "/companies" },
-        { icon: Users, label: "Candidatos", path: "/candidates" },
+        { icon: Briefcase, label: "Vagas", path: "/agency/portal?tab=job-description" },
+        { icon: Building, label: "Gerenciamento", path: "/agency/portal?tab=management" },
         { icon: DollarSign, label: "Pagamentos", path: "/payments" },
         { icon: MapPin, label: "Agências", path: "/admin/agencies" },
+        { icon: Bell, label: "Notificações", path: "/notifications" },
       ]
     };
   }
@@ -35,13 +36,14 @@ const getMenuItems = (userRole: string | undefined): { homeHref: string; profile
   // Agency menu
   if (userRole === 'agency') {
     return {
-      homeHref: "/agency/dashboard",
+      homeHref: "/agency/portal",
       profileHref: "/settings",
       items: [
         { icon: Calendar, label: "Agenda", path: "/calendar" },
-        { icon: Building, label: "Empresas", path: "/companies" },
-        { icon: Users, label: "Candidatos", path: "/candidates" },
+        { icon: Briefcase, label: "Vagas", path: "/agency/portal?tab=job-description" },
+        { icon: Building, label: "Gerenciamento", path: "/agency/portal?tab=management" },
         { icon: DollarSign, label: "Pagamentos", path: "/payments" },
+        { icon: Bell, label: "Notificações", path: "/notifications" },
       ]
     };
   }
@@ -57,6 +59,7 @@ const getMenuItems = (userRole: string | undefined): { homeHref: string; profile
         { icon: Calendar, label: "Agenda", path: "/company/scheduling" },
         { icon: Users, label: "Funcionários", path: "/company/employees" },
         { icon: DollarSign, label: "Pagamentos", path: "/company/payments" },
+        { icon: Bell, label: "Notificações", path: "/notifications" },
       ]
     };
   }
@@ -69,6 +72,7 @@ const getMenuItems = (userRole: string | undefined): { homeHref: string; profile
       items: [
         { icon: Briefcase, label: "Vagas", path: "/candidate/vagas" },
         { icon: FileCheck, label: "Candidaturas", path: "/candidate/candidaturas" },
+        { icon: Bell, label: "Notificações", path: "/notifications" },
       ]
     };
   }
@@ -107,6 +111,12 @@ export default function DashboardLayout({
     refetchInterval: 60000,
   });
 
+  // Notification count for badge
+  const notificationCountQuery = trpc.notification.getUnreadCount.useQuery(undefined, {
+    enabled: !!user,
+    refetchInterval: 30000, // Refresh every 30 seconds
+  });
+
   // Redirect to onboarding if needed
   useEffect(() => {
     if (!user) return;
@@ -124,16 +134,28 @@ export default function DashboardLayout({
   }, [user, location, companyOnboardingQuery.data, candidateOnboardingQuery.data]);
 
   if (loading) {
-    return <DashboardLayoutSkeleton />
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <ClassicLoader />
+      </div>
+    );
   }
 
   // Show loading while checking onboarding
   if (user?.role === 'company' && companyOnboardingQuery.isLoading) {
-    return <DashboardLayoutSkeleton />
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <ClassicLoader />
+      </div>
+    );
   }
 
   if (user?.role === 'candidate' && candidateOnboardingQuery.isLoading) {
-    return <DashboardLayoutSkeleton />
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <ClassicLoader />
+      </div>
+    );
   }
 
   if (!user) {
@@ -170,12 +192,18 @@ export default function DashboardLayout({
     paymentBadge = overdueAmount > 0 ? 1 : 0;
   }
 
+  // Notification badge
+  const notificationBadge = notificationCountQuery.data || 0;
+
   const { homeHref, profileHref, items } = getMenuItems(user?.role ?? undefined);
+  console.log('[DashboardLayout] User role:', user?.role, 'Menu items:', items.map(i => ({ label: i.label, path: i.path })));
+
   const navItems = items.map(item => ({
     label: item.label,
     href: item.path,
     icon: item.icon,
-    badge: item.path.includes('payment') ? paymentBadge : undefined,
+    badge: item.path.includes('payment') ? paymentBadge :
+           item.path.includes('notification') ? notificationBadge : undefined,
   }));
 
   return (
@@ -183,9 +211,9 @@ export default function DashboardLayout({
       {/* Background with corner gradients */}
       <div className="fixed inset-0 -z-10 bg-white">
         {/* Top-left corner gradient */}
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_0%_0%,rgba(59,130,246,0.15),transparent_50%)]"></div>
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_0%_0%,rgba(255,107,53,0.15),transparent_50%)]"></div>
         {/* Bottom-right corner gradient */}
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_100%_100%,rgba(59,130,246,0.12),transparent_50%)]"></div>
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_100%_100%,rgba(255,107,53,0.12),transparent_50%)]"></div>
       </div>
 
       {/* Agency filter dropdown for admins - floats top-left */}

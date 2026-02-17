@@ -74,6 +74,8 @@ export async function getCompanyFullHistory(
   agencyContract: { type: string; pdfUrl?: string | null; html?: string | null } | null;
   phoneNumbers: { label: string; phone_number: string }[];
   companyEmails: { label: string; email: string; is_primary: boolean }[];
+  hiringProcesses: any[];
+  signingInvitations: any[];
 }> {
   let meeting = null;
 
@@ -126,6 +128,8 @@ export async function getCompanyFullHistory(
   let phoneNumbers: { label: string; phone_number: string }[] = [];
   let companyEmails: { label: string; email: string; is_primary: boolean }[] = [];
   let signedContratoInicial: any[] = [];
+  let hiringProcesses: any[] = [];
+  let signingInvitations: any[] = [];
   if (company?.id) {
     const { data: companyContracts } = await supabaseAdmin
       .from("contracts")
@@ -187,6 +191,28 @@ export async function getCompanyFullHistory(
         .eq("category", "contrato_inicial")
         .order("signed_at", { ascending: false });
       signedContratoInicial = docsByUser || [];
+    }
+
+    // Fetch hiring processes for this company
+    const { data: hp } = await supabaseAdmin
+      .from("hiring_processes")
+      .select(`
+        *,
+        candidate:candidates(id, full_name),
+        job:jobs(id, title)
+      `)
+      .eq("company_id", company.id)
+      .order("created_at", { ascending: false });
+    hiringProcesses = hp || [];
+
+    // Fetch signing invitations for these hiring processes
+    const hpIds = hiringProcesses.map((h: any) => h.id);
+    if (hpIds.length > 0) {
+      const { data: invitations } = await supabaseAdmin
+        .from("signing_invitations")
+        .select("*")
+        .in("hiring_process_id", hpIds);
+      signingInvitations = invitations || [];
     }
   }
 
@@ -291,6 +317,8 @@ export async function getCompanyFullHistory(
     phoneNumbers,
     companyEmails,
     signedContratoInicial,
+    hiringProcesses,
+    signingInvitations,
   };
 }
 

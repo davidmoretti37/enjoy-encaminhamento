@@ -5,6 +5,7 @@ import { router } from "../_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { companyProcedure, candidateProcedure } from "./procedures";
 import * as db from "../db";
+import * as hiringDb from "../db/hiring";
 
 export const applicationRouter = router({
   // Apply to job
@@ -39,15 +40,27 @@ export const applicationRouter = router({
     if (!candidate) return [];
     const applications = await db.getApplicationsByCandidateId(candidate.id);
 
-    // Filter out company info unless candidate is hired (status === 'selected')
+    // Auto-fix: if a hiring process exists but application is still "interviewed", update to "selected"
+    for (const app of applications) {
+      if (app.status === "interviewed") {
+        const hp = await hiringDb.getHiringProcessByApplication(app.id);
+        if (hp) {
+          await db.updateApplication(app.id, { status: "selected" });
+          app.status = "selected";
+        }
+      }
+    }
+
+    // Remap 'jobs' to 'job' and strip company info (ANEC is middleman)
     return applications.map((app: any) => ({
       ...app,
-      jobs: app.jobs ? {
+      job: app.jobs ? {
         ...app.jobs,
-        // Only include company info if hired
-        companies: app.status === 'selected' ? app.jobs.companies : undefined,
-        company_id: app.status === 'selected' ? app.jobs.company_id : undefined,
+        companies: undefined,
+        company: undefined,
+        company_id: undefined,
       } : null,
+      jobs: undefined,
     }));
   }),
 
@@ -66,6 +79,31 @@ export const applicationRouter = router({
       }
 
       return await db.getApplicationsByJobId(input.jobId);
+    }),
+
+  // Candidate marks they joined the agency meeting (records timestamp, does NOT change status)
+  joinMeeting: candidateProcedure
+    .input(z.object({
+      applicationId: z.string().uuid(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const candidate = await db.getCandidateByUserId(ctx.user.id);
+      if (!candidate) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Candidate not found' });
+      }
+
+      const applications = await db.getApplicationsByCandidateId(candidate.id);
+      const app = applications.find((a: any) => a.id === input.applicationId);
+      if (!app) {
+        throw new TRPCError({ code: 'FORBIDDEN' });
+      }
+
+      // Record when the candidate joined the meeting (use interview_date field)
+      if (!app.interview_date) {
+        await db.updateApplication(input.applicationId, { interview_date: new Date().toISOString() });
+      }
+
+      return { success: true };
     }),
 
   // Update application status
