@@ -173,12 +173,16 @@ export default function AgencyRegistration() {
 
   // Validation for each step
   const validateAgencyInfo = () => {
-    if (!agencyName.trim()) {
-      toast.error("Digite o nome da agência");
+    if (!city.trim()) {
+      toast.error("Digite a cidade");
       return false;
     }
-    if (!cnpj.trim()) {
-      toast.error("Digite o CNPJ");
+    if (!state.trim()) {
+      toast.error("Digite o estado");
+      return false;
+    }
+    if (!agencyName.trim()) {
+      toast.error("Digite o nome da agência");
       return false;
     }
     if (!email.trim()) {
@@ -395,6 +399,33 @@ export default function AgencyRegistration() {
                   }}
                   className="space-y-4"
                 >
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="col-span-2 space-y-2">
+                      <Label htmlFor="city">Cidade *</Label>
+                      <Input
+                        id="city"
+                        value={city}
+                        onChange={(e) => setCity(e.target.value)}
+                        placeholder="Ex: São Paulo"
+                        required
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="state">Estado *</Label>
+                      <Input
+                        id="state"
+                        value={state}
+                        onChange={(e) => setState(e.target.value.toUpperCase())}
+                        placeholder="Ex: SP"
+                        maxLength={2}
+                        required
+                      />
+                    </div>
+                  </div>
+                  <p className="text-xs text-muted-foreground -mt-2">
+                    Empresas e candidatos desta cidade serão direcionados para sua agência
+                  </p>
+
                   <div className="space-y-2">
                     <Label htmlFor="agencyName">Nome da Agência *</Label>
                     <Input
@@ -402,17 +433,6 @@ export default function AgencyRegistration() {
                       value={agencyName}
                       onChange={(e) => setAgencyName(e.target.value)}
                       placeholder="Ex: Agência de Recrutamento ABC"
-                      required
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="cnpj">CNPJ *</Label>
-                    <Input
-                      id="cnpj"
-                      value={cnpj}
-                      onChange={(e) => setCnpj(e.target.value)}
-                      placeholder="00.000.000/0000-00"
                       required
                     />
                   </div>
@@ -442,26 +462,14 @@ export default function AgencyRegistration() {
                     />
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="city">Cidade</Label>
-                      <Input
-                        id="city"
-                        value={city}
-                        onChange={(e) => setCity(e.target.value)}
-                        placeholder="Ex: São Paulo"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="state">Estado</Label>
-                      <Input
-                        id="state"
-                        value={state}
-                        onChange={(e) => setState(e.target.value.toUpperCase())}
-                        placeholder="Ex: SP"
-                        maxLength={2}
-                      />
-                    </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="cnpj">CNPJ</Label>
+                    <Input
+                      id="cnpj"
+                      value={cnpj}
+                      onChange={(e) => setCnpj(e.target.value)}
+                      placeholder="00.000.000/0000-00"
+                    />
                   </div>
 
                   <Button type="submit" className="w-full">
