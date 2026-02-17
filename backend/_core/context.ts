@@ -59,21 +59,39 @@ export async function createContext(
         if (userProfile) {
           user = userProfile;
         } else {
-          // User authenticated but no profile yet - create minimal user object from auth data
-          // This can happen right after signup before the profile insert completes
-          console.log('[Auth] No profile found for user, using auth data:', authUser.id);
-          user = {
-            id: authUser.id,
-            email: authUser.email || '',
-            name: authUser.user_metadata?.name || null,
-            role: authUser.user_metadata?.role || null,
-            agency_id: authUser.user_metadata?.agency_id || null,
-            created_at: authUser.created_at,
-            updated_at: null,
-            last_signed_in: null,
-            last_login: null,
-            profile_photo_url: null,
-          };
+          // User authenticated but no profile yet (e.g. Google OAuth)
+          // Auto-create profile as candidate by default
+          console.log('[Auth] No profile found for user, auto-creating:', authUser.id);
+          const role = authUser.user_metadata?.role || 'candidate';
+          const { data: newProfile, error: createError } = await supabaseAdmin
+            .from('users')
+            .insert({
+              id: authUser.id,
+              email: authUser.email || '',
+              name: authUser.user_metadata?.full_name || authUser.user_metadata?.name || null,
+              role,
+              agency_id: authUser.user_metadata?.agency_id || null,
+            })
+            .select('*')
+            .single();
+
+          if (createError) {
+            console.error('[Auth] Failed to auto-create profile:', createError.message);
+            user = {
+              id: authUser.id,
+              email: authUser.email || '',
+              name: authUser.user_metadata?.full_name || authUser.user_metadata?.name || null,
+              role: role as any,
+              agency_id: authUser.user_metadata?.agency_id || null,
+              created_at: authUser.created_at,
+              updated_at: null,
+              last_signed_in: null,
+              last_login: null,
+              profile_photo_url: null,
+            };
+          } else {
+            user = newProfile;
+          }
         }
       }
     }

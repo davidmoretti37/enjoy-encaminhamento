@@ -60,6 +60,7 @@ import EstagioPage from "./pages/EstagioPage";
 import PublicVagasPage from "./pages/PublicVagasPage";
 import NotificationsScreen from "./pages/NotificationsScreen";
 import ExternalSigningPage from "./pages/signing/ExternalSigningPage";
+import AuthCallback from "./pages/AuthCallback";
 // New Funnel Portals
 import EmpresaPortal from "./pages/EmpresaPortal";
 import CandidatoPortal from "./pages/CandidatoPortal";
@@ -86,6 +87,7 @@ function Router() {
       <Route path={"/estagio"} component={EstagioPage} />
       <Route path={"/vagas"} component={PublicVagasPage} />
       <Route path={"/login"} component={Login} />
+      <Route path={"/auth/callback"} component={AuthCallback} />
       <Route path={"/contract/:token"} component={ContractSign} />
       <Route path={"/company/register/:token"} component={CompanyRegister} />
       {/* Agency registration */}
