@@ -10,13 +10,30 @@ import {
 } from "lucide-react";
 import { useLocation } from "wouter";
 import ClassicLoader from "@/components/ui/ClassicLoader";
+import { useAuth } from "@/_core/hooks/useAuth";
+import { useAgencyContext } from "@/contexts/AgencyContext";
 
 export default function DashboardContent() {
   const [, setLocation] = useLocation();
+  const { user } = useAuth();
+  const { isAllAgenciesMode } = useAgencyContext();
+  const isTodasMode = user?.role === 'admin' && isAllAgenciesMode;
 
-  const { data: stats } = trpc.agency.getDashboardStats.useQuery();
-  const { data: candidates, isLoading: candidatesLoading } = trpc.agency.getCandidates.useQuery();
-  const { data: applications, isLoading: applicationsLoading } = trpc.agency.getApplications.useQuery();
+  // Agency-specific queries (disabled in Todas mode)
+  const { data: agencyStats } = trpc.agency.getDashboardStats.useQuery(undefined, { enabled: !isTodasMode });
+  const { data: agencyCandidates, isLoading: agencyCandidatesLoading } = trpc.agency.getCandidates.useQuery(undefined, { enabled: !isTodasMode });
+  const { data: agencyApplications, isLoading: agencyApplicationsLoading } = trpc.agency.getApplications.useQuery(undefined, { enabled: !isTodasMode });
+
+  // Affiliate-level queries (enabled in Todas mode)
+  const { data: affiliateStats } = trpc.affiliate.getDashboardStats.useQuery({ agencyId: null }, { enabled: isTodasMode });
+  const { data: affiliateCandidates, isLoading: affiliateCandidatesLoading } = trpc.affiliate.getCandidates.useQuery({ agencyId: null }, { enabled: isTodasMode });
+  const { data: affiliateApplications, isLoading: affiliateApplicationsLoading } = trpc.affiliate.getApplications.useQuery({ agencyId: null }, { enabled: isTodasMode });
+
+  const stats = isTodasMode ? affiliateStats : agencyStats;
+  const candidates = isTodasMode ? affiliateCandidates : agencyCandidates;
+  const candidatesLoading = isTodasMode ? affiliateCandidatesLoading : agencyCandidatesLoading;
+  const applications = isTodasMode ? affiliateApplications : agencyApplications;
+  const applicationsLoading = isTodasMode ? affiliateApplicationsLoading : agencyApplicationsLoading;
 
   return (
     <div className="space-y-8">

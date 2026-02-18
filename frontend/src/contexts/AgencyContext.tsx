@@ -1,4 +1,4 @@
-import React, { createContext, useContext, ReactNode, useState, useEffect } from "react";
+import React, { createContext, useContext, ReactNode, useState, useEffect, useCallback } from "react";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 
@@ -16,96 +16,75 @@ interface AgencyContextType {
   setCurrentAgency: (agencyId: string | null) => void;
 }
 
+const STORAGE_KEY = "admin_agency_context";
+
 const AgencyContext = createContext<AgencyContextType | undefined>(undefined);
+
+function loadFromStorage(): string | null {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    return stored ? JSON.parse(stored) : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveToStorage(agencyId: string | null) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(agencyId));
+  } catch {
+    // ignore storage errors
+  }
+}
 
 export function AgencyProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
-  const utils = trpc.useUtils();
-
-  // Only fetch for admin users
   const isAdmin = user?.role === "admin";
 
-  // Local state for optimistic updates
-  const [optimisticAgency, setOptimisticAgency] = useState<Agency | null | undefined>(undefined);
+  // Client-side state — source of truth for UI
+  const [selectedAgencyId, setSelectedAgencyId] = useState<string | null>(() => loadFromStorage());
 
-  // Get current agency context
-  const { data: serverAgency, isLoading: isLoadingCurrent } =
-    trpc.agencyContext.getCurrent.useQuery(undefined, {
-      enabled: isAdmin,
-    });
-
-  // Get available agencies
+  // Get available agencies from server
   const { data: availableAgencies = [], isLoading: isLoadingAgencies } =
     trpc.agencyContext.getAvailable.useQuery(undefined, {
       enabled: isAdmin,
     });
 
-  // Sync optimistic state with server state when server data changes
-  useEffect(() => {
-    if (!isLoadingCurrent) {
-      setOptimisticAgency(undefined); // Clear optimistic state when server responds
-    }
-  }, [serverAgency, isLoadingCurrent]);
-
-  // Mutation to set current agency
+  // Best-effort server persistence (fire and forget — doesn't affect UI)
   const setCurrentMutation = trpc.agencyContext.setCurrent.useMutation({
-    onSuccess: () => {
-      // Invalidate all queries that depend on agency context
-      utils.agencyContext.getCurrent.invalidate();
-
-      // Outreach queries
-      utils.outreach.getAvailability.invalidate();
-      utils.outreach.getMeetings.invalidate();
-      utils.outreach.getAdminSettings.invalidate();
-      utils.outreach.getAllCompanyForms.invalidate();
-
-      // Affiliate data queries
-      utils.affiliate.getAgencies.invalidate();
-      utils.affiliate.getCandidates.invalidate();
-      utils.affiliate.getCompanies.invalidate();
-      utils.affiliate.getJobs.invalidate();
-      utils.affiliate.getContracts.invalidate();
-      utils.affiliate.getPayments.invalidate();
-      utils.affiliate.getApplications.invalidate();
-      utils.affiliate.getDashboardStats.invalidate();
-
-      // Agency queries (used by SettingsPage + agency views)
-      utils.agency.getDocumentTemplates.invalidate();
-      utils.agency.getContract.invalidate();
-
-      // Admin queries (used by admin role)
-      utils.candidate.getAllForAdmin.invalidate();
-      utils.admin.getAllApplications.invalidate();
-      utils.admin.getAllContracts.invalidate();
-      utils.admin.getAllPayments.invalidate();
-    },
     onError: (error) => {
-      // Revert optimistic update on error
-      console.error('Failed to set agency context:', error);
-      setOptimisticAgency(undefined);
+      console.warn('[AgencyContext] Server persistence failed (non-blocking):', error.message);
     },
   });
 
-  const setCurrentAgency = (agencyId: string | null) => {
-    // Optimistic update - immediately show the new agency
-    if (agencyId === null) {
-      setOptimisticAgency(null);
-    } else {
-      const agency = availableAgencies.find(s => s.id === agencyId);
-      if (agency) {
-        setOptimisticAgency(agency);
-      }
-    }
-    setCurrentMutation.mutate({ agencyId });
-  };
+  // Resolve the selected agency ID to a full agency object
+  const currentAgency = selectedAgencyId
+    ? availableAgencies.find(a => a.id === selectedAgencyId) || null
+    : null;
 
-  // Use optimistic state if set, otherwise use server state
-  const currentAgency = optimisticAgency !== undefined ? optimisticAgency : (serverAgency || null);
+  const setCurrentAgency = useCallback((agencyId: string | null) => {
+    setSelectedAgencyId(agencyId);
+    saveToStorage(agencyId);
+    // Best-effort server persistence
+    setCurrentMutation.mutate({ agencyId });
+  }, [setCurrentMutation]);
+
+  // If the stored agency ID is not in the available list (e.g., agency was deleted), reset
+  useEffect(() => {
+    if (
+      selectedAgencyId &&
+      availableAgencies.length > 0 &&
+      !availableAgencies.find(a => a.id === selectedAgencyId)
+    ) {
+      setSelectedAgencyId(null);
+      saveToStorage(null);
+    }
+  }, [selectedAgencyId, availableAgencies]);
 
   const value: AgencyContextType = {
     currentAgency,
     availableAgencies,
-    isLoading: isLoadingCurrent || isLoadingAgencies,
+    isLoading: isLoadingAgencies,
     isAllAgenciesMode: currentAgency === null,
     setCurrentAgency,
   };

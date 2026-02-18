@@ -1,4 +1,5 @@
 import { useAgencyFunnel } from "@/contexts/AgencyFunnelContext";
+import { useAgencyContext } from "@/contexts/AgencyContext";
 import ClassicLoader from "@/components/ui/ClassicLoader";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -10,6 +11,7 @@ import { Search, X } from "lucide-react";
 
 export default function ManagementTab() {
   const { managementFilter, setManagementFilter, companies, candidates, isLoading } = useAgencyFunnel();
+  const { isAllAgenciesMode, availableAgencies } = useAgencyContext();
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedEntity, setSelectedEntity] = useState<any>(null);
   const [documentsModalOpen, setDocumentsModalOpen] = useState(false);
@@ -115,9 +117,9 @@ export default function ManagementTab() {
 
       {/* Content based on filter */}
       {managementFilter === 'companies' ? (
-        <CompanyList companies={filteredCompanies} onDocumentsClick={handleDocumentsClick} searchTerm={searchTerm} />
+        <CompanyList companies={filteredCompanies} onDocumentsClick={handleDocumentsClick} searchTerm={searchTerm} isAllAgenciesMode={isAllAgenciesMode} availableAgencies={availableAgencies} />
       ) : (
-        <CandidateList candidates={filteredCandidates} onDocumentsClick={handleDocumentsClick} searchTerm={searchTerm} />
+        <CandidateList candidates={filteredCandidates} onDocumentsClick={handleDocumentsClick} searchTerm={searchTerm} isAllAgenciesMode={isAllAgenciesMode} availableAgencies={availableAgencies} />
       )}
 
       {/* Documents Modal */}
@@ -133,8 +135,61 @@ export default function ManagementTab() {
   );
 }
 
-function CompanyList({ companies, onDocumentsClick, searchTerm }: { companies: any[]; onDocumentsClick: (entity: any) => void; searchTerm: string }) {
-  if (companies.length === 0) {
+function CompanyRow({ company, onDocumentsClick }: { company: any; onDocumentsClick: (entity: any) => void }) {
+  return (
+    <div className="p-3 bg-white rounded-lg border-2 border-slate-200 hover:border-orange-300 hover:shadow-md transition-all">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2.5">
+          <div className="h-8 w-8 rounded-lg bg-[#0A2342] flex items-center justify-center">
+            <Building2 className="h-4 w-4 text-white" />
+          </div>
+          <div>
+            <span className="text-sm font-medium text-gray-900">
+              {company.company_name || "Empresa sem nome"}
+            </span>
+            {company.contact_name && (
+              <p className="text-xs text-gray-500">{company.contact_name}</p>
+            )}
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="text-gray-600 border-gray-300 hover:bg-gray-50 hover:border-orange-300"
+            onClick={() => onDocumentsClick(company)}
+          >
+            <FileText className="h-4 w-4 mr-1.5" />
+            Documentos
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="text-gray-600 border-gray-300 hover:bg-gray-50 hover:border-orange-300"
+            disabled
+            title="Em desenvolvimento"
+          >
+            <FileCheck className="h-4 w-4 mr-1.5" />
+            Contratos
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="text-gray-600 border-gray-300 hover:bg-gray-50 hover:border-orange-300"
+            disabled
+            title="Em desenvolvimento"
+          >
+            <DollarSign className="h-4 w-4 mr-1.5" />
+            Pagamentos
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CompanyList({ companies, onDocumentsClick, searchTerm, isAllAgenciesMode, availableAgencies }: { companies: any[]; onDocumentsClick: (entity: any) => void; searchTerm: string; isAllAgenciesMode: boolean; availableAgencies: { id: string; name: string; city: string | null }[] }) {
+  if (!isAllAgenciesMode && companies.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-center">
         <div className="w-20 h-20 rounded-2xl bg-white border-2 border-slate-200 flex items-center justify-center mb-6 shadow-sm">
@@ -150,67 +205,105 @@ function CompanyList({ companies, onDocumentsClick, searchTerm }: { companies: a
     );
   }
 
+  if (isAllAgenciesMode) {
+    return (
+      <div className="space-y-6">
+        {availableAgencies.map(agency => {
+          const agencyCompanies = companies.filter((c: any) => c.agency_id === agency.id);
+          return (
+            <div key={agency.id}>
+              <div className="flex items-center gap-2 py-3 px-3 border-b border-gray-200 bg-gray-50/80 rounded-t-lg">
+                <Building2 className="h-4 w-4 text-gray-500" />
+                <span className="font-semibold text-gray-700">{agency.name}</span>
+                <span className="text-xs text-gray-400">({agencyCompanies.length})</span>
+              </div>
+              {agencyCompanies.length > 0 ? (
+                <div className="space-y-2 mt-2">
+                  {agencyCompanies.map((company: any) => (
+                    <CompanyRow key={company.id} company={company} onDocumentsClick={onDocumentsClick} />
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-gray-400 py-4 px-3">Nenhuma empresa nesta agência</p>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-2">
       {companies.map((company: any) => (
-        <div
-          key={company.id}
-          className="p-3 bg-white rounded-lg border-2 border-slate-200 hover:border-orange-300 hover:shadow-md transition-all"
-        >
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2.5">
-              <div className="h-8 w-8 rounded-lg bg-[#0A2342] flex items-center justify-center">
-                <Building2 className="h-4 w-4 text-white" />
-              </div>
-              <div>
-                <span className="text-sm font-medium text-gray-900">
-                  {company.company_name || "Empresa sem nome"}
-                </span>
-                {company.contact_name && (
-                  <p className="text-xs text-gray-500">{company.contact_name}</p>
-                )}
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                className="text-gray-600 border-gray-300 hover:bg-gray-50 hover:border-orange-300"
-                onClick={() => onDocumentsClick(company)}
-              >
-                <FileText className="h-4 w-4 mr-1.5" />
-                Documentos
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="text-gray-600 border-gray-300 hover:bg-gray-50 hover:border-orange-300"
-                disabled
-                title="Em desenvolvimento"
-              >
-                <FileCheck className="h-4 w-4 mr-1.5" />
-                Contratos
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="text-gray-600 border-gray-300 hover:bg-gray-50 hover:border-orange-300"
-                disabled
-                title="Em desenvolvimento"
-              >
-                <DollarSign className="h-4 w-4 mr-1.5" />
-                Pagamentos
-              </Button>
-            </div>
-          </div>
-        </div>
+        <CompanyRow key={company.id} company={company} onDocumentsClick={onDocumentsClick} />
       ))}
     </div>
   );
 }
 
-function CandidateList({ candidates, onDocumentsClick, searchTerm }: { candidates: any[]; onDocumentsClick: (entity: any) => void; searchTerm: string }) {
-  if (candidates.length === 0) {
+function CandidateRow({ candidate }: { candidate: any }) {
+  return (
+    <div className="p-3 bg-white rounded-lg border-2 border-slate-200 hover:border-orange-300 hover:shadow-md transition-all">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2.5">
+          <div className="h-8 w-8 rounded-full bg-[#0A2342] flex items-center justify-center">
+            <span className="text-white font-medium text-xs">
+              {candidate.full_name?.charAt(0)?.toUpperCase() || 'C'}
+            </span>
+          </div>
+          <div>
+            <span className="text-sm font-medium text-gray-900">
+              {candidate.full_name || "Candidato sem nome"}
+            </span>
+            <div className="flex items-center gap-2 mt-0.5">
+              {candidate.education_level && (
+                <p className="text-xs text-gray-500">{candidate.education_level}</p>
+              )}
+              {candidate.status && (
+                <Badge
+                  variant={
+                    candidate.status === 'active' ? 'default' :
+                    candidate.status === 'employed' ? 'secondary' :
+                    'outline'
+                  }
+                  className="text-xs"
+                >
+                  {candidate.status === 'active' ? 'Ativo' : candidate.status === 'employed' ? 'Empregado' : 'Inativo'}
+                </Badge>
+              )}
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="text-gray-600 border-gray-300 hover:bg-gray-50 hover:border-orange-300"
+            disabled
+            title="Em desenvolvimento"
+          >
+            <FileText className="h-4 w-4 mr-1.5" />
+            Documentos
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="text-gray-600 border-gray-300 hover:bg-gray-50 hover:border-orange-300"
+            disabled
+            title="Em desenvolvimento"
+          >
+            <User className="h-4 w-4 mr-1.5" />
+            Perfil
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CandidateList({ candidates, onDocumentsClick, searchTerm, isAllAgenciesMode, availableAgencies }: { candidates: any[]; onDocumentsClick: (entity: any) => void; searchTerm: string; isAllAgenciesMode: boolean; availableAgencies: { id: string; name: string; city: string | null }[] }) {
+  if (!isAllAgenciesMode && candidates.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-center">
         <div className="w-20 h-20 rounded-2xl bg-white border-2 border-slate-200 flex items-center justify-center mb-6 shadow-sm">
@@ -226,67 +319,38 @@ function CandidateList({ candidates, onDocumentsClick, searchTerm }: { candidate
     );
   }
 
+  if (isAllAgenciesMode) {
+    return (
+      <div className="space-y-6">
+        {availableAgencies.map(agency => {
+          const agencyCandidates = candidates.filter((c: any) => c.agency_id === agency.id);
+          return (
+            <div key={agency.id}>
+              <div className="flex items-center gap-2 py-3 px-3 border-b border-gray-200 bg-gray-50/80 rounded-t-lg">
+                <Building2 className="h-4 w-4 text-gray-500" />
+                <span className="font-semibold text-gray-700">{agency.name}</span>
+                <span className="text-xs text-gray-400">({agencyCandidates.length})</span>
+              </div>
+              {agencyCandidates.length > 0 ? (
+                <div className="space-y-2 mt-2">
+                  {agencyCandidates.map((candidate: any) => (
+                    <CandidateRow key={candidate.id} candidate={candidate} />
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-gray-400 py-4 px-3">Nenhum candidato nesta agência</p>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-2">
       {candidates.map((candidate: any) => (
-        <div
-          key={candidate.id}
-          className="p-3 bg-white rounded-lg border-2 border-slate-200 hover:border-orange-300 hover:shadow-md transition-all"
-        >
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2.5">
-              <div className="h-8 w-8 rounded-full bg-[#0A2342] flex items-center justify-center">
-                <span className="text-white font-medium text-xs">
-                  {candidate.full_name?.charAt(0)?.toUpperCase() || 'C'}
-                </span>
-              </div>
-              <div>
-                <span className="text-sm font-medium text-gray-900">
-                  {candidate.full_name || "Candidato sem nome"}
-                </span>
-                <div className="flex items-center gap-2 mt-0.5">
-                  {candidate.education_level && (
-                    <p className="text-xs text-gray-500">{candidate.education_level}</p>
-                  )}
-                  {candidate.status && (
-                    <Badge
-                      variant={
-                        candidate.status === 'active' ? 'default' :
-                        candidate.status === 'employed' ? 'secondary' :
-                        'outline'
-                      }
-                      className="text-xs"
-                    >
-                      {candidate.status === 'active' ? 'Ativo' : candidate.status === 'employed' ? 'Empregado' : 'Inativo'}
-                    </Badge>
-                  )}
-                </div>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                className="text-gray-600 border-gray-300 hover:bg-gray-50 hover:border-orange-300"
-                disabled
-                title="Em desenvolvimento"
-              >
-                <FileText className="h-4 w-4 mr-1.5" />
-                Documentos
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="text-gray-600 border-gray-300 hover:bg-gray-50 hover:border-orange-300"
-                disabled
-                title="Em desenvolvimento"
-              >
-                <User className="h-4 w-4 mr-1.5" />
-                Perfil
-              </Button>
-            </div>
-          </div>
-        </div>
+        <CandidateRow key={candidate.id} candidate={candidate} />
       ))}
     </div>
   );

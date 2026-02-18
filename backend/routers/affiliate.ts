@@ -132,8 +132,10 @@ export const affiliateRouter = router({
       if (!affiliate) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Affiliate not found' });
       }
-      // Use provided agencyId, or fall back to stored context, or null for all
-      const agencyId = input?.agencyId ?? await db.getAdminAgencyContext(ctx.user.id);
+      // null = explicitly "all agencies" mode, undefined = use stored context
+      const agencyId = input?.agencyId === null
+        ? undefined
+        : (input?.agencyId ?? await db.getAdminAgencyContext(ctx.user.id));
       return await db.getCompaniesByAffiliateId(affiliate.id, agencyId);
     }),
 

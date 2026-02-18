@@ -48,7 +48,7 @@ export async function acceptAgencyInvitation(
   password: string,
   agencyData: {
     agency_name: string;
-    cnpj: string;
+    cnpj?: string;
     email: string;
     phone?: string;
     city?: string;
@@ -102,22 +102,19 @@ export async function acceptAgencyInvitation(
   }
 
   // Create agency record
-  // Note: Database may still use franchise_id instead of affiliate_id
   const { data: agency, error: agencyError } = await supabaseAdmin
     .from("agencies")
     .insert({
       user_id: userId,
       affiliate_id: invitation.affiliate_id,
-      franchise_id: invitation.affiliate_id, // Legacy column name
       agency_name: agencyData.agency_name,
-      cnpj: agencyData.cnpj,
+      cnpj: agencyData.cnpj || null,
       email: agencyData.email,
       phone: agencyData.phone || null,
       city: agencyData.city || null,
       state: agencyData.state || null,
       address: agencyData.address || null,
       status: "active",
-      contract_pdf_url: contractUrl || null,
     })
     .select()
     .single();
@@ -439,7 +436,8 @@ export async function getJobsByAffiliateId(
       company:companies (
         id,
         company_name,
-        affiliate_id
+        affiliate_id,
+        agency_id
       )
     `
     )

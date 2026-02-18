@@ -493,7 +493,7 @@ export default function CompanyOnboarding() {
       </div>
 
       <div className="max-w-3xl mx-auto px-4 py-8">
-        <form onSubmit={handleSubmit}>
+        <form onSubmit={handleSubmit} noValidate>
           {/* Step 1: Company Data */}
           {step === 1 && (
             <div className="space-y-6">

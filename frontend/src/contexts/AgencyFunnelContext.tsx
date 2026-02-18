@@ -9,6 +9,8 @@ import {
 } from "react";
 import { useLocation, useSearch } from "wouter";
 import { trpc } from "@/lib/trpc";
+import { useAuth } from "@/_core/hooks/useAuth";
+import { useAgencyContext } from "./AgencyContext";
 
 type Tab = "dashboard" | "job-description" | "management";
 type ManagementFilter = "companies" | "candidates";
@@ -81,23 +83,52 @@ export function AgencyFunnelProvider({ children }: { children: ReactNode }) {
 
   // tRPC queries
   const utils = trpc.useUtils();
+  const { user } = useAuth();
+  const { isAllAgenciesMode } = useAgencyContext();
 
+  // Admin in "Todas as Agências" mode uses affiliate-level endpoints
+  const isTodasMode = user?.role === 'admin' && isAllAgenciesMode;
+
+  // === Agency-specific queries (disabled in Todas mode) ===
   const { data: agencyProfile } = trpc.agency.getProfile.useQuery(
     undefined,
-    { staleTime: 60000 }
+    { staleTime: 60000, enabled: !isTodasMode }
   );
 
-  // Get companies for the agency
-  const { data: directCompanies = [], isLoading: isDirectCompaniesLoading } = trpc.agency.getCompanies.useQuery(
+  const { data: agencyDirectCompanies = [], isLoading: isAgencyCompaniesLoading } = trpc.agency.getCompanies.useQuery(
     undefined,
-    { staleTime: 30000 }
+    { staleTime: 30000, enabled: !isTodasMode }
   );
 
-  // Get meetings (completed companies from outreach)
-  const { data: meetings = [], isLoading: isMeetingsLoading } = trpc.agency.getMeetings.useQuery(
+  const { data: agencyMeetings = [], isLoading: isAgencyMeetingsLoading } = trpc.agency.getMeetings.useQuery(
     undefined,
-    { staleTime: 30000 }
+    { staleTime: 30000, enabled: !isTodasMode }
   );
+
+  const { data: agencyCandidates = [], isLoading: isAgencyCandidatesLoading } = trpc.agency.getCandidates.useQuery(
+    undefined,
+    { staleTime: 30000, enabled: !isTodasMode }
+  );
+
+  // === Affiliate-level queries (enabled only in Todas mode) ===
+  const { data: affiliateCompanies = [], isLoading: isAffiliateCompaniesLoading } = trpc.affiliate.getCompanies.useQuery(
+    { agencyId: null },
+    { staleTime: 30000, enabled: isTodasMode }
+  );
+
+  const { data: affiliateMeetings = [], isLoading: isAffiliateMeetingsLoading } = trpc.outreach.getMeetings.useQuery(
+    { agencyId: null },
+    { staleTime: 30000, enabled: isTodasMode }
+  );
+
+  const { data: affiliateCandidates = [], isLoading: isAffiliateCandidatesLoading } = trpc.affiliate.getCandidates.useQuery(
+    { agencyId: null },
+    { staleTime: 30000, enabled: isTodasMode }
+  );
+
+  // Select the right data source based on mode
+  const directCompanies = isTodasMode ? affiliateCompanies : agencyDirectCompanies;
+  const meetings = isTodasMode ? affiliateMeetings : agencyMeetings;
 
   // Combine direct signups and outreach companies
   const companies = useMemo(() => {
@@ -121,18 +152,19 @@ export function AgencyFunnelProvider({ children }: { children: ReactNode }) {
         contact_phone: c.phone || null,
         status: 'active',
         _isDirectSignup: true,
+        agency_id: c.agency_id || null,
       }));
 
     return [...completedMeetings, ...directAsMeetings];
   }, [directCompanies, meetings]);
 
-  const isCompaniesLoading = isDirectCompaniesLoading || isMeetingsLoading;
+  const isCompaniesLoading = isTodasMode
+    ? (isAffiliateCompaniesLoading || isAffiliateMeetingsLoading)
+    : (isAgencyCompaniesLoading || isAgencyMeetingsLoading);
 
   // Get candidates
-  const { data: candidates = [], isLoading: isCandidatesLoading } = trpc.agency.getCandidates.useQuery(
-    undefined,
-    { staleTime: 30000 }
-  );
+  const candidates = isTodasMode ? affiliateCandidates : agencyCandidates;
+  const isCandidatesLoading = isTodasMode ? isAffiliateCandidatesLoading : isAgencyCandidatesLoading;
 
   const { data: notificationData } = trpc.notification.getUnreadCount.useQuery(
     undefined,
@@ -208,12 +240,18 @@ export function AgencyFunnelProvider({ children }: { children: ReactNode }) {
 
   // Refresh all data
   const refreshData = useCallback(() => {
-    utils.agency.getProfile.invalidate();
-    utils.agency.getCompanies.invalidate();
-    utils.agency.getMeetings.invalidate();
-    utils.agency.getCandidates.invalidate();
+    if (isTodasMode) {
+      utils.affiliate.getCompanies.invalidate();
+      utils.outreach.getMeetings.invalidate();
+      utils.affiliate.getCandidates.invalidate();
+    } else {
+      utils.agency.getProfile.invalidate();
+      utils.agency.getCompanies.invalidate();
+      utils.agency.getMeetings.invalidate();
+      utils.agency.getCandidates.invalidate();
+    }
     utils.notification.getUnreadCount.invalidate();
-  }, [utils]);
+  }, [utils, isTodasMode]);
 
   const isLoading = isCompaniesLoading || isCandidatesLoading;
   const notificationCount = (notificationData as any)?.count || 0;

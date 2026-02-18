@@ -115,18 +115,18 @@ export const companyRouter = router({
 
       // Get agency_id from user profile (set during signup)
       const userProfile = existingProfile || await db.getUserById(ctx.user.id);
-      const agencyId = userProfile?.agency_id || ctx.user.agency_id;
+      const agencyId = userProfile?.agency_id || ctx.user.agency_id || null;
 
-      if (!agencyId) {
-        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Agência não vinculada. Por favor, faça login novamente.' });
+      // Get agency's affiliate_id for proper linking (if agency exists)
+      let agencyData: { id: string; affiliate_id: string | null } | null = null;
+      if (agencyId) {
+        const { data } = await supabaseAdmin
+          .from('agencies')
+          .select('id, affiliate_id')
+          .eq('id', agencyId)
+          .single();
+        agencyData = data;
       }
-
-      // Get agency's affiliate_id for proper linking
-      const { data: agencyData } = await supabaseAdmin
-        .from('agencies')
-        .select('id, affiliate_id')
-        .eq('id', agencyId)
-        .single();
 
       // Check if company already exists
       let company = await db.getCompanyByUserId(ctx.user.id);

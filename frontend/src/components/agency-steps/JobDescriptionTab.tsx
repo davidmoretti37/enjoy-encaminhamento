@@ -1,4 +1,5 @@
 import { useAgencyFunnel } from "@/contexts/AgencyFunnelContext";
+import { useAgencyContext } from "@/contexts/AgencyContext";
 import ClassicLoader from "@/components/ui/ClassicLoader";
 import { Building2, Briefcase, TrendingUp } from "lucide-react";
 import { trpc } from "@/lib/trpc";
@@ -6,6 +7,7 @@ import CompanyJobFlow from "./CompanyJobFlow";
 
 export default function JobDescriptionTab() {
   const { companies, selectedCompanyId, setSelectedCompanyId, isCompaniesLoading } = useAgencyFunnel();
+  const { isAllAgenciesMode, availableAgencies } = useAgencyContext();
 
   console.log('[JobDescriptionTab] selectedCompanyId:', selectedCompanyId);
 
@@ -49,15 +51,45 @@ export default function JobDescriptionTab() {
       </div>
 
       {/* Company Cards Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {companies.map((company: any) => (
-          <CompanyCard
-            key={company.id}
-            company={company}
-            onClick={() => setSelectedCompanyId(company.id)}
-          />
-        ))}
-      </div>
+      {isAllAgenciesMode ? (
+        <div className="space-y-6">
+          {availableAgencies.map(agency => {
+            const agencyCompanies = companies.filter((c: any) => c.agency_id === agency.id);
+            return (
+              <div key={agency.id}>
+                <div className="flex items-center gap-2 py-3 px-3 border-b border-gray-200 bg-gray-50/80 rounded-t-lg">
+                  <Building2 className="h-4 w-4 text-gray-500" />
+                  <span className="font-semibold text-gray-700">{agency.name}</span>
+                  <span className="text-xs text-gray-400">({agencyCompanies.length})</span>
+                </div>
+                {agencyCompanies.length > 0 ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mt-3">
+                    {agencyCompanies.map((company: any) => (
+                      <CompanyCard
+                        key={company.id}
+                        company={company}
+                        onClick={() => setSelectedCompanyId(company.id)}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-400 py-4 px-3">Nenhuma empresa nesta agência</p>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          {companies.map((company: any) => (
+            <CompanyCard
+              key={company.id}
+              company={company}
+              onClick={() => setSelectedCompanyId(company.id)}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }

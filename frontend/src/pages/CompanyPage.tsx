@@ -42,12 +42,13 @@ interface Meeting {
   contract_signed_at: string | null;
   contract_signer_name: string | null;
   agency_name?: string | null;
+  agency_id?: string | null;
   _isDirectSignup?: boolean; // Flag for companies that registered directly
 }
 
 export default function CompanyPage() {
   const { user, loading: authLoading } = useAuth();
-  const { currentAgency, isAllAgenciesMode } = useAgencyContext();
+  const { currentAgency, availableAgencies, isAllAgenciesMode } = useAgencyContext();
   const [, setLocation] = useLocation();
   const [selectedMeeting, setSelectedMeeting] = useState<Meeting | null>(null);
   const [documentsMeeting, setDocumentsMeeting] = useState<Meeting | null>(null);
@@ -224,6 +225,7 @@ export default function CompanyPage() {
       contract_signed_at: c.created_at, // Mark as completed
       contract_signer_name: c.contact_name || null,
       agency_name: null,
+      agency_id: c.agency_id || null,
       _isDirectSignup: true, // Flag to identify direct signups
     }));
 
@@ -346,58 +348,124 @@ export default function CompanyPage() {
 
           {/* Empresas View - Completed Companies */}
           <TabsContent value="empresas">
-            {completedCompanies.length > 0 ? (
-              <div className="space-y-2">
-                {completedCompanies.map((meeting: Meeting) => (
-                  <div
-                    key={meeting.id}
-                    className="p-4 bg-white rounded-lg border border-gray-300 shadow-sm hover:shadow-md transition-all"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="h-9 w-9 rounded-lg bg-gray-100 flex items-center justify-center">
-                          <Building className="h-4 w-4 text-gray-600" />
-                        </div>
-                        <div>
-                          <span className="font-medium text-gray-900">
-                            {meeting.company_name || "Empresa sem nome"}
-                          </span>
-                          {meeting.contact_name && (
-                            <p className="text-sm text-gray-500">{meeting.contact_name}</p>
-                          )}
-                          {isAllAgenciesMode && meeting.agency_name && (
-                            <p className="text-xs text-gray-400">{meeting.agency_name}</p>
-                          )}
-                        </div>
+            {isAllAgenciesMode ? (
+              // Grouped by agency — show all agencies from context
+              <div className="space-y-4">
+                {availableAgencies.map(agency => {
+                  const agencyCompanies = completedCompanies.filter((m: Meeting) => m.agency_id === agency.id);
+                  return (
+                    <div key={agency.id}>
+                      <div className="flex items-center gap-2 py-3 px-3 border-b border-gray-200 bg-gray-50/80 rounded-t-lg">
+                        <Building className="h-4 w-4 text-gray-500" />
+                        <span className="font-semibold text-gray-700">{agency.name}</span>
+                        <span className="text-xs text-gray-400">({agencyCompanies.length})</span>
                       </div>
-                      <div className="flex items-center gap-2">
-                        {/* Show invite button for imported companies */}
-                        {meeting._isDirectSignup && (
-                          <SendCompanyInviteButton companyId={meeting.id} />
-                        )}
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="text-gray-600 border-gray-300 hover:bg-gray-50"
-                          onClick={() => setDocumentsMeeting(meeting)}
-                        >
-                          <FileText className="h-4 w-4 mr-1.5" />
-                          Documentos
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="text-gray-600 border-gray-300 hover:bg-gray-50"
-                          onClick={() => setLocation(`/agency/job-descriptions/${meeting.id}`)}
-                        >
-                          <Briefcase className="h-4 w-4 mr-1.5" />
-                          Descrição da Vaga
-                        </Button>
+                      {agencyCompanies.length > 0 ? (
+                        <div className="space-y-2 mt-2">
+                          {agencyCompanies.map((meeting: Meeting) => (
+                            <div
+                              key={meeting.id}
+                              className="p-4 bg-white rounded-lg border border-gray-300 shadow-sm hover:shadow-md transition-all"
+                            >
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                  <div className="h-9 w-9 rounded-lg bg-gray-100 flex items-center justify-center">
+                                    <Building className="h-4 w-4 text-gray-600" />
+                                  </div>
+                                  <div>
+                                    <span className="font-medium text-gray-900">
+                                      {meeting.company_name || "Empresa sem nome"}
+                                    </span>
+                                    {meeting.contact_name && (
+                                      <p className="text-sm text-gray-500">{meeting.contact_name}</p>
+                                    )}
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  {meeting._isDirectSignup && (
+                                    <SendCompanyInviteButton companyId={meeting.id} />
+                                  )}
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="text-gray-600 border-gray-300 hover:bg-gray-50"
+                                    onClick={() => setDocumentsMeeting(meeting)}
+                                  >
+                                    <FileText className="h-4 w-4 mr-1.5" />
+                                    Documentos
+                                  </Button>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="text-gray-600 border-gray-300 hover:bg-gray-50"
+                                    onClick={() => setLocation(`/agency/job-descriptions/${meeting.id}`)}
+                                  >
+                                    <Briefcase className="h-4 w-4 mr-1.5" />
+                                    Descrição da Vaga
+                                  </Button>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="py-4 px-3 text-sm text-gray-400 bg-white rounded-b-lg border border-t-0 border-gray-200">
+                          Nenhuma empresa nesta agência
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : completedCompanies.length > 0 ? (
+                // Single agency flat list
+                <div className="space-y-2">
+                  {completedCompanies.map((meeting: Meeting) => (
+                    <div
+                      key={meeting.id}
+                      className="p-4 bg-white rounded-lg border border-gray-300 shadow-sm hover:shadow-md transition-all"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="h-9 w-9 rounded-lg bg-gray-100 flex items-center justify-center">
+                            <Building className="h-4 w-4 text-gray-600" />
+                          </div>
+                          <div>
+                            <span className="font-medium text-gray-900">
+                              {meeting.company_name || "Empresa sem nome"}
+                            </span>
+                            {meeting.contact_name && (
+                              <p className="text-sm text-gray-500">{meeting.contact_name}</p>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {meeting._isDirectSignup && (
+                            <SendCompanyInviteButton companyId={meeting.id} />
+                          )}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="text-gray-600 border-gray-300 hover:bg-gray-50"
+                            onClick={() => setDocumentsMeeting(meeting)}
+                          >
+                            <FileText className="h-4 w-4 mr-1.5" />
+                            Documentos
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="text-gray-600 border-gray-300 hover:bg-gray-50"
+                            onClick={() => setLocation(`/agency/job-descriptions/${meeting.id}`)}
+                          >
+                            <Briefcase className="h-4 w-4 mr-1.5" />
+                            Descrição da Vaga
+                          </Button>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
             ) : (
               <div className="text-center py-16 bg-gray-50 rounded-lg border border-dashed border-gray-200">
                 <Building className="h-10 w-10 text-gray-300 mx-auto mb-3" />
@@ -415,32 +483,51 @@ export default function CompanyPage() {
                   Aguardando envio
                   <span className="text-xs text-gray-400">{waitingOnUs.length}</span>
                 </h3>
-                {waitingOnUs.length > 0 ? (
-                  <div className="space-y-2">
-                    {waitingOnUs.map((meeting: Meeting) => (
-                      <div
-                        key={meeting.id}
-                        className="p-4 bg-white rounded-lg border border-gray-200 cursor-pointer hover:border-gray-300 transition-colors"
-                        onClick={() => handleCardClick(meeting)}
-                      >
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-3">
-                            <div className="h-9 w-9 rounded-lg bg-blue-50 flex items-center justify-center">
-                              <Send className="h-4 w-4 text-blue-600" />
-                            </div>
-                            <div>
-                              <span className="font-medium text-gray-900">
-                                {meeting.company_name || "Empresa sem nome"}
-                              </span>
-                              {meeting.contact_name && (
-                                <p className="text-sm text-gray-500">{meeting.contact_name}</p>
-                              )}
-                            </div>
+                {isAllAgenciesMode ? (
+                  <div className="space-y-3">
+                    {availableAgencies.map(agency => {
+                      const items = waitingOnUs.filter((m: Meeting) => m.agency_id === agency.id);
+                      if (items.length === 0) return null;
+                      return (
+                        <div key={agency.id}>
+                          <div className="flex items-center gap-2 py-2 px-2 bg-gray-50/80 rounded-lg mb-1">
+                            <Building className="h-3.5 w-3.5 text-gray-500" />
+                            <span className="text-xs font-semibold text-gray-600">{agency.name}</span>
+                            <span className="text-[10px] text-gray-400">({items.length})</span>
+                          </div>
+                          <div className="space-y-2">
+                            {items.map((meeting: Meeting) => (
+                              <div key={meeting.id} className="p-4 bg-white rounded-lg border border-gray-200 cursor-pointer hover:border-gray-300 transition-colors" onClick={() => handleCardClick(meeting)}>
+                                <div className="flex items-center gap-3">
+                                  <div className="h-9 w-9 rounded-lg bg-blue-50 flex items-center justify-center"><Send className="h-4 w-4 text-blue-600" /></div>
+                                  <div>
+                                    <span className="font-medium text-gray-900">{meeting.company_name || "Empresa sem nome"}</span>
+                                    {meeting.contact_name && <p className="text-sm text-gray-500">{meeting.contact_name}</p>}
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
                           </div>
                         </div>
-                        {isAllAgenciesMode && meeting.agency_name && (
-                          <p className="text-xs text-gray-400 mt-2 ml-12">{meeting.agency_name}</p>
-                        )}
+                      );
+                    })}
+                    {waitingOnUs.length === 0 && (
+                      <div className="text-center py-8 bg-gray-50 rounded-lg border border-dashed border-gray-200">
+                        <p className="text-sm text-gray-400">Nenhuma pendente</p>
+                      </div>
+                    )}
+                  </div>
+                ) : waitingOnUs.length > 0 ? (
+                  <div className="space-y-2">
+                    {waitingOnUs.map((meeting: Meeting) => (
+                      <div key={meeting.id} className="p-4 bg-white rounded-lg border border-gray-200 cursor-pointer hover:border-gray-300 transition-colors" onClick={() => handleCardClick(meeting)}>
+                        <div className="flex items-center gap-3">
+                          <div className="h-9 w-9 rounded-lg bg-blue-50 flex items-center justify-center"><Send className="h-4 w-4 text-blue-600" /></div>
+                          <div>
+                            <span className="font-medium text-gray-900">{meeting.company_name || "Empresa sem nome"}</span>
+                            {meeting.contact_name && <p className="text-sm text-gray-500">{meeting.contact_name}</p>}
+                          </div>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -457,32 +544,51 @@ export default function CompanyPage() {
                   Aguardando resposta
                   <span className="text-xs text-gray-400">{waitingOnThem.length}</span>
                 </h3>
-                {waitingOnThem.length > 0 ? (
-                  <div className="space-y-2">
-                    {waitingOnThem.map((meeting: Meeting) => (
-                      <div
-                        key={meeting.id}
-                        className="p-4 bg-white rounded-lg border border-gray-200 cursor-pointer hover:border-gray-300 transition-colors"
-                        onClick={() => handleCardClick(meeting)}
-                      >
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-3">
-                            <div className="h-9 w-9 rounded-lg bg-amber-50 flex items-center justify-center">
-                              <Clock className="h-4 w-4 text-amber-600" />
-                            </div>
-                            <div>
-                              <span className="font-medium text-gray-900">
-                                {meeting.company_name || "Empresa sem nome"}
-                              </span>
-                              {meeting.contact_name && (
-                                <p className="text-sm text-gray-500">{meeting.contact_name}</p>
-                              )}
-                            </div>
+                {isAllAgenciesMode ? (
+                  <div className="space-y-3">
+                    {availableAgencies.map(agency => {
+                      const items = waitingOnThem.filter((m: Meeting) => m.agency_id === agency.id);
+                      if (items.length === 0) return null;
+                      return (
+                        <div key={agency.id}>
+                          <div className="flex items-center gap-2 py-2 px-2 bg-gray-50/80 rounded-lg mb-1">
+                            <Building className="h-3.5 w-3.5 text-gray-500" />
+                            <span className="text-xs font-semibold text-gray-600">{agency.name}</span>
+                            <span className="text-[10px] text-gray-400">({items.length})</span>
+                          </div>
+                          <div className="space-y-2">
+                            {items.map((meeting: Meeting) => (
+                              <div key={meeting.id} className="p-4 bg-white rounded-lg border border-gray-200 cursor-pointer hover:border-gray-300 transition-colors" onClick={() => handleCardClick(meeting)}>
+                                <div className="flex items-center gap-3">
+                                  <div className="h-9 w-9 rounded-lg bg-amber-50 flex items-center justify-center"><Clock className="h-4 w-4 text-amber-600" /></div>
+                                  <div>
+                                    <span className="font-medium text-gray-900">{meeting.company_name || "Empresa sem nome"}</span>
+                                    {meeting.contact_name && <p className="text-sm text-gray-500">{meeting.contact_name}</p>}
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
                           </div>
                         </div>
-                        {isAllAgenciesMode && meeting.agency_name && (
-                          <p className="text-xs text-gray-400 mt-2 ml-12">{meeting.agency_name}</p>
-                        )}
+                      );
+                    })}
+                    {waitingOnThem.length === 0 && (
+                      <div className="text-center py-8 bg-gray-50 rounded-lg border border-dashed border-gray-200">
+                        <p className="text-sm text-gray-400">Nenhuma pendente</p>
+                      </div>
+                    )}
+                  </div>
+                ) : waitingOnThem.length > 0 ? (
+                  <div className="space-y-2">
+                    {waitingOnThem.map((meeting: Meeting) => (
+                      <div key={meeting.id} className="p-4 bg-white rounded-lg border border-gray-200 cursor-pointer hover:border-gray-300 transition-colors" onClick={() => handleCardClick(meeting)}>
+                        <div className="flex items-center gap-3">
+                          <div className="h-9 w-9 rounded-lg bg-amber-50 flex items-center justify-center"><Clock className="h-4 w-4 text-amber-600" /></div>
+                          <div>
+                            <span className="font-medium text-gray-900">{meeting.company_name || "Empresa sem nome"}</span>
+                            {meeting.contact_name && <p className="text-sm text-gray-500">{meeting.contact_name}</p>}
+                          </div>
+                        </div>
                       </div>
                     ))}
                   </div>

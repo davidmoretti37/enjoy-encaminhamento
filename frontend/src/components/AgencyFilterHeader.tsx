@@ -25,6 +25,7 @@ export default function AgencyFilterHeader() {
   const handleSelect = (value: string | null) => {
     setCurrentAgency(value);
     setOpen(false);
+    window.location.reload();
   };
 
   return (

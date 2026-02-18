@@ -1,7 +1,7 @@
 // @ts-nocheck
 // Reusable document signing flow component
 // Shows PDF pages rendered inline with signature overlay on last page
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { Document, Page, pdfjs } from "react-pdf";
 import "react-pdf/dist/Page/AnnotationLayer.css";
 import "react-pdf/dist/Page/TextLayer.css";
@@ -145,6 +145,13 @@ export default function DocumentSigningFlow({
     contractId,
     candidateId,
   });
+
+  // Call onAllSigned when initial data loads with everything already signed
+  useEffect(() => {
+    if (data?.allSigned && onAllSigned) {
+      onAllSigned();
+    }
+  }, [data?.allSigned, onAllSigned]);
 
   const signMutation = trpc.contract.signDocument.useMutation({
     onSuccess: (result) => {

@@ -126,7 +126,7 @@ export const agencyRouter = router({
       password: z.string().min(6),
       agencyData: z.object({
         agency_name: z.string(),
-        cnpj: z.string(),
+        cnpj: z.string().optional(),
         email: z.string().email(),
         phone: z.string().optional(),
         city: z.string().optional(),

@@ -156,19 +156,24 @@ export default function AgencyRegistration() {
     }
 
     // Submit registration
-    await acceptInvitationMutation.mutateAsync({
-      token: token!,
-      password,
-      agencyData: {
-        agency_name: agencyName,
-        cnpj,
-        email,
-        phone: phone || undefined,
-        city: city || undefined,
-        state: state || undefined,
-      },
-      contractUrl,
-    });
+    try {
+      await acceptInvitationMutation.mutateAsync({
+        token: token!,
+        password,
+        agencyData: {
+          agency_name: agencyName,
+          cnpj: cnpj || undefined,
+          email,
+          phone: phone || undefined,
+          city: city || undefined,
+          state: state || undefined,
+        },
+        contractUrl,
+      });
+    } catch (err) {
+      // Error handled by onError callback
+      console.error('[AgencyRegistration] Submit error:', err);
+    }
   };
 
   // Validation for each step

@@ -264,7 +264,7 @@ function ContactInfoModal({
 
 export default function CandidatePage() {
   const { user, loading: authLoading } = useAuth();
-  const { currentAgency, isAllAgenciesMode } = useAgencyContext();
+  const { currentAgency, availableAgencies, isAllAgenciesMode } = useAgencyContext();
   const [searchTerm, setSearchTerm] = useState("");
   const [applicationSearchTerm, setApplicationSearchTerm] = useState("");
   const [selectedCandidate, setSelectedCandidate] = useState<string | null>(null);
@@ -654,73 +654,153 @@ export default function CandidatePage() {
             </div>
 
             {/* Candidates Table */}
-            <Card>
-              <CardContent className="p-0">
-                {filteredCandidates && filteredCandidates.length > 0 ? (
-                  <Table>
-                    <TableHeader>
-                      <TableRow className="bg-gray-50/50">
-                        <TableHead className="font-medium">Nome</TableHead>
-                        <TableHead className="font-medium">Email</TableHead>
-                        {isAllAgenciesMode && <TableHead className="font-medium">Escola</TableHead>}
-                        <TableHead className="font-medium">Escolaridade</TableHead>
-                        <TableHead className="font-medium">Cidade</TableHead>
-                        <TableHead className="font-medium">Status</TableHead>
-                        <TableHead className="font-medium">Cadastro</TableHead>
-                        {isAdmin && <TableHead className="text-right font-medium">Ações</TableHead>}
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {filteredCandidates.map((candidate: any) => (
-                        <TableRow key={candidate.id} className="hover:bg-gray-50/50">
-                          <TableCell className="font-medium">{candidate.full_name || 'N/A'}</TableCell>
-                          <TableCell className="text-gray-500 text-sm">{(isAdmin ? candidate.users?.email : candidate.email) || 'N/A'}</TableCell>
-                          {isAllAgenciesMode && (
-                            <TableCell>
-                              <div className="flex items-center gap-1.5">
-                                <Building className="h-3.5 w-3.5 text-gray-400" />
-                                <span className="text-sm">{candidate.agency?.name || 'N/A'}</span>
-                              </div>
-                            </TableCell>
-                          )}
-                          <TableCell className="text-sm">{candidate.education_level ? getEducationLevelLabel(candidate.education_level) : 'N/A'}</TableCell>
-                          <TableCell className="text-sm">{candidate.city || 'N/A'}</TableCell>
-                          <TableCell>{getCandidateStatusBadge(candidate.status)}</TableCell>
-                          <TableCell className="text-sm text-gray-500">{new Date(candidate.created_at).toLocaleDateString('pt-BR')}</TableCell>
-                          {isAdmin && (
-                            <TableCell className="text-right">
-                              <div className="flex justify-end gap-1">
-                                {candidate.status === 'inactive' && (
-                                  <Button size="sm" variant="ghost" className="h-8 px-2 text-green-600 hover:text-green-700 hover:bg-green-50" onClick={() => handleActivate(candidate.id)} disabled={updateCandidateStatusMutation.isPending} title="Ativar">
-                                    <CheckCircle className="h-4 w-4" />
-                                  </Button>
-                                )}
-                                {candidate.status === 'active' && (
-                                  <>
-                                    <Button size="sm" variant="ghost" className="h-8 px-2 text-blue-600 hover:text-blue-700 hover:bg-blue-50" onClick={() => handleMarkEmployed(candidate.id)} disabled={updateCandidateStatusMutation.isPending} title="Marcar como empregado">
-                                      <UserCheck className="h-4 w-4" />
-                                    </Button>
-                                    <Button size="sm" variant="ghost" className="h-8 px-2 text-gray-400 hover:text-red-600 hover:bg-red-50" onClick={() => handleDeactivate(candidate.id)} disabled={updateCandidateStatusMutation.isPending} title="Desativar">
-                                      <UserX className="h-4 w-4" />
-                                    </Button>
-                                  </>
-                                )}
-                                {candidate.status === 'employed' && (
-                                  <Button size="sm" variant="ghost" className="h-8 px-2 text-green-600 hover:text-green-700 hover:bg-green-50" onClick={() => handleActivate(candidate.id)} disabled={updateCandidateStatusMutation.isPending} title="Reativar">
-                                    <CheckCircle className="h-4 w-4" />
-                                  </Button>
-                                )}
-                                <Button size="sm" variant="ghost" className="h-8 px-2 text-gray-400 hover:text-gray-600" onClick={() => setSelectedCandidate(candidate.id)} title="Ver detalhes">
-                                  <Eye className="h-4 w-4" />
-                                </Button>
-                              </div>
-                            </TableCell>
-                          )}
+            {filteredCandidates && filteredCandidates.length > 0 ? (
+              isAllAgenciesMode ? (
+                // Grouped by agency view — use availableAgencies to show all sections
+                <div className="space-y-4">
+                  {availableAgencies.map(agency => {
+                    const agencyCandidates = filteredCandidates.filter((c: any) => c.agency_id === agency.id);
+                    return (
+                      <div key={agency.id}>
+                        <div className="flex items-center gap-2 py-3 px-3 border-b border-gray-200 bg-gray-50/80 rounded-t-lg">
+                          <Building className="h-4 w-4 text-gray-500" />
+                          <span className="font-semibold text-gray-700">{agency.name}</span>
+                          <span className="text-xs text-gray-400">({agencyCandidates.length})</span>
+                        </div>
+                        {agencyCandidates.length > 0 ? (
+                          <Card className="rounded-t-none">
+                            <CardContent className="p-0">
+                              <Table>
+                                <TableHeader>
+                                  <TableRow className="bg-gray-50/50">
+                                    <TableHead className="font-medium">Nome</TableHead>
+                                    <TableHead className="font-medium">Email</TableHead>
+                                    <TableHead className="font-medium">Escolaridade</TableHead>
+                                    <TableHead className="font-medium">Cidade</TableHead>
+                                    <TableHead className="font-medium">Status</TableHead>
+                                    <TableHead className="font-medium">Cadastro</TableHead>
+                                    {isAdmin && <TableHead className="text-right font-medium">Ações</TableHead>}
+                                  </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                  {agencyCandidates.map((candidate: any) => (
+                                    <TableRow key={candidate.id} className="hover:bg-gray-50/50">
+                                      <TableCell className="font-medium">{candidate.full_name || 'N/A'}</TableCell>
+                                      <TableCell className="text-gray-500 text-sm">{(isAdmin ? candidate.users?.email : candidate.email) || 'N/A'}</TableCell>
+                                      <TableCell className="text-sm">{candidate.education_level ? getEducationLevelLabel(candidate.education_level) : 'N/A'}</TableCell>
+                                      <TableCell className="text-sm">{candidate.city || 'N/A'}</TableCell>
+                                      <TableCell>{getCandidateStatusBadge(candidate.status)}</TableCell>
+                                      <TableCell className="text-sm text-gray-500">{new Date(candidate.created_at).toLocaleDateString('pt-BR')}</TableCell>
+                                      {isAdmin && (
+                                        <TableCell className="text-right">
+                                          <div className="flex justify-end gap-1">
+                                            {candidate.status === 'inactive' && (
+                                              <Button size="sm" variant="ghost" className="h-8 px-2 text-green-600 hover:text-green-700 hover:bg-green-50" onClick={() => handleActivate(candidate.id)} disabled={updateCandidateStatusMutation.isPending} title="Ativar">
+                                                <CheckCircle className="h-4 w-4" />
+                                              </Button>
+                                            )}
+                                            {candidate.status === 'active' && (
+                                              <>
+                                                <Button size="sm" variant="ghost" className="h-8 px-2 text-blue-600 hover:text-blue-700 hover:bg-blue-50" onClick={() => handleMarkEmployed(candidate.id)} disabled={updateCandidateStatusMutation.isPending} title="Marcar como empregado">
+                                                  <UserCheck className="h-4 w-4" />
+                                                </Button>
+                                                <Button size="sm" variant="ghost" className="h-8 px-2 text-gray-400 hover:text-red-600 hover:bg-red-50" onClick={() => handleDeactivate(candidate.id)} disabled={updateCandidateStatusMutation.isPending} title="Desativar">
+                                                  <UserX className="h-4 w-4" />
+                                                </Button>
+                                              </>
+                                            )}
+                                            {candidate.status === 'employed' && (
+                                              <Button size="sm" variant="ghost" className="h-8 px-2 text-green-600 hover:text-green-700 hover:bg-green-50" onClick={() => handleActivate(candidate.id)} disabled={updateCandidateStatusMutation.isPending} title="Reativar">
+                                                <CheckCircle className="h-4 w-4" />
+                                              </Button>
+                                            )}
+                                            <Button size="sm" variant="ghost" className="h-8 px-2 text-gray-400 hover:text-gray-600" onClick={() => setSelectedCandidate(candidate.id)} title="Ver detalhes">
+                                              <Eye className="h-4 w-4" />
+                                            </Button>
+                                          </div>
+                                        </TableCell>
+                                      )}
+                                    </TableRow>
+                                  ))}
+                                </TableBody>
+                              </Table>
+                            </CardContent>
+                          </Card>
+                        ) : (
+                          <Card className="rounded-t-none">
+                            <CardContent className="py-6 text-center text-sm text-gray-400">
+                              Nenhum candidato nesta agência
+                            </CardContent>
+                          </Card>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                // Single agency flat table
+                <Card>
+                  <CardContent className="p-0">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="bg-gray-50/50">
+                          <TableHead className="font-medium">Nome</TableHead>
+                          <TableHead className="font-medium">Email</TableHead>
+                          <TableHead className="font-medium">Escolaridade</TableHead>
+                          <TableHead className="font-medium">Cidade</TableHead>
+                          <TableHead className="font-medium">Status</TableHead>
+                          <TableHead className="font-medium">Cadastro</TableHead>
+                          {isAdmin && <TableHead className="text-right font-medium">Ações</TableHead>}
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                ) : (
+                      </TableHeader>
+                      <TableBody>
+                        {filteredCandidates.map((candidate: any) => (
+                          <TableRow key={candidate.id} className="hover:bg-gray-50/50">
+                            <TableCell className="font-medium">{candidate.full_name || 'N/A'}</TableCell>
+                            <TableCell className="text-gray-500 text-sm">{(isAdmin ? candidate.users?.email : candidate.email) || 'N/A'}</TableCell>
+                            <TableCell className="text-sm">{candidate.education_level ? getEducationLevelLabel(candidate.education_level) : 'N/A'}</TableCell>
+                            <TableCell className="text-sm">{candidate.city || 'N/A'}</TableCell>
+                            <TableCell>{getCandidateStatusBadge(candidate.status)}</TableCell>
+                            <TableCell className="text-sm text-gray-500">{new Date(candidate.created_at).toLocaleDateString('pt-BR')}</TableCell>
+                            {isAdmin && (
+                              <TableCell className="text-right">
+                                <div className="flex justify-end gap-1">
+                                  {candidate.status === 'inactive' && (
+                                    <Button size="sm" variant="ghost" className="h-8 px-2 text-green-600 hover:text-green-700 hover:bg-green-50" onClick={() => handleActivate(candidate.id)} disabled={updateCandidateStatusMutation.isPending} title="Ativar">
+                                      <CheckCircle className="h-4 w-4" />
+                                    </Button>
+                                  )}
+                                  {candidate.status === 'active' && (
+                                    <>
+                                      <Button size="sm" variant="ghost" className="h-8 px-2 text-blue-600 hover:text-blue-700 hover:bg-blue-50" onClick={() => handleMarkEmployed(candidate.id)} disabled={updateCandidateStatusMutation.isPending} title="Marcar como empregado">
+                                        <UserCheck className="h-4 w-4" />
+                                      </Button>
+                                      <Button size="sm" variant="ghost" className="h-8 px-2 text-gray-400 hover:text-red-600 hover:bg-red-50" onClick={() => handleDeactivate(candidate.id)} disabled={updateCandidateStatusMutation.isPending} title="Desativar">
+                                        <UserX className="h-4 w-4" />
+                                      </Button>
+                                    </>
+                                  )}
+                                  {candidate.status === 'employed' && (
+                                    <Button size="sm" variant="ghost" className="h-8 px-2 text-green-600 hover:text-green-700 hover:bg-green-50" onClick={() => handleActivate(candidate.id)} disabled={updateCandidateStatusMutation.isPending} title="Reativar">
+                                      <CheckCircle className="h-4 w-4" />
+                                    </Button>
+                                  )}
+                                  <Button size="sm" variant="ghost" className="h-8 px-2 text-gray-400 hover:text-gray-600" onClick={() => setSelectedCandidate(candidate.id)} title="Ver detalhes">
+                                    <Eye className="h-4 w-4" />
+                                  </Button>
+                                </div>
+                              </TableCell>
+                            )}
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </CardContent>
+                </Card>
+              )
+            ) : (
+              <Card>
+                <CardContent className="p-0">
                   <div className="flex flex-col items-center justify-center py-16">
                     <Users className="h-10 w-10 text-gray-300 mb-3" />
                     <h3 className="text-sm font-medium text-gray-500 mb-1">
@@ -730,9 +810,9 @@ export default function CandidatePage() {
                       {searchTerm ? 'Tente ajustar os termos de busca' : statusFilter ? 'Nenhum candidato com esse status' : 'Candidatos aparecerão aqui quando se cadastrarem'}
                     </p>
                   </div>
-                )}
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
+            )}
 
             {filteredCandidates && filteredCandidates.length > 0 && (
               <p className="text-xs text-gray-400 text-center">

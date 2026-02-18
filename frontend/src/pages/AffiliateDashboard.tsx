@@ -19,15 +19,16 @@ import {
   DollarSign,
 } from "lucide-react";
 import DashboardLayout from "@/components/DashboardLayout";
+import { useAgencyContext } from "@/contexts/AgencyContext";
 import { useLocation } from "wouter";
 
 export default function AffiliateDashboard() {
   const { user, loading: authLoading } = useAuth();
   const [, setLocation] = useLocation();
+  const { currentAgency } = useAgencyContext();
 
   const { data: affiliate, isLoading: affiliateLoading } = trpc.affiliate.getByUserId.useQuery();
-  // Pass null to get stats for ALL agencies (not filtered by selected agency context)
-  const { data: stats, isLoading: statsLoading } = trpc.affiliate.getDashboardStats.useQuery({ agencyId: null });
+  const { data: stats, isLoading: statsLoading } = trpc.affiliate.getDashboardStats.useQuery({ agencyId: currentAgency?.id ?? null });
   const { data: agencies, isLoading: agenciesLoading } = trpc.affiliate.getAgencies.useQuery();
 
   const isLoading = authLoading || affiliateLoading || statsLoading;

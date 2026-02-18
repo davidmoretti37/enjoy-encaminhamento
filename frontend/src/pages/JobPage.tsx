@@ -43,7 +43,7 @@ import { useState } from "react";
 
 export default function JobPage() {
   const { user, loading: authLoading } = useAuth();
-  const { currentAgency, isAllAgenciesMode } = useAgencyContext();
+  const { currentAgency, availableAgencies, isAllAgenciesMode } = useAgencyContext();
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedJob, setSelectedJob] = useState<string | null>(null);
   const [matchingJobId, setMatchingJobId] = useState<string | null>(null);
@@ -327,114 +327,219 @@ export default function JobPage() {
           </CardHeader>
           <CardContent>
             {filteredJobs && filteredJobs.length > 0 ? (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Título</TableHead>
-                    <TableHead>Empresa</TableHead>
-                    {isAllAgenciesMode && <TableHead>Agência</TableHead>}
-                    <TableHead>Tipo</TableHead>
-                    <TableHead>{isAdmin ? 'Localização' : 'Cidade'}</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Publicado</TableHead>
-                    {isAdmin && <TableHead className="text-right">Ações</TableHead>}
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredJobs.map((job: any) => {
-                    const companyName = isAdmin ? job.companies?.company_name : job.company?.company_name;
+              isAllAgenciesMode ? (
+                // Grouped by agency — use availableAgencies to show all sections
+                <div className="space-y-6">
+                  {availableAgencies.map(agency => {
+                    const agencyJobs = filteredJobs.filter((j: any) => j.company?.agency_id === agency.id);
                     return (
-                      <TableRow key={job.id}>
-                        <TableCell className="font-medium">{job.title}</TableCell>
-                        <TableCell>{companyName || 'N/A'}</TableCell>
-                        {isAllAgenciesMode && (
-                          <TableCell>
-                            <div className="flex items-center gap-2">
-                              <Building className="h-4 w-4 text-slate-400" />
-                              <span className="text-sm">{job.agency?.agency_name || 'N/A'}</span>
-                            </div>
-                          </TableCell>
+                      <div key={agency.id}>
+                        <div className="flex items-center gap-2 py-3 px-3 border-b border-gray-200 bg-gray-50/80 rounded-t-lg">
+                          <Building className="h-4 w-4 text-gray-500" />
+                          <span className="font-semibold text-gray-700">{agency.name}</span>
+                          <span className="text-xs text-gray-400">({agencyJobs.length})</span>
+                        </div>
+                        {agencyJobs.length > 0 ? (
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead>Título</TableHead>
+                                <TableHead>Empresa</TableHead>
+                                <TableHead>Tipo</TableHead>
+                                <TableHead>{isAdmin ? 'Localização' : 'Cidade'}</TableHead>
+                                <TableHead>Status</TableHead>
+                                <TableHead>Publicado</TableHead>
+                                {isAdmin && <TableHead className="text-right">Ações</TableHead>}
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {agencyJobs.map((job: any) => {
+                                const companyName = isAdmin ? job.companies?.company_name : job.company?.company_name;
+                                return (
+                                  <TableRow key={job.id}>
+                                    <TableCell className="font-medium">{job.title}</TableCell>
+                                    <TableCell>{companyName || 'N/A'}</TableCell>
+                                    <TableCell>{getJobTypeBadge(job.job_type)}</TableCell>
+                                    <TableCell>
+                                      {isAdmin && job.remote ? (
+                                        <Badge variant="outline" className="bg-blue-50">Remoto</Badge>
+                                      ) : (
+                                        job.city || 'N/A'
+                                      )}
+                                    </TableCell>
+                                    <TableCell>{getStatusBadge(job.status)}</TableCell>
+                                    <TableCell>
+                                      {(job.published_at || job.created_at) ? new Date(job.published_at || job.created_at).toLocaleDateString('pt-BR') : '-'}
+                                    </TableCell>
+                                    {isAdmin && (
+                                      <TableCell className="text-right">
+                                        <div className="flex justify-end gap-2">
+                                          {job.status === 'open' && (
+                                            <Button
+                                              size="sm"
+                                              variant="secondary"
+                                              onClick={() => handleFindCandidates(job)}
+                                              disabled={matchingJobId === job.id || findCandidatesMutation.isPending}
+                                              className="bg-purple-100 hover:bg-purple-200 text-purple-700"
+                                            >
+                                              {matchingJobId === job.id ? (
+                                                <>
+                                                  <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                                                  Buscando...
+                                                </>
+                                              ) : (
+                                                <>
+                                                  <Sparkles className="h-4 w-4 mr-1" />
+                                                  IA Buscar
+                                                </>
+                                              )}
+                                            </Button>
+                                          )}
+                                          <Button size="sm" variant="outline" onClick={() => handleViewMatches(job)}>
+                                            <Users className="h-4 w-4 mr-1" />
+                                            Matches
+                                          </Button>
+                                          {job.status === 'draft' && (
+                                            <Button size="sm" variant="default" onClick={() => handlePublish(job.id)} disabled={updateStatusMutation.isPending}>
+                                              <CheckCircle className="h-4 w-4 mr-1" />
+                                              Publicar
+                                            </Button>
+                                          )}
+                                          {job.status === 'open' && (
+                                            <>
+                                              <Button size="sm" variant="outline" onClick={() => handleMarkFilled(job.id)} disabled={updateStatusMutation.isPending}>
+                                                <CheckCircle className="h-4 w-4 mr-1" />
+                                                Preencher
+                                              </Button>
+                                              <Button size="sm" variant="destructive" onClick={() => handleClose(job.id)} disabled={updateStatusMutation.isPending}>
+                                                <Ban className="h-4 w-4 mr-1" />
+                                                Fechar
+                                              </Button>
+                                            </>
+                                          )}
+                                          {(job.status === 'closed' || job.status === 'filled') && (
+                                            <Button size="sm" variant="default" onClick={() => handlePublish(job.id)} disabled={updateStatusMutation.isPending}>
+                                              <CheckCircle className="h-4 w-4 mr-1" />
+                                              Reabrir
+                                            </Button>
+                                          )}
+                                          <Button size="sm" variant="outline" onClick={() => setSelectedJob(job.id)}>
+                                            <Eye className="h-4 w-4" />
+                                          </Button>
+                                        </div>
+                                      </TableCell>
+                                    )}
+                                  </TableRow>
+                                );
+                              })}
+                            </TableBody>
+                          </Table>
+                        ) : (
+                          <div className="py-4 px-3 text-sm text-gray-400 bg-white rounded-b-lg border border-t-0 border-gray-200">
+                            Nenhuma vaga nesta agência
+                          </div>
                         )}
-                        <TableCell>{getJobTypeBadge(job.job_type)}</TableCell>
-                        <TableCell>
-                          {isAdmin && job.remote ? (
-                            <Badge variant="outline" className="bg-blue-50">Remoto</Badge>
-                          ) : (
-                            job.city || 'N/A'
-                          )}
-                        </TableCell>
-                        <TableCell>{getStatusBadge(job.status)}</TableCell>
-                        <TableCell>
-                          {(job.published_at || job.created_at) ? new Date(job.published_at || job.created_at).toLocaleDateString('pt-BR') : '-'}
-                        </TableCell>
-                        {isAdmin && (
-                          <TableCell className="text-right">
-                            <div className="flex justify-end gap-2">
-                              {/* AI Matching buttons */}
-                              {job.status === 'open' && (
-                                <Button
-                                  size="sm"
-                                  variant="secondary"
-                                  onClick={() => handleFindCandidates(job)}
-                                  disabled={matchingJobId === job.id || findCandidatesMutation.isPending}
-                                  className="bg-purple-100 hover:bg-purple-200 text-purple-700"
-                                >
-                                  {matchingJobId === job.id ? (
-                                    <>
-                                      <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                                      Buscando...
-                                    </>
-                                  ) : (
-                                    <>
-                                      <Sparkles className="h-4 w-4 mr-1" />
-                                      IA Buscar
-                                    </>
-                                  )}
-                                </Button>
-                              )}
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => handleViewMatches(job)}
-                              >
-                                <Users className="h-4 w-4 mr-1" />
-                                Matches
-                              </Button>
-                              {job.status === 'draft' && (
-                                <Button size="sm" variant="default" onClick={() => handlePublish(job.id)} disabled={updateStatusMutation.isPending}>
-                                  <CheckCircle className="h-4 w-4 mr-1" />
-                                  Publicar
-                                </Button>
-                              )}
-                              {job.status === 'open' && (
-                                <>
-                                  <Button size="sm" variant="outline" onClick={() => handleMarkFilled(job.id)} disabled={updateStatusMutation.isPending}>
-                                    <CheckCircle className="h-4 w-4 mr-1" />
-                                    Preencher
-                                  </Button>
-                                  <Button size="sm" variant="destructive" onClick={() => handleClose(job.id)} disabled={updateStatusMutation.isPending}>
-                                    <Ban className="h-4 w-4 mr-1" />
-                                    Fechar
-                                  </Button>
-                                </>
-                              )}
-                              {(job.status === 'closed' || job.status === 'filled') && (
-                                <Button size="sm" variant="default" onClick={() => handlePublish(job.id)} disabled={updateStatusMutation.isPending}>
-                                  <CheckCircle className="h-4 w-4 mr-1" />
-                                  Reabrir
-                                </Button>
-                              )}
-                              <Button size="sm" variant="outline" onClick={() => setSelectedJob(job.id)}>
-                                <Eye className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          </TableCell>
-                        )}
-                      </TableRow>
+                      </div>
                     );
                   })}
-                </TableBody>
-              </Table>
+                </div>
+              ) : (
+                // Single agency flat table
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Título</TableHead>
+                      <TableHead>Empresa</TableHead>
+                      <TableHead>Tipo</TableHead>
+                      <TableHead>{isAdmin ? 'Localização' : 'Cidade'}</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Publicado</TableHead>
+                      {isAdmin && <TableHead className="text-right">Ações</TableHead>}
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredJobs.map((job: any) => {
+                      const companyName = isAdmin ? job.companies?.company_name : job.company?.company_name;
+                      return (
+                        <TableRow key={job.id}>
+                          <TableCell className="font-medium">{job.title}</TableCell>
+                          <TableCell>{companyName || 'N/A'}</TableCell>
+                          <TableCell>{getJobTypeBadge(job.job_type)}</TableCell>
+                          <TableCell>
+                            {isAdmin && job.remote ? (
+                              <Badge variant="outline" className="bg-blue-50">Remoto</Badge>
+                            ) : (
+                              job.city || 'N/A'
+                            )}
+                          </TableCell>
+                          <TableCell>{getStatusBadge(job.status)}</TableCell>
+                          <TableCell>
+                            {(job.published_at || job.created_at) ? new Date(job.published_at || job.created_at).toLocaleDateString('pt-BR') : '-'}
+                          </TableCell>
+                          {isAdmin && (
+                            <TableCell className="text-right">
+                              <div className="flex justify-end gap-2">
+                                {job.status === 'open' && (
+                                  <Button
+                                    size="sm"
+                                    variant="secondary"
+                                    onClick={() => handleFindCandidates(job)}
+                                    disabled={matchingJobId === job.id || findCandidatesMutation.isPending}
+                                    className="bg-purple-100 hover:bg-purple-200 text-purple-700"
+                                  >
+                                    {matchingJobId === job.id ? (
+                                      <>
+                                        <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                                        Buscando...
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Sparkles className="h-4 w-4 mr-1" />
+                                        IA Buscar
+                                      </>
+                                    )}
+                                  </Button>
+                                )}
+                                <Button size="sm" variant="outline" onClick={() => handleViewMatches(job)}>
+                                  <Users className="h-4 w-4 mr-1" />
+                                  Matches
+                                </Button>
+                                {job.status === 'draft' && (
+                                  <Button size="sm" variant="default" onClick={() => handlePublish(job.id)} disabled={updateStatusMutation.isPending}>
+                                    <CheckCircle className="h-4 w-4 mr-1" />
+                                    Publicar
+                                  </Button>
+                                )}
+                                {job.status === 'open' && (
+                                  <>
+                                    <Button size="sm" variant="outline" onClick={() => handleMarkFilled(job.id)} disabled={updateStatusMutation.isPending}>
+                                      <CheckCircle className="h-4 w-4 mr-1" />
+                                      Preencher
+                                    </Button>
+                                    <Button size="sm" variant="destructive" onClick={() => handleClose(job.id)} disabled={updateStatusMutation.isPending}>
+                                      <Ban className="h-4 w-4 mr-1" />
+                                      Fechar
+                                    </Button>
+                                  </>
+                                )}
+                                {(job.status === 'closed' || job.status === 'filled') && (
+                                  <Button size="sm" variant="default" onClick={() => handlePublish(job.id)} disabled={updateStatusMutation.isPending}>
+                                    <CheckCircle className="h-4 w-4 mr-1" />
+                                    Reabrir
+                                  </Button>
+                                )}
+                                <Button size="sm" variant="outline" onClick={() => setSelectedJob(job.id)}>
+                                  <Eye className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          )}
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              )
             ) : (
               <div className="text-center py-12">
                 <Briefcase className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
