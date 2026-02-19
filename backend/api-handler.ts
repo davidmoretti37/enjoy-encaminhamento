@@ -21,13 +21,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   // Adapt Vercel request/response to Express-like format
-  // The tRPC Express middleware expects certain properties
+  // The tRPC Express middleware expects req.path (Express property not on VercelRequest)
+  const url = req.url || '/';
+  const pathname = url.split('?')[0];
+  const strippedPath = pathname.replace(/^\/api\/trpc/, '') || '/';
+
   const expressReq = Object.assign(req, {
     cookies: parseCookies(req.headers.cookie || ""),
+    path: strippedPath,
+    url: strippedPath + (url.includes('?') ? '?' + url.split('?').slice(1).join('?') : ''),
   });
-
-  // Strip /api/trpc prefix so tRPC can resolve the procedure name
-  expressReq.url = expressReq.url?.replace(/^\/api\/trpc/, '') || '/';
 
   return new Promise<void>((resolve, reject) => {
     trpcHandler(expressReq as any, res as any, (err) => {
