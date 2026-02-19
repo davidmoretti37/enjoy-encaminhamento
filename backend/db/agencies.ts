@@ -129,7 +129,7 @@ export async function getAgencyForUserContext(userId: string, role: string) {
   if (role === 'agency') {
     return await getAgencyByUserId(userId);
   }
-  if (role === 'admin') {
+  if (role === 'admin' || role === 'super_admin') {
     const { getAdminAgencyContext } = await import("./scheduling");
     const agencyId = await getAdminAgencyContext(userId);
     if (!agencyId) return null;

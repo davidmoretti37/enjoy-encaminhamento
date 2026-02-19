@@ -36,8 +36,8 @@ export const adminProcedure = t.procedure.use(
   t.middleware(async (opts) => {
     const { ctx, next } = opts;
 
-    // Only admin role has admin access
-    if (!ctx.user || ctx.user.role !== "admin") {
+    // Only admin/super_admin role has admin access
+    if (!ctx.user || (ctx.user.role !== "admin" && ctx.user.role !== "super_admin")) {
       throw new TRPCError({ code: "FORBIDDEN", message: NOT_ADMIN_ERR_MSG });
     }
 

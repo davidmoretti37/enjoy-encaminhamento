@@ -97,7 +97,7 @@ export default function AgencyManagement() {
     );
   }
 
-  if (!user || user.role !== 'admin') {
+  if (!user || (user.role !== 'admin' && user.role !== 'super_admin')) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Card className="max-w-md">

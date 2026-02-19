@@ -81,7 +81,7 @@ export default function AdminAgencies() {
     );
   }
 
-  if (!user || user.role !== 'admin' || !affiliate) {
+  if (!user || (user.role !== 'admin' && user.role !== 'super_admin') || !affiliate) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Card className="max-w-md">

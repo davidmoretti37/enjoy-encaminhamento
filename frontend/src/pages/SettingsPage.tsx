@@ -138,7 +138,7 @@ export default function SettingsPage() {
     );
   }
 
-  if (!user || !user.role || !["admin", "agency"].includes(user.role)) {
+  if (!user || !user.role || !["super_admin", "admin", "agency"].includes(user.role)) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Card className="max-w-md">

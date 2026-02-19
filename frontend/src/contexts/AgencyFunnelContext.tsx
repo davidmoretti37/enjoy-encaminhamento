@@ -87,7 +87,7 @@ export function AgencyFunnelProvider({ children }: { children: ReactNode }) {
   const { isAllAgenciesMode } = useAgencyContext();
 
   // Admin in "Todas as Agências" mode uses affiliate-level endpoints
-  const isTodasMode = user?.role === 'admin' && isAllAgenciesMode;
+  const isTodasMode = (user?.role === 'admin' || user?.role === 'super_admin') && isAllAgenciesMode;
 
   // === Agency-specific queries (disabled in Todas mode) ===
   const { data: agencyProfile } = trpc.agency.getProfile.useQuery(

@@ -101,7 +101,7 @@ export default function DashboardLayout({
 
   // Payment alert counts for admin/agency
   const paymentAlertsQuery = trpc.admin.getPaymentAlertCounts.useQuery(undefined, {
-    enabled: !!user && (user.role === 'admin' || user.role === 'agency'),
+    enabled: !!user && (user.role === 'super_admin' || user.role === 'admin' || user.role === 'agency'),
     refetchInterval: 60000,
   });
 
@@ -184,7 +184,7 @@ export default function DashboardLayout({
 
   // Compute payment badge based on role
   let paymentBadge = 0;
-  if (user.role === 'admin' || user.role === 'agency') {
+  if (user.role === 'super_admin' || user.role === 'admin' || user.role === 'agency') {
     paymentBadge = paymentAlertsQuery.data?.total || 0;
   } else if (user.role === 'company') {
     // Show badge if there's overdue amount

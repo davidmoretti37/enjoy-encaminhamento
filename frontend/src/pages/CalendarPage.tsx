@@ -318,7 +318,7 @@ export default function CalendarPage() {
     );
   }
 
-  if (!user || (user.role !== 'admin' && user.role !== 'agency')) {
+  if (!user || (user.role !== 'super_admin' && user.role !== 'admin' && user.role !== 'agency')) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Card className="max-w-md">

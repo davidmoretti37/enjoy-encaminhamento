@@ -59,7 +59,7 @@ export default function ImportCandidatesModal({
 }: ImportCandidatesModalProps) {
   const { user } = useAuth();
   const isAgencyUser = user?.role === 'agency';
-  const isAffiliateUser = user?.role === 'admin';
+  const isAffiliateUser = user?.role === 'admin' || user?.role === 'super_admin';
 
   const initialStep = isAgencyUser ? "upload" : "select-agency";
 

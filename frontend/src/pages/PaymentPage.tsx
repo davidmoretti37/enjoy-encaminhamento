@@ -40,7 +40,7 @@ export default function PaymentPage() {
   const [expandedCompanies, setExpandedCompanies] = useState<Record<string, boolean>>({});
 
   // Determine role capabilities
-  const isAffiliate = user?.role === 'admin';
+  const isAffiliate = user?.role === 'admin' || user?.role === 'super_admin';
   const isAgency = user?.role === 'agency';
   const isAdmin = isAffiliate;
 

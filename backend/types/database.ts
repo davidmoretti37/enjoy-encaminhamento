@@ -24,7 +24,7 @@ export interface Database {
       users: {
         Row: {
           id: string
-          role: 'admin' | 'agency' | 'candidate' | 'company' | null
+          role: 'super_admin' | 'admin' | 'agency' | 'candidate' | 'company' | null
           name: string | null
           email: string | null
           agency_id: string | null

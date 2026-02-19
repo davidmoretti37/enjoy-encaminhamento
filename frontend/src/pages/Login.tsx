@@ -84,7 +84,7 @@ export default function Login() {
       toast.success('Login bem-sucedido!');
 
       // Role-based dashboard redirect using window.location for clean navigation
-      if (user?.role === 'admin') {
+      if (user?.role === 'super_admin' || user?.role === 'admin') {
         window.location.href = '/admin/dashboard';
       } else if (user?.role === 'agency') {
         window.location.href = '/agency/dashboard';

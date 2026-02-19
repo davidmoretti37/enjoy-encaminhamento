@@ -17,7 +17,7 @@ export default function DashboardContent() {
   const [, setLocation] = useLocation();
   const { user } = useAuth();
   const { isAllAgenciesMode } = useAgencyContext();
-  const isTodasMode = user?.role === 'admin' && isAllAgenciesMode;
+  const isTodasMode = (user?.role === 'admin' || user?.role === 'super_admin') && isAllAgenciesMode;
 
   // Agency-specific queries (disabled in Todas mode)
   const { data: agencyStats } = trpc.agency.getDashboardStats.useQuery(undefined, { enabled: !isTodasMode });

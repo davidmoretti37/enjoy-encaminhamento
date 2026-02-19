@@ -86,7 +86,7 @@ export default function CompanyPage() {
   };
 
   // Detect role
-  const isAffiliate = user?.role === 'admin';
+  const isAffiliate = user?.role === 'admin' || user?.role === 'super_admin';
   const isAgency = user?.role === 'agency';
 
   // Separate queries for each role (both called but only one enabled at a time)
