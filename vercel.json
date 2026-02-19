@@ -2,6 +2,11 @@
   "buildCommand": "pnpm run build",
   "outputDirectory": "dist/public",
   "framework": "vite",
+  "functions": {
+    "api/trpc.ts": {
+      "includeFiles": "backend/_bundled.mjs"
+    }
+  },
   "rewrites": [
     { "source": "/api/trpc/:path*", "destination": "/api/trpc" },
     { "source": "/trpc/:path*", "destination": "/api/trpc" },

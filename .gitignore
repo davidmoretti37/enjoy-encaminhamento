@@ -6,7 +6,7 @@
 dist/
 build/
 *.dist
-api/trpc.js
+backend/_bundled.mjs
 
 # Environment variables
 .env
