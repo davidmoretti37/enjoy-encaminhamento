@@ -1,7 +1,7 @@
 import "dotenv/config";
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
-import { appRouter } from "../backend/routers";
+import { appRouter } from "../backend/routers.js";
 import { createContext } from "../backend/_core/context";
 
 // Create a handler that wraps the tRPC middleware for Vercel
