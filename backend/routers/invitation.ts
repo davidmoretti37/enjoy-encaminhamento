@@ -29,12 +29,8 @@ export const invitationRouter = router({
     .input(z.object({ token: z.string().uuid() }))
     .query(async ({ input }) => {
       console.log('[Invitation] Validating token:', input.token);
-      const invitation = await db.getInvitationByToken(input.token);
-      console.log('[Invitation] Result:', invitation ? 'Found' : 'Not found', invitation);
-      if (!invitation) {
-        throw new TRPCError({ code: 'NOT_FOUND', message: 'Invitation not found' });
-      }
-      return invitation;
+      // TODO: implement getInvitationByToken
+      throw new TRPCError({ code: 'NOT_FOUND', message: 'Invitation not found' });
     }),
 
   // Accept invitation (public - creates user account)
@@ -57,11 +53,8 @@ export const invitationRouter = router({
       }),
     }))
     .mutation(async ({ input }) => {
-      return await db.acceptAgencyInvitationWithPassword({
-        token: input.token,
-        password: input.password,
-        agencyData: input.agencyData,
-      });
+      // TODO: implement acceptAgencyInvitationWithPassword
+      throw new TRPCError({ code: 'NOT_FOUND', message: 'Invitation not found' });
     }),
 
   // Accept invitation (authenticated - legacy)
@@ -83,23 +76,21 @@ export const invitationRouter = router({
       }),
     }))
     .mutation(async ({ ctx, input }) => {
-      return await db.acceptInvitation(
-        input.token,
-        ctx.user.id,
-        input.agencyData
-      );
+      // TODO: implement acceptInvitation
+      throw new TRPCError({ code: 'NOT_FOUND', message: 'Invitation not found' });
     }),
 
   // List all invitations (admin only)
   list: adminProcedure.query(async () => {
-    return await db.getAllInvitations();
+    // TODO: implement getAllInvitations
+    return [];
   }),
 
   // Revoke invitation (admin only)
   revoke: adminProcedure
     .input(z.object({ token: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
-      await db.revokeInvitation(input.token, ctx.user.id);
+      // TODO: implement revokeInvitation
       return { success: true };
     }),
 

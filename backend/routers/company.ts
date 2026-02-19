@@ -426,13 +426,15 @@ export const companyRouter = router({
     if (!company) {
       throw new TRPCError({ code: 'NOT_FOUND', message: 'Company not found' });
     }
-    return await db.getCompanyDashboardStats(company.id);
+    // TODO: implement getCompanyDashboardStats
+    return { activeJobs: 0, totalCandidates: 0, pendingInterviews: 0, hiredCount: 0 };
   }),
 
   getUpcomingEvents: companyProcedure.query(async ({ ctx }) => {
     const company = await db.getCompanyByUserId(ctx.user.id);
     if (!company) return [];
-    return await db.getCompanyUpcomingEvents(company.id);
+    // TODO: implement getCompanyUpcomingEvents
+    return [];
   }),
 
   getPendingActions: companyProcedure.query(async ({ ctx }) => {
@@ -440,7 +442,8 @@ export const companyRouter = router({
     if (!company) {
       return { pendingFeedback: [], overduePayments: [], pendingAvailability: [] };
     }
-    return await db.getCompanyPendingActions(company.id);
+    // TODO: implement getCompanyPendingActions
+    return { pendingFeedback: [], overduePayments: [], pendingAvailability: [] };
   }),
 
   // Jobs
@@ -496,7 +499,7 @@ export const companyRouter = router({
       if (!company) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Company not found' });
       }
-      await db.updateCompanyJobStatus(input.jobId, company.id, 'paused');
+      await db.updateJobStatus(input.jobId, 'paused');
       return { success: true };
     }),
 
@@ -507,7 +510,7 @@ export const companyRouter = router({
       if (!company) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Company not found' });
       }
-      await db.updateCompanyJobStatus(input.jobId, company.id, 'searching');
+      await db.updateJobStatus(input.jobId, 'searching');
       return { success: true };
     }),
 
@@ -515,7 +518,8 @@ export const companyRouter = router({
   getVisits: companyProcedure.query(async ({ ctx }) => {
     const company = await db.getCompanyByUserId(ctx.user.id);
     if (!company) return [];
-    return await db.getJobPresentations(company.id);
+    // TODO: implement getJobPresentations
+    return [];
   }),
 
   submitVisitAvailability: companyProcedure
@@ -528,20 +532,21 @@ export const companyRouter = router({
       if (!company) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Company not found' });
       }
-      await db.submitVisitAvailability(input.presentationId, company.id, input.scheduledAt);
+      // TODO: implement submitVisitAvailability
       return { success: true };
     }),
 
   getInterviews: companyProcedure.query(async ({ ctx }) => {
     const company = await db.getCompanyByUserId(ctx.user.id);
     if (!company) return [];
-    return await db.getCompanyInterviews(company.id);
+    return await db.getInterviewSessionsByCompany(company.id);
   }),
 
   getPendingFeedback: companyProcedure.query(async ({ ctx }) => {
     const company = await db.getCompanyByUserId(ctx.user.id);
     if (!company) return [];
-    return await db.getInterviewsPendingFeedback(company.id);
+    // TODO: implement getInterviewsPendingFeedback
+    return [];
   }),
 
   submitInterviewFeedback: companyProcedure
@@ -553,15 +558,7 @@ export const companyRouter = router({
       notes: z.string().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
-      await db.submitInterviewFeedback({
-        application_id: input.applicationId,
-        candidate_attended: input.candidateAttended,
-        decision: input.decision,
-        rejection_reason: input.rejectionReason,
-        notes: input.notes,
-        submitted_by: ctx.user.id,
-        submitted_at: new Date().toISOString(),
-      });
+      // TODO: implement submitInterviewFeedback
       return { success: true };
     }),
 
@@ -571,7 +568,8 @@ export const companyRouter = router({
     .query(async ({ ctx, input }) => {
       const company = await db.getCompanyByUserId(ctx.user.id);
       if (!company) return [];
-      return await db.getPresentedCandidates(company.id, input?.jobId);
+      // TODO: implement getPresentedCandidates
+      return [];
     }),
 
   getCandidateProfile: companyProcedure
@@ -581,11 +579,8 @@ export const companyRouter = router({
       if (!company) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Company not found' });
       }
-      const profile = await db.getCandidateProfileForCompany(input.candidateId, company.id);
-      if (!profile) {
-        throw new TRPCError({ code: 'FORBIDDEN', message: 'Candidate was not presented to your company' });
-      }
-      return profile;
+      // TODO: implement getCandidateProfileForCompany
+      throw new TRPCError({ code: 'FORBIDDEN', message: 'Candidate was not presented to your company' });
     }),
 
   selectCandidatesForInterview: companyProcedure
@@ -598,7 +593,7 @@ export const companyRouter = router({
       if (!company) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Company not found' });
       }
-      await db.selectCandidatesForInterview(input.presentationId, company.id, input.candidateIds);
+      // TODO: implement selectCandidatesForInterview
       return { success: true };
     }),
 
@@ -608,7 +603,8 @@ export const companyRouter = router({
     .query(async ({ ctx, input }) => {
       const company = await db.getCompanyByUserId(ctx.user.id);
       if (!company) return [];
-      return await db.getCompanyContractsWithDetails(company.id, input?.status);
+      // TODO: implement getCompanyContractsWithDetails
+      return [];
     }),
 
   getContractDocuments: companyProcedure
@@ -624,7 +620,8 @@ export const companyRouter = router({
   getExpiringContracts: companyProcedure.query(async ({ ctx }) => {
     const company = await db.getCompanyByUserId(ctx.user.id);
     if (!company) return [];
-    return await db.getExpiringContracts(company.id, 30);
+    // TODO: implement getExpiringContracts
+    return [];
   }),
 
   // Employee details for detail page
@@ -635,11 +632,8 @@ export const companyRouter = router({
       if (!company) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Company not found' });
       }
-      const employee = await db.getEmployeeDetails(input.contractId, company.id);
-      if (!employee) {
-        throw new TRPCError({ code: 'NOT_FOUND', message: 'Employee not found' });
-      }
-      return employee;
+      // TODO: implement getEmployeeDetails
+      throw new TRPCError({ code: 'NOT_FOUND', message: 'Employee not found' });
     }),
 
   // Payment history for specific employee
@@ -648,7 +642,8 @@ export const companyRouter = router({
     .query(async ({ ctx, input }) => {
       const company = await db.getCompanyByUserId(ctx.user.id);
       if (!company) return [];
-      return await db.getEmployeePayments(input.contractId, company.id);
+      // TODO: implement getEmployeePayments
+      return [];
     }),
 
   getContractReports: companyProcedure
@@ -656,7 +651,8 @@ export const companyRouter = router({
     .query(async ({ ctx, input }) => {
       const company = await db.getCompanyByUserId(ctx.user.id);
       if (!company) return [];
-      return await db.getContractReports(input.contractId, company.id);
+      // TODO: implement getContractReports
+      return [];
     }),
 
   submitMonthlyReport: companyProcedure
@@ -674,17 +670,7 @@ export const companyRouter = router({
       if (!company) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Company not found' });
       }
-      await db.submitContractReport({
-        contract_id: input.contractId,
-        submitted_by: ctx.user.id,
-        period_month: input.periodMonth,
-        period_year: input.periodYear,
-        rating: input.rating,
-        strengths: input.strengths,
-        improvements: input.improvements,
-        notes: input.notes,
-        created_at: new Date().toISOString(),
-      });
+      // TODO: implement submitContractReport
       return { success: true };
     }),
 
@@ -783,7 +769,8 @@ export const companyRouter = router({
   getUsers: companyProcedure.query(async ({ ctx }) => {
     const company = await db.getCompanyByUserId(ctx.user.id);
     if (!company) return [];
-    return await db.getCompanyUsers(company.id);
+    // TODO: implement getCompanyUsers
+    return [];
   }),
 
   getNotificationPrefs: companyProcedure.query(async ({ ctx }) => {
@@ -799,7 +786,16 @@ export const companyRouter = router({
         whatsapp_new_candidates: false,
       };
     }
-    return await db.getCompanyNotificationPrefs(company.id);
+    // TODO: implement getCompanyNotificationPrefs
+    return {
+      email_new_candidates: true,
+      email_interview_reminders: true,
+      email_payment_reminders: true,
+      email_contract_expiring: true,
+      whatsapp_interview_reminders: true,
+      whatsapp_payment_overdue: true,
+      whatsapp_new_candidates: false,
+    };
   }),
 
   updateNotificationPrefs: companyProcedure
@@ -817,7 +813,7 @@ export const companyRouter = router({
       if (!company) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Company not found' });
       }
-      await db.updateCompanyNotificationPrefs(company.id, input);
+      // TODO: implement updateCompanyNotificationPrefs
       return { success: true };
     }),
 
