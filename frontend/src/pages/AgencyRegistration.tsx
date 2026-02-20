@@ -468,7 +468,7 @@ export default function AgencyRegistration() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="cnpj">CNPJ</Label>
+                    <Label htmlFor="cnpj">CNPJ <span className="text-muted-foreground font-normal">(Opcional)</span></Label>
                     <Input
                       id="cnpj"
                       value={cnpj}

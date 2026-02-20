@@ -120,40 +120,155 @@ export const contractRouter = router({
 
       // Check for Autentique documents (signing happens on Autentique)
       let autentiqueDocuments: any[] = [];
-      // Look for autentique docs linked to any hiring process for this company
-      // or check if there's a matching context
+      const { supabaseAdmin } = await import("../supabase");
       try {
-        const { data: hiringProcesses } = await (await import("../supabase")).supabaseAdmin
-          .from("hiring_processes")
-          .select("id, autentique_document_ids")
-          .eq("company_id", company?.id)
-          .not("autentique_document_ids", "eq", "{}");
+        // 1. Check outreach_contract context (admin sent contract via outreach)
+        if (input.category === "contrato_inicial") {
+          const { data: meetings } = await supabaseAdmin
+            .from("scheduled_meetings")
+            .select("id")
+            .eq("company_email", ctx.user.email)
+            .not("autentique_document_ids", "is", null);
 
-        if (hiringProcesses && hiringProcesses.length > 0) {
-          for (const hp of hiringProcesses) {
-            const docs = await db.getAutentiqueDocumentsByContext("hiring_contract", hp.id);
-            autentiqueDocuments.push(...docs);
+          if (meetings && meetings.length > 0) {
+            for (const meeting of meetings) {
+              const docs = await db.getAutentiqueDocumentsByContext("outreach_contract", meeting.id);
+              autentiqueDocuments.push(...docs);
+            }
+          }
+
+          // 2. Check onboarding_contract context (self-service onboarding)
+          const contextId = company?.id || ctx.user.id;
+          const onboardingDocs = await db.getAutentiqueDocumentsByContext("onboarding_contract", contextId);
+          autentiqueDocuments.push(...onboardingDocs);
+        }
+
+        // 3. Check hiring_contract context (hiring process contracts)
+        if (company?.id) {
+          const { data: hiringProcesses } = await supabaseAdmin
+            .from("hiring_processes")
+            .select("id, autentique_document_ids")
+            .eq("company_id", company.id)
+            .not("autentique_document_ids", "eq", "{}");
+
+          if (hiringProcesses && hiringProcesses.length > 0) {
+            for (const hp of hiringProcesses) {
+              const docs = await db.getAutentiqueDocumentsByContext("hiring_contract", hp.id);
+              autentiqueDocuments.push(...docs);
+            }
           }
         }
       } catch {
         // autentique_documents table may not exist yet
       }
 
+      const enrichedTemplates = templates.map((t: any) => {
+        const autentiqueDoc = autentiqueDocuments.find((d: any) => d.template_id === t.id);
+        return {
+          ...t,
+          isSigned: signedTemplateIds.has(t.id) || autentiqueDoc?.status === "signed",
+          autentiqueStatus: autentiqueDoc?.status || null,
+          autentiqueSignUrl: autentiqueDoc?.signers?.[0]?.sign_url || null,
+        };
+      });
+
+      const totalSigned = enrichedTemplates.filter((t: any) => t.isSigned).length;
+
       return {
-        templates: templates.map((t: any) => {
-          const autentiqueDoc = autentiqueDocuments.find((d: any) => d.template_id === t.id);
-          return {
-            ...t,
-            isSigned: signedTemplateIds.has(t.id) || autentiqueDoc?.status === "signed",
-            autentiqueStatus: autentiqueDoc?.status || null,
-            autentiqueSignUrl: autentiqueDoc?.signers?.[0]?.sign_url || null,
-          };
-        }),
+        templates: enrichedTemplates,
         signed: signedDocs,
         total: templates.length,
-        signedCount: signedDocs.length,
-        allSigned: templates.length === 0 || signedDocs.length >= templates.length,
+        signedCount: totalSigned,
+        allSigned: templates.length === 0 || totalSigned >= templates.length,
       };
+    }),
+
+  // Create Autentique documents on-demand for self-service onboarding
+  prepareAutentiqueDocuments: companyProcedure
+    .input(z.object({
+      category: z.enum(['contrato_inicial', 'clt', 'estagio', 'menor_aprendiz']),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const { createDocument: createAutentiqueDocument, isAutentiqueConfigured } = await import("../integrations/autentique");
+
+      if (!isAutentiqueConfigured()) {
+        return { created: false, reason: "autentique_not_configured" };
+      }
+
+      const company = await db.getCompanyByUserId(ctx.user.id);
+      const agencyId = company?.agency_id || ctx.user.agency_id;
+      if (!agencyId) {
+        return { created: false, reason: "no_agency" };
+      }
+
+      const contextId = company?.id || ctx.user.id;
+      const { supabaseAdmin } = await import("../supabase");
+
+      // Check if Autentique docs already exist for this context
+      const existingDocs = await db.getAutentiqueDocumentsByContext("onboarding_contract", contextId);
+      if (existingDocs.length > 0) {
+        return { created: false, reason: "already_exist" };
+      }
+
+      // Also check outreach_contract context (admin may have already sent contract)
+      if (input.category === "contrato_inicial") {
+        const { data: meetings } = await supabaseAdmin
+          .from("scheduled_meetings")
+          .select("id")
+          .eq("company_email", ctx.user.email)
+          .not("autentique_document_ids", "is", null);
+
+        if (meetings && meetings.length > 0) {
+          return { created: false, reason: "outreach_exists" };
+        }
+      }
+
+      const templates = await db.getDocumentTemplates(agencyId, input.category);
+      if (templates.length === 0) {
+        return { created: false, reason: "no_templates" };
+      }
+
+      const signerEmail = ctx.user.email;
+      const signerName = company?.contact_name || company?.name || ctx.user.name || "Representante";
+      let count = 0;
+
+      for (const template of templates) {
+        try {
+          const pdfResponse = await fetch(template.file_url);
+          if (!pdfResponse.ok) continue;
+          const pdfBuffer = Buffer.from(await pdfResponse.arrayBuffer());
+
+          const result = await createAutentiqueDocument(
+            template.name,
+            pdfBuffer,
+            [{ email: signerEmail, name: signerName, action: "SIGN" }],
+            {
+              message: `Por favor, assine o documento "${template.name}".`,
+              reminder: "WEEKLY",
+            }
+          );
+
+          await db.createAutentiqueDocument({
+            autentiqueDocumentId: result.documentId,
+            documentName: template.name,
+            contextType: "onboarding_contract",
+            contextId,
+            templateId: template.id,
+            signers: result.signers.map((s) => ({
+              role: "company",
+              email: s.email,
+              name: s.name,
+              autentiqueSignerId: s.public_id,
+              signUrl: s.signUrl,
+            })),
+          });
+          count++;
+        } catch (err) {
+          console.error(`[Contract] Failed to create Autentique doc for template ${template.name}:`, err);
+        }
+      }
+
+      return { created: count > 0, count };
     }),
 
   // Sign a document (legacy canvas signing - kept as fallback)

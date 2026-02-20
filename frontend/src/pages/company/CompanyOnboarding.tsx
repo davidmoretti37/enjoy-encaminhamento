@@ -109,6 +109,13 @@ export default function CompanyOnboarding() {
 
   // Document signing state
   const [allDocsSigned, setAllDocsSigned] = useState(false);
+  const utils = trpc.useUtils();
+
+  const prepareAutentiqueDocs = trpc.contract.prepareAutentiqueDocuments.useMutation({
+    onSuccess: () => {
+      utils.contract.getDocumentsToSign.invalidate({ category: "contrato_inicial" });
+    },
+  });
 
   const [formData, setFormData] = useState({
     // Company Data
@@ -308,6 +315,8 @@ export default function CompanyOnboarding() {
       setStep(2);
     } else if (step === 2 && validateStep2()) {
       setStep(3);
+      // Prepare Autentique documents for signing (if configured)
+      prepareAutentiqueDocs.mutate({ category: "contrato_inicial" });
     }
   };
 

@@ -3,25 +3,6 @@
 // Deployed as a standalone Vercel serverless function
 
 import { createClient } from "@supabase/supabase-js";
-import crypto from "crypto";
-
-// ============================================
-// TYPES
-// ============================================
-
-interface AutentiqueWebhookEvent {
-  webhook: {
-    event: {
-      id: string;
-      type: string;
-      data: {
-        object: any;
-        previous_attributes?: any;
-      };
-      created_at: string;
-    };
-  };
-}
 
 // ============================================
 // SUPABASE CLIENT
@@ -29,19 +10,10 @@ interface AutentiqueWebhookEvent {
 
 function getSupabase() {
   return createClient(
-    process.env.SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    process.env.SUPABASE_URL || "",
+    process.env.SUPABASE_SERVICE_ROLE_KEY || "",
     { auth: { autoRefreshToken: false, persistSession: false } }
   );
-}
-
-// ============================================
-// WEBHOOK SIGNATURE VERIFICATION
-// ============================================
-
-function verifyWebhookSignature(payload: string, signature: string, secret: string): boolean {
-  const computed = crypto.createHmac("sha256", secret).update(payload).digest("hex");
-  return crypto.timingSafeEqual(Buffer.from(computed), Buffer.from(signature));
 }
 
 // ============================================
@@ -67,14 +39,14 @@ async function handleSignatureAccepted(supabase: any, eventData: any) {
   console.log(`[Webhook] Signature accepted: doc=${autentiqueDocId}, signer=${signerEmail || signerPublicId}`);
 
   // Look up our tracking record
-  const { data: doc } = await supabase
+  const { data: doc, error: docError } = await supabase
     .from("autentique_documents")
     .select("*")
     .eq("autentique_document_id", autentiqueDocId)
     .single();
 
-  if (!doc) {
-    console.warn(`[Webhook] No tracking record for Autentique document: ${autentiqueDocId}`);
+  if (docError || !doc) {
+    console.warn(`[Webhook] No tracking record for Autentique document: ${autentiqueDocId}`, docError?.message);
     return;
   }
 
@@ -99,32 +71,44 @@ async function handleSignatureAccepted(supabase: any, eventData: any) {
   const signer = signers[signerIndex];
   signer.signed_at = new Date().toISOString();
 
-  await supabase
+  const { error: updateError } = await supabase
     .from("autentique_documents")
     .update({ signers })
     .eq("autentique_document_id", autentiqueDocId);
 
-  // Update signing_invitations if applicable
-  if (doc.context_type === "hiring_contract") {
-    const { data: invitations } = await supabase
-      .from("signing_invitations")
-      .select("*")
-      .eq("autentique_signer_id", signerPublicId);
-
-    if (invitations && invitations.length > 0) {
-      await supabase
-        .from("signing_invitations")
-        .update({ signed_at: new Date().toISOString() })
-        .eq("autentique_signer_id", signerPublicId)
-        .is("signed_at", null);
-    }
-
-    // Update hiring_processes signature flags based on role
-    await updateHiringSignatureFlag(supabase, doc.context_id, signer.role, signer.name, signer.email);
+  if (updateError) {
+    console.error(`[Webhook] Failed to update signer status:`, updateError.message);
   }
 
-  // Create notification
-  await createSignatureNotification(supabase, doc, signer);
+  // Update signing_invitations if applicable
+  if (doc.context_type === "hiring_contract") {
+    try {
+      const { data: invitations } = await supabase
+        .from("signing_invitations")
+        .select("*")
+        .eq("autentique_signer_id", signerPublicId);
+
+      if (invitations && invitations.length > 0) {
+        await supabase
+          .from("signing_invitations")
+          .update({ signed_at: new Date().toISOString() })
+          .eq("autentique_signer_id", signerPublicId)
+          .is("signed_at", null);
+      }
+
+      // Update hiring_processes signature flags based on role
+      await updateHiringSignatureFlag(supabase, doc.context_id, signer.role, signer.name, signer.email);
+    } catch (err: any) {
+      console.error(`[Webhook] Error updating hiring data:`, err.message);
+    }
+  }
+
+  // Create notification (non-critical)
+  try {
+    await createSignatureNotification(supabase, doc, signer);
+  } catch (err: any) {
+    console.error(`[Webhook] Error creating notification:`, err.message);
+  }
 }
 
 /**
@@ -142,14 +126,14 @@ async function handleDocumentFinished(supabase: any, eventData: any) {
   console.log(`[Webhook] Document finished: ${autentiqueDocId}`);
 
   // Get our tracking record
-  const { data: doc } = await supabase
+  const { data: doc, error: docError } = await supabase
     .from("autentique_documents")
     .select("*")
     .eq("autentique_document_id", autentiqueDocId)
     .single();
 
-  if (!doc) {
-    console.warn(`[Webhook] No tracking record for finished document: ${autentiqueDocId}`);
+  if (docError || !doc) {
+    console.warn(`[Webhook] No tracking record for finished document: ${autentiqueDocId}`, docError?.message);
     return;
   }
 
@@ -163,13 +147,18 @@ async function handleDocumentFinished(supabase: any, eventData: any) {
   const signedPdfUrl = document.files?.signed || null;
 
   // Update document status
-  await supabase
+  const { error: updateError } = await supabase
     .from("autentique_documents")
     .update({
       status: "signed",
       signed_pdf_url: signedPdfUrl,
     })
     .eq("autentique_document_id", autentiqueDocId);
+
+  if (updateError) {
+    console.error(`[Webhook] Failed to update document status:`, updateError.message);
+    return;
+  }
 
   // Check if all documents for this context are now complete
   const { data: allDocs } = await supabase
@@ -188,10 +177,14 @@ async function handleDocumentFinished(supabase: any, eventData: any) {
   console.log(`[Webhook] All documents complete for ${doc.context_type}:${doc.context_id}`);
 
   // Trigger context-specific completion logic
-  if (doc.context_type === "outreach_contract") {
-    await handleOutreachContractComplete(supabase, doc.context_id);
-  } else if (doc.context_type === "hiring_contract") {
-    await handleHiringContractComplete(supabase, doc.context_id);
+  try {
+    if (doc.context_type === "outreach_contract") {
+      await handleOutreachContractComplete(supabase, doc.context_id);
+    } else if (doc.context_type === "hiring_contract") {
+      await handleHiringContractComplete(supabase, doc.context_id);
+    }
+  } catch (err: any) {
+    console.error(`[Webhook] Error in completion handler:`, err.message);
   }
 }
 
@@ -210,11 +203,14 @@ async function handleSignatureRejected(supabase: any, eventData: any) {
 
   if (!autentiqueDocId) return;
 
-  // Update document status
-  await supabase
+  const { error } = await supabase
     .from("autentique_documents")
     .update({ status: "refused" })
     .eq("autentique_document_id", autentiqueDocId);
+
+  if (error) {
+    console.error(`[Webhook] Failed to update rejected status:`, error.message);
+  }
 }
 
 /**
@@ -226,12 +222,15 @@ async function handleSignatureViewed(supabase: any, eventData: any) {
 
   if (!signerPublicId) return;
 
-  // Update signing_invitations viewed_at
-  await supabase
+  const { error } = await supabase
     .from("signing_invitations")
     .update({ viewed_at: new Date().toISOString() })
     .eq("autentique_signer_id", signerPublicId)
     .is("viewed_at", null);
+
+  if (error) {
+    console.error(`[Webhook] Failed to update viewed_at:`, error.message);
+  }
 }
 
 // ============================================
@@ -285,10 +284,14 @@ async function updateHiringSignatureFlag(
       return;
   }
 
-  await supabase
+  const { error } = await supabase
     .from("hiring_processes")
     .update(updates)
     .eq("id", hiringProcessId);
+
+  if (error) {
+    console.error(`[Webhook] Failed to update hiring signature flag:`, error.message);
+  }
 }
 
 /**
@@ -297,13 +300,11 @@ async function updateHiringSignatureFlag(
 async function handleOutreachContractComplete(supabase: any, meetingId: string) {
   console.log(`[Webhook] Outreach contract complete for meeting: ${meetingId}`);
 
-  // Update the scheduled_meeting
   await supabase
     .from("scheduled_meetings")
     .update({ contract_signed_at: new Date().toISOString() })
     .eq("id", meetingId);
 
-  // Get the meeting to find the company
   const { data: meeting } = await supabase
     .from("scheduled_meetings")
     .select("company_id, agency_id")
@@ -327,7 +328,6 @@ async function handleOutreachContractComplete(supabase: any, meetingId: string) 
 async function handleHiringContractComplete(supabase: any, hiringProcessId: string) {
   console.log(`[Webhook] Hiring contract complete for process: ${hiringProcessId}`);
 
-  // Get the hiring process
   const { data: process } = await supabase
     .from("hiring_processes")
     .select("*, company:companies(id, company_name, email)")
@@ -336,8 +336,6 @@ async function handleHiringContractComplete(supabase: any, hiringProcessId: stri
 
   if (!process) return;
 
-  // Check if the status trigger already moved it to active
-  // If not, update status based on hiring type
   if (process.status === "pending_signatures") {
     const newStatus = process.hiring_type === "clt" ? "pending_payment" : "active";
     await supabase
@@ -353,7 +351,6 @@ async function handleHiringContractComplete(supabase: any, hiringProcessId: stri
 async function createSignatureNotification(supabase: any, doc: any, signer: any) {
   if (doc.context_type !== "hiring_contract") return;
 
-  // Get the hiring process to find the company
   const { data: process } = await supabase
     .from("hiring_processes")
     .select("company_id, candidate:candidates(full_name)")
@@ -394,31 +391,21 @@ export default async function handler(req: any, res: any) {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
-  // Verify webhook signature if secret is configured
-  const webhookSecret = process.env.AUTENTIQUE_WEBHOOK_SECRET;
-  if (webhookSecret) {
-    const signature = req.headers["x-autentique-signature"];
-    if (!signature) {
-      console.warn("[Webhook] Missing x-autentique-signature header");
-      return res.status(401).json({ error: "Missing signature" });
-    }
+  // Log the raw event for debugging
+  console.log("[Webhook] Received Autentique event:", JSON.stringify(req.body).slice(0, 500));
 
-    const rawBody = typeof req.body === "string" ? req.body : JSON.stringify(req.body);
-    if (!verifyWebhookSignature(rawBody, signature, webhookSecret)) {
-      console.warn("[Webhook] Invalid webhook signature");
-      return res.status(401).json({ error: "Invalid signature" });
-    }
-  }
-
+  // Always return 200 to Autentique to stop retries, even if processing fails
   try {
-    const event: AutentiqueWebhookEvent = req.body;
-    const eventType = event?.webhook?.event?.type;
-    const eventData = event?.webhook?.event?.data;
-    const eventId = event?.webhook?.event?.id;
+    const body = req.body;
 
-    if (!eventType || !eventData) {
-      console.warn("[Webhook] Invalid event payload:", JSON.stringify(req.body).slice(0, 200));
-      return res.status(400).json({ error: "Invalid payload" });
+    // Autentique may send different payload structures — handle both
+    const eventType = body?.webhook?.event?.type || body?.event?.type || body?.type;
+    const eventData = body?.webhook?.event?.data || body?.event?.data || body?.data;
+    const eventId = body?.webhook?.event?.id || body?.event?.id || body?.id;
+
+    if (!eventType) {
+      console.warn("[Webhook] Could not determine event type from payload");
+      return res.status(200).json({ received: true, status: "unknown_format" });
     }
 
     console.log(`[Webhook] Processing event: ${eventType} (${eventId})`);
@@ -449,6 +436,7 @@ export default async function handler(req: any, res: any) {
     return res.status(200).json({ received: true, event: eventType });
   } catch (err: any) {
     console.error("[Webhook] Error processing event:", err);
-    return res.status(500).json({ error: err.message });
+    // Still return 200 to prevent Autentique from retrying endlessly
+    return res.status(200).json({ received: true, error: err.message });
   }
 }

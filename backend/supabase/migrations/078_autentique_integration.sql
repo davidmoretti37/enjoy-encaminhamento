@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS autentique_documents (
   document_name TEXT NOT NULL,
 
   -- Context: which flow this belongs to
-  context_type TEXT NOT NULL CHECK (context_type IN ('outreach_contract', 'hiring_contract')),
+  context_type TEXT NOT NULL CHECK (context_type IN ('outreach_contract', 'hiring_contract', 'onboarding_contract')),
   -- For outreach: scheduled_meetings.id. For hiring: hiring_processes.id
   context_id UUID NOT NULL,
 

@@ -10,7 +10,7 @@ export interface AutentiqueDocumentRecord {
   id: string;
   autentique_document_id: string;
   document_name: string;
-  context_type: "outreach_contract" | "hiring_contract";
+  context_type: "outreach_contract" | "hiring_contract" | "onboarding_contract";
   context_id: string;
   template_id: string | null;
   status: "pending" | "processing" | "signed" | "refused" | "expired";
@@ -39,7 +39,7 @@ export interface AutentiqueSignerRecord {
 export async function createAutentiqueDocument(params: {
   autentiqueDocumentId: string;
   documentName: string;
-  contextType: "outreach_contract" | "hiring_contract";
+  contextType: "outreach_contract" | "hiring_contract" | "onboarding_contract";
   contextId: string;
   templateId?: string;
   signers: Array<{
@@ -105,7 +105,7 @@ export async function getAutentiqueDocumentByAutentiqueId(
  * Get all Autentique documents for a context (e.g., all documents for a hiring process)
  */
 export async function getAutentiqueDocumentsByContext(
-  contextType: "outreach_contract" | "hiring_contract",
+  contextType: "outreach_contract" | "hiring_contract" | "onboarding_contract",
   contextId: string
 ): Promise<AutentiqueDocumentRecord[]> {
   const { data, error } = await supabaseAdmin

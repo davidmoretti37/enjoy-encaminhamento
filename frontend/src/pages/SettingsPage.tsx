@@ -110,10 +110,13 @@ export default function SettingsPage() {
     },
   });
 
+  const utils = trpc.useUtils();
+
   const updateProfileMutation = trpc.agency.updateProfile.useMutation({
     onSuccess: () => {
       toast.success("Informacoes de pagamento salvas!");
       setSavingPaymentInfo(false);
+      utils.agency.getProfile.invalidate();
     },
     onError: (error: any) => {
       toast.error(`Erro ao salvar: ${error.message}`);
