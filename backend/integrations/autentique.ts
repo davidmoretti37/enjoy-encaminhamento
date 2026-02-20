@@ -147,7 +147,8 @@ export async function createDocument(
       ...(options.deadlineAt && { deadline_at: options.deadlineAt }),
     },
     signers: signers.map((s) => ({
-      email: s.email,
+      // Only pass name (not email) so Autentique returns the signing link in the API response.
+      // When email is included, Autentique emails the link directly and doesn't expose it via API.
       action: s.action,
       name: s.name,
     })),
