@@ -164,6 +164,46 @@ export const contractRouter = router({
         console.error("[Contract] Error looking up Autentique docs:", err?.message || err);
       }
 
+      // Refresh status from Autentique API for any pending docs
+      if (autentiqueDocuments.length > 0) {
+        try {
+          const { getDocumentStatus } = await import("../integrations/autentique");
+          for (const aDoc of autentiqueDocuments) {
+            if (aDoc.status === "pending" && aDoc.autentique_document_id) {
+              const apiStatus = await getDocumentStatus(aDoc.autentique_document_id);
+              const signedSigners = apiStatus.signers.filter((s: any) => s.signed);
+              if (signedSigners.length > 0) {
+                // Update signers signed_at in DB
+                const updatedSigners = (aDoc.signers || []).map((s: any) => {
+                  const apiSigner = apiStatus.signers.find((as: any) => as.public_id === s.autentique_signer_id);
+                  if (apiSigner?.signed) {
+                    return { ...s, signed_at: apiSigner.signed.created_at };
+                  }
+                  return s;
+                });
+                const allSignersSigned = updatedSigners.every((s: any) => s.signed_at);
+                const newStatus = allSignersSigned ? "signed" : aDoc.status;
+                await supabaseAdmin
+                  .from("autentique_documents")
+                  .update({
+                    signers: updatedSigners,
+                    status: newStatus,
+                    ...(allSignersSigned && apiStatus.files.signed ? { signed_pdf_url: apiStatus.files.signed } : {}),
+                  })
+                  .eq("id", aDoc.id);
+                aDoc.status = newStatus;
+                aDoc.signers = updatedSigners;
+                if (newStatus === "signed") {
+                  console.log(`[Contract] Autentique doc ${aDoc.document_name} marked as signed via API check`);
+                }
+              }
+            }
+          }
+        } catch (err: any) {
+          console.error("[Contract] Error refreshing Autentique status:", err?.message || err);
+        }
+      }
+
       const enrichedTemplates = templates.map((t: any) => {
         const autentiqueDoc = autentiqueDocuments.find((d: any) => d.template_id === t.id);
         return {
