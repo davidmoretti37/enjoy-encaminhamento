@@ -1045,10 +1045,17 @@ export default function CompanyOnboarding() {
 
               <Card className="shadow-xl border-0 bg-white/80 backdrop-blur">
               <CardContent className="p-8 space-y-6">
-                <DocumentSigningFlow
-                  category="contrato_inicial"
-                  onAllSigned={() => setAllDocsSigned(true)}
-                />
+                {prepareAutentiqueDocs.isPending ? (
+                  <div className="flex flex-col items-center justify-center py-12 gap-3">
+                    <ClassicLoader />
+                    <p className="text-sm text-muted-foreground">Preparando documentos para assinatura...</p>
+                  </div>
+                ) : (
+                  <DocumentSigningFlow
+                    category="contrato_inicial"
+                    onAllSigned={() => setAllDocsSigned(true)}
+                  />
+                )}
 
                 <div className="flex justify-between pt-6 border-t">
                   <Button type="button" variant="outline" onClick={handleBack} size="lg" className="px-8">
