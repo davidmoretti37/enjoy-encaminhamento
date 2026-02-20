@@ -182,6 +182,8 @@ async function handleDocumentFinished(supabase: any, eventData: any) {
       await handleOutreachContractComplete(supabase, doc.context_id);
     } else if (doc.context_type === "hiring_contract") {
       await handleHiringContractComplete(supabase, doc.context_id);
+    } else if (doc.context_type === "onboarding_contract") {
+      await handleOnboardingContractComplete(supabase, doc.context_id);
     }
   } catch (err: any) {
     console.error(`[Webhook] Error in completion handler:`, err.message);
@@ -342,6 +344,49 @@ async function handleHiringContractComplete(supabase: any, hiringProcessId: stri
       .from("hiring_processes")
       .update({ status: newStatus })
       .eq("id", hiringProcessId);
+  }
+}
+
+/**
+ * Handle completion of all onboarding contract documents
+ */
+async function handleOnboardingContractComplete(supabase: any, contextId: string) {
+  console.log(`[Webhook] Onboarding contract complete for context: ${contextId}`);
+
+  // contextId can be a company ID or user ID — try company first
+  const { data: company } = await supabase
+    .from("companies")
+    .select("id")
+    .eq("id", contextId)
+    .single();
+
+  if (company) {
+    await supabase
+      .from("companies")
+      .update({
+        contract_signed_at: new Date().toISOString(),
+        pipeline_status: "contract_signed",
+      })
+      .eq("id", company.id);
+    console.log(`[Webhook] Company ${company.id} marked as contract_signed`);
+  } else {
+    // contextId is a user ID — find the company by user
+    const { data: companyByUser } = await supabase
+      .from("companies")
+      .select("id")
+      .eq("user_id", contextId)
+      .single();
+
+    if (companyByUser) {
+      await supabase
+        .from("companies")
+        .update({
+          contract_signed_at: new Date().toISOString(),
+          pipeline_status: "contract_signed",
+        })
+        .eq("id", companyByUser.id);
+      console.log(`[Webhook] Company ${companyByUser.id} (via user) marked as contract_signed`);
+    }
   }
 }
 

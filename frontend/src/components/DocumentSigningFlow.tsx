@@ -146,6 +146,16 @@ export default function DocumentSigningFlow({
     category,
     contractId,
     candidateId,
+  }, {
+    // Poll every 5s when there are pending Autentique docs (user may be signing in another tab)
+    refetchInterval: (query) => {
+      const d = query.state.data as any;
+      if (!d) return false;
+      const hasPendingAutentique = d.templates?.some(
+        (t: any) => !t.isSigned && t.autentiqueSignUrl
+      );
+      return hasPendingAutentique ? 5000 : false;
+    },
   });
 
   // Call onAllSigned when initial data loads with everything already signed
