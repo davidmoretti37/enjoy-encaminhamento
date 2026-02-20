@@ -195,13 +195,15 @@ export async function createDocument(
   return {
     documentId: doc.id,
     name: doc.name,
-    signers: (doc.signatures || []).map((sig: any) => ({
-      public_id: sig.public_id,
-      name: sig.name,
-      email: sig.email,
-      signUrl: sig.link?.short_link || "",
-      action: sig.action?.name || "SIGN",
-    })),
+    signers: (doc.signatures || [])
+      .filter((sig: any) => sig.link?.short_link)
+      .map((sig: any) => ({
+        public_id: sig.public_id,
+        name: sig.name,
+        email: sig.email,
+        signUrl: sig.link.short_link,
+        action: sig.action?.name || "SIGN",
+      })),
   };
 }
 
@@ -243,17 +245,19 @@ export async function getDocumentStatus(documentId: string): Promise<AutentiqueD
       original: doc.files?.original || null,
       signed: doc.files?.signed || null,
     },
-    signers: (doc.signatures || []).map((sig: any) => ({
-      public_id: sig.public_id,
-      name: sig.name,
-      email: sig.email,
-      signUrl: sig.link?.short_link || "",
-      signed: sig.signed ? { created_at: sig.signed.created_at } : null,
-      viewed: sig.viewed ? { created_at: sig.viewed.created_at } : null,
-      rejected: sig.rejected
-        ? { created_at: sig.rejected.created_at, reason: sig.rejected.reason || "" }
-        : null,
-    })),
+    signers: (doc.signatures || [])
+      .filter((sig: any) => sig.link?.short_link)
+      .map((sig: any) => ({
+        public_id: sig.public_id,
+        name: sig.name,
+        email: sig.email,
+        signUrl: sig.link.short_link,
+        signed: sig.signed ? { created_at: sig.signed.created_at } : null,
+        viewed: sig.viewed ? { created_at: sig.viewed.created_at } : null,
+        rejected: sig.rejected
+          ? { created_at: sig.rejected.created_at, reason: sig.rejected.reason || "" }
+          : null,
+      })),
   };
 }
 

@@ -170,7 +170,7 @@ export const contractRouter = router({
           ...t,
           isSigned: signedTemplateIds.has(t.id) || autentiqueDoc?.status === "signed",
           autentiqueStatus: autentiqueDoc?.status || null,
-          autentiqueSignUrl: autentiqueDoc?.signers?.[0]?.sign_url || null,
+          autentiqueSignUrl: autentiqueDoc?.signers?.find((s: any) => s.sign_url)?.sign_url || null,
         };
       });
 
