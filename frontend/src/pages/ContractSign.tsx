@@ -7,12 +7,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { CheckCircle, Loader2, XCircle, FileText, Eraser, ExternalLink, Copy, Mail } from "lucide-react";
+import { CheckCircle, Loader2, XCircle, FileText, Eraser, ExternalLink, Copy, Mail, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 
 export default function ContractSign() {
   const { token } = useParams<{ token: string }>();
-  const [status, setStatus] = useState<"loading" | "ready" | "signing" | "success" | "error" | "already_signed">("loading");
+  const [status, setStatus] = useState<"loading" | "ready" | "autentique" | "signing" | "success" | "error" | "already_signed">("loading");
   const [signerName, setSignerName] = useState("");
   const [signerCpf, setSignerCpf] = useState("");
   const [acceptedTerms, setAcceptedTerms] = useState(false);
@@ -46,18 +46,20 @@ export default function ContractSign() {
     if (isLoading) {
       setStatus("loading");
     } else if (error) {
-      setErrorMessage("Link de contrato inválido ou expirado");
+      setErrorMessage("Link de contrato invalido ou expirado");
       setStatus("error");
     } else if (company) {
       if (company.contract_signed_at) {
         setStatus("already_signed");
-        // Set registration URL if available (for already signed contracts)
         if (company.registrationUrl) {
           setRegistrationUrl(company.registrationUrl);
         }
         if (company.company_email) {
           setSignedCompanyEmail(company.company_email);
         }
+      } else if (company.autentiqueStatus?.signingUrl) {
+        // Autentique signing is active
+        setStatus("autentique");
       } else {
         setStatus("ready");
       }
@@ -88,7 +90,7 @@ export default function ContractSign() {
 
   const handleSign = async () => {
     if (!sigRef.current || sigRef.current.isEmpty()) {
-      setErrorMessage("Por favor, faça sua assinatura");
+      setErrorMessage("Por favor, faca sua assinatura");
       return;
     }
     if (!signerName.trim()) {
@@ -96,7 +98,7 @@ export default function ContractSign() {
       return;
     }
     if (signerCpf.replace(/\D/g, "").length !== 11) {
-      setErrorMessage("Por favor, informe um CPF válido");
+      setErrorMessage("Por favor, informe um CPF valido");
       return;
     }
     if (!acceptedTerms) {
@@ -128,56 +130,56 @@ export default function ContractSign() {
         company.formData.state,
         company.formData.cep,
       ].filter(Boolean).join(", ")
-    : "[Endereço]";
+    : "[Endereco]";
   const companyCity = company?.formData?.city || "[Cidade]";
 
   const contractText = `
-CONTRATO DE PRESTAÇÃO DE SERVIÇOS DE INTERMEDIAÇÃO DE MÃO DE OBRA
+CONTRATO DE PRESTACAO DE SERVICOS DE INTERMEDIACAO DE MAO DE OBRA
 
 Pelo presente instrumento particular, as partes:
 
 CONTRATANTE: ${companyName}
 CNPJ: ${companyCnpj}
-Endereço: ${companyAddress}
+Endereco: ${companyAddress}
 Email: ${company?.company_email || "[Email]"}
 Contato: ${company?.formData?.contact_person || company?.contact_name || "[Nome do Contato]"}
 
-CONTRATADA: Currículos MVP Intermediação de Mão de Obra LTDA
+CONTRATADA: Curriculos MVP Intermediacao de Mao de Obra LTDA
 
-Têm entre si justo e contratado o seguinte:
+Tem entre si justo e contratado o seguinte:
 
-CLÁUSULA PRIMEIRA - DO OBJETO
-O presente contrato tem por objeto a prestação de serviços de intermediação de mão de obra,
-consistindo na captação, seleção e encaminhamento de profissionais qualificados para
-atendimento às necessidades da CONTRATANTE.
+CLAUSULA PRIMEIRA - DO OBJETO
+O presente contrato tem por objeto a prestacao de servicos de intermediacao de mao de obra,
+consistindo na captacao, selecao e encaminhamento de profissionais qualificados para
+atendimento as necessidades da CONTRATANTE.
 
-CLÁUSULA SEGUNDA - DAS OBRIGAÇÕES DA CONTRATADA
-I. Realizar a captação de candidatos através de sua rede de escolas parceiras;
-II. Efetuar a pré-seleção dos candidatos conforme perfil solicitado;
+CLAUSULA SEGUNDA - DAS OBRIGACOES DA CONTRATADA
+I. Realizar a captacao de candidatos atraves de sua rede de escolas parceiras;
+II. Efetuar a pre-selecao dos candidatos conforme perfil solicitado;
 III. Encaminhar os candidatos selecionados para entrevista com a CONTRATANTE;
-IV. Manter cadastro atualizado dos candidatos disponíveis.
+IV. Manter cadastro atualizado dos candidatos disponiveis.
 
-CLÁUSULA TERCEIRA - DAS OBRIGAÇÕES DA CONTRATANTE
-I. Fornecer informações claras sobre as vagas disponíveis;
+CLAUSULA TERCEIRA - DAS OBRIGACOES DA CONTRATANTE
+I. Fornecer informacoes claras sobre as vagas disponiveis;
 II. Comunicar a CONTRATADA sobre o resultado das entrevistas;
 III. Efetuar o pagamento dos valores acordados;
 IV. Respeitar as normas trabalhistas vigentes.
 
-CLÁUSULA QUARTA - DA REMUNERAÇÃO
-A CONTRATANTE pagará à CONTRATADA, a título de intermediação, o valor equivalente
-a um salário do profissional contratado, a ser pago em até 30 (trinta) dias após o
-início das atividades do profissional.
+CLAUSULA QUARTA - DA REMUNERACAO
+A CONTRATANTE pagara a CONTRATADA, a titulo de intermediacao, o valor equivalente
+a um salario do profissional contratado, a ser pago em ate 30 (trinta) dias apos o
+inicio das atividades do profissional.
 
-CLÁUSULA QUINTA - DA VIGÊNCIA
-O presente contrato vigorará por prazo indeterminado, podendo ser rescindido por
-qualquer das partes mediante comunicação prévia de 30 (trinta) dias.
+CLAUSULA QUINTA - DA VIGENCIA
+O presente contrato vigorara por prazo indeterminado, podendo ser rescindido por
+qualquer das partes mediante comunicacao previa de 30 (trinta) dias.
 
-CLÁUSULA SEXTA - DO FORO
-Fica eleito o foro da Comarca de ${companyCity}, para dirimir quaisquer dúvidas oriundas
+CLAUSULA SEXTA - DO FORO
+Fica eleito o foro da Comarca de ${companyCity}, para dirimir quaisquer duvidas oriundas
 do presente contrato.
 
 E, por estarem assim justas e contratadas, as partes assinam o presente instrumento
-em duas vias de igual teor e forma, na presença de duas testemunhas.
+em duas vias de igual teor e forma, na presenca de duas testemunhas.
   `.trim();
 
   return (
@@ -201,11 +203,25 @@ em duas vias de igual teor e forma, na presença de duas testemunhas.
                   <CheckCircle className="h-10 w-10 text-green-600" />
                 </div>
               </div>
-              <CardTitle className="text-green-700">Contrato Já Assinado</CardTitle>
+              <CardTitle className="text-green-700">Contrato Ja Assinado</CardTitle>
               <CardDescription>
                 {registrationUrl
-                  ? "Este contrato já foi assinado. Clique abaixo para criar sua conta e acessar o Portal da Empresa."
-                  : "Este contrato já foi assinado anteriormente. Aguarde a aprovação para criar sua conta."}
+                  ? "Este contrato ja foi assinado. Clique abaixo para criar sua conta e acessar o Portal da Empresa."
+                  : "Este contrato ja foi assinado anteriormente. Aguarde a aprovacao para criar sua conta."}
+              </CardDescription>
+            </>
+          )}
+
+          {status === "autentique" && (
+            <>
+              <div className="flex justify-center mb-4">
+                <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center">
+                  <ShieldCheck className="h-10 w-10 text-blue-600" />
+                </div>
+              </div>
+              <CardTitle>Assinar Contrato Digitalmente</CardTitle>
+              <CardDescription>
+                Seu contrato sera assinado pela plataforma Autentique, garantindo validade juridica conforme a Lei 14.063/2020
               </CardDescription>
             </>
           )}
@@ -220,8 +236,8 @@ em duas vias de igual teor e forma, na presença de duas testemunhas.
               <CardTitle className="text-green-700">Contrato Assinado com Sucesso!</CardTitle>
               <CardDescription>
                 {registrationUrl
-                  ? "Seu contrato foi assinado. Agora você pode criar sua conta para acessar o Portal da Empresa."
-                  : "Seu contrato foi assinado digitalmente. Você receberá um e-mail com o link para criar sua conta em breve."}
+                  ? "Seu contrato foi assinado. Agora voce pode criar sua conta para acessar o Portal da Empresa."
+                  : "Seu contrato foi assinado digitalmente. Voce recebera um e-mail com o link para criar sua conta em breve."}
               </CardDescription>
             </>
           )}
@@ -234,7 +250,7 @@ em duas vias de igual teor e forma, na presença de duas testemunhas.
                 </div>
               </div>
               <CardTitle className="text-red-700">Erro</CardTitle>
-              <CardDescription>{errorMessage || "Não foi possível processar o contrato."}</CardDescription>
+              <CardDescription>{errorMessage || "Nao foi possivel processar o contrato."}</CardDescription>
             </>
           )}
 
@@ -245,7 +261,7 @@ em duas vias de igual teor e forma, na presença de duas testemunhas.
                   <FileText className="h-10 w-10 text-blue-600" />
                 </div>
               </div>
-              <CardTitle>Contrato de Prestação de Serviços</CardTitle>
+              <CardTitle>Contrato de Prestacao de Servicos</CardTitle>
               <CardDescription>
                 Leia o contrato abaixo e assine digitalmente para formalizar nossa parceria
               </CardDescription>
@@ -253,13 +269,78 @@ em duas vias de igual teor e forma, na presença de duas testemunhas.
           )}
         </CardHeader>
 
+        {/* Autentique signing state */}
+        {status === "autentique" && company && (
+          <CardContent className="space-y-6">
+            {/* Company Info */}
+            <div className="bg-gray-50 rounded-lg p-4">
+              <h3 className="font-semibold mb-2">Dados da Empresa</h3>
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                <div><strong>Nome:</strong> {companyName}</div>
+                {company.formData?.cnpj && <div><strong>CNPJ:</strong> {companyCnpj}</div>}
+                {company.company_email && <div><strong>E-mail:</strong> {company.company_email}</div>}
+              </div>
+            </div>
+
+            {/* Autentique document status */}
+            {company.autentiqueStatus?.documents && company.autentiqueStatus.documents.length > 0 && (
+              <div className="space-y-3">
+                <h3 className="font-semibold">Documentos para Assinar</h3>
+                {company.autentiqueStatus.documents.map((doc: any, i: number) => (
+                  <div key={i} className="flex items-center justify-between border rounded-lg p-3">
+                    <div className="flex items-center gap-2">
+                      <FileText className="h-4 w-4 text-gray-500" />
+                      <span className="text-sm">{doc.name}</span>
+                    </div>
+                    <span className={`text-xs px-2 py-1 rounded-full ${
+                      doc.status === "signed"
+                        ? "bg-green-100 text-green-700"
+                        : doc.status === "refused"
+                        ? "bg-red-100 text-red-700"
+                        : "bg-yellow-100 text-yellow-700"
+                    }`}>
+                      {doc.status === "signed" ? "Assinado" : doc.status === "refused" ? "Recusado" : "Pendente"}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Sign on Autentique button */}
+            {!company.autentiqueStatus?.allSigned && (
+              <a
+                href={company.autentiqueStatus?.signingUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block"
+              >
+                <Button className="w-full bg-blue-600 hover:bg-blue-700 text-lg py-6" size="lg">
+                  <ShieldCheck className="h-5 w-5 mr-2" />
+                  Assinar na Autentique
+                </Button>
+              </a>
+            )}
+
+            {company.autentiqueStatus?.allSigned && (
+              <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-center">
+                <CheckCircle className="h-8 w-8 text-green-600 mx-auto mb-2" />
+                <p className="text-green-700 font-medium">Todos os documentos foram assinados!</p>
+                <p className="text-sm text-green-600 mt-1">Aguarde a confirmacao por email.</p>
+              </div>
+            )}
+
+            <p className="text-xs text-center text-muted-foreground">
+              A assinatura digital via Autentique possui validade juridica conforme a Lei 14.063/2020.
+            </p>
+          </CardContent>
+        )}
+
         {/* Already signed state with registration link */}
         {status === "already_signed" && registrationUrl && (
           <CardContent className="space-y-6">
-            {/* Registration Link - Prominent CTA */}
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
               <p className="text-sm text-blue-700 mb-3 text-center">
-                Clique no botão abaixo para criar sua conta:
+                Clique no botao abaixo para criar sua conta:
               </p>
               <a href={registrationUrl} className="block">
                 <Button className="w-full bg-blue-600 hover:bg-blue-700 text-lg py-6">
@@ -268,7 +349,6 @@ em duas vias de igual teor e forma, na presença de duas testemunhas.
               </a>
             </div>
 
-            {/* Copy link option */}
             <div className="space-y-2">
               <Label className="text-sm text-gray-600">Ou copie o link:</Label>
               <div className="flex items-center gap-2">
@@ -290,11 +370,10 @@ em duas vias de igual teor e forma, na presença de duas testemunhas.
               </div>
             </div>
 
-            {/* Email notice */}
             <div className="flex items-center gap-2 text-sm text-gray-500 justify-center">
               <Mail className="h-4 w-4" />
               <span>
-                Email de cadastro: {signedCompanyEmail || "seu endereço cadastrado"}.
+                Email de cadastro: {signedCompanyEmail || "seu endereco cadastrado"}.
               </span>
             </div>
           </CardContent>
@@ -303,10 +382,9 @@ em duas vias de igual teor e forma, na presença de duas testemunhas.
         {/* Success state with registration link */}
         {status === "success" && registrationUrl && (
           <CardContent className="space-y-6">
-            {/* Registration Link - Prominent CTA */}
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
               <p className="text-sm text-blue-700 mb-3 text-center">
-                Clique no botão abaixo para criar sua conta:
+                Clique no botao abaixo para criar sua conta:
               </p>
               <a href={registrationUrl} className="block">
                 <Button className="w-full bg-blue-600 hover:bg-blue-700 text-lg py-6">
@@ -315,7 +393,6 @@ em duas vias de igual teor e forma, na presença de duas testemunhas.
               </a>
             </div>
 
-            {/* Copy link option */}
             <div className="space-y-2">
               <Label className="text-sm text-gray-600">Ou copie o link:</Label>
               <div className="flex items-center gap-2">
@@ -337,16 +414,16 @@ em duas vias de igual teor e forma, na presença de duas testemunhas.
               </div>
             </div>
 
-            {/* Email notice */}
             <div className="flex items-center gap-2 text-sm text-gray-500 justify-center">
               <Mail className="h-4 w-4" />
               <span>
-                Um email também foi enviado para {signedCompanyEmail || "seu endereço cadastrado"}.
+                Um email tambem foi enviado para {signedCompanyEmail || "seu endereco cadastrado"}.
               </span>
             </div>
           </CardContent>
         )}
 
+        {/* Legacy canvas signing (fallback when Autentique is not configured) */}
         {(status === "ready" || status === "signing") && company && (
           <CardContent className="space-y-6">
             {/* Company Info */}
@@ -363,7 +440,7 @@ em duas vias de igual teor e forma, na presença de duas testemunhas.
                   <div><strong>Telefone:</strong> {company.formData?.mobile_phone || company.formData?.contact_phone || company.contact_phone}</div>
                 )}
                 {company.formData?.address && (
-                  <div className="col-span-2"><strong>Endereço:</strong> {companyAddress}</div>
+                  <div className="col-span-2"><strong>Endereco:</strong> {companyAddress}</div>
                 )}
               </div>
             </div>
@@ -371,7 +448,6 @@ em duas vias de igual teor e forma, na presença de duas testemunhas.
             {/* Contract Content */}
             <div className="border rounded-lg bg-white overflow-hidden">
               {company.agencyContract?.type === "pdf" ? (
-                // PDF Contract - Full height viewer
                 <div className="space-y-2">
                   <div className="bg-gray-100 p-2 flex items-center justify-between">
                     <span className="text-sm font-medium text-gray-700">Contrato PDF</span>
@@ -393,7 +469,6 @@ em duas vias de igual teor e forma, na presença de duas testemunhas.
                   />
                 </div>
               ) : company.agencyContract?.type === "html" ? (
-                // HTML Contract
                 <div className="p-4 max-h-96 overflow-y-auto">
                   <div
                     className="prose prose-sm max-w-none whitespace-pre-wrap"
@@ -401,7 +476,6 @@ em duas vias de igual teor e forma, na presença de duas testemunhas.
                   />
                 </div>
               ) : (
-                // Default Contract Text
                 <div className="p-4 max-h-64 overflow-y-auto">
                   <pre className="whitespace-pre-wrap text-sm font-sans leading-relaxed text-gray-700">
                     {contractText}
@@ -478,7 +552,7 @@ em duas vias de igual teor e forma, na presença de duas testemunhas.
                 htmlFor="terms"
                 className="text-sm leading-tight cursor-pointer"
               >
-                Li e aceito os termos do contrato acima. Declaro que as informações fornecidas são verdadeiras e que tenho autorização para assinar em nome da empresa.
+                Li e aceito os termos do contrato acima. Declaro que as informacoes fornecidas sao verdadeiras e que tenho autorizacao para assinar em nome da empresa.
               </label>
             </div>
 

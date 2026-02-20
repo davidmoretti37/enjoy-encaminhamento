@@ -104,6 +104,16 @@ export const ENV = {
     },
   },
 
+  // Autentique Digital Signature Integration (optional)
+  autentique: {
+    apiKey: optionalEnv("AUTENTIQUE_API_KEY"),
+    sandbox: optionalEnv("AUTENTIQUE_SANDBOX", "true") === "true",
+    webhookSecret: optionalEnv("AUTENTIQUE_WEBHOOK_SECRET"),
+    isConfigured(): boolean {
+      return !!process.env.AUTENTIQUE_API_KEY;
+    },
+  },
+
   // Legacy fields (for backward compatibility with existing code)
   appId: optionalEnv("VITE_APP_ID"),
   cookieSecret: optionalEnv("JWT_SECRET"),
@@ -157,6 +167,10 @@ export function validateEnv(): { valid: boolean; errors: string[] } {
 
   if (!ENV.google.isConfigured()) {
     console.warn("[ENV] Google not configured - Google Meet will not work");
+  }
+
+  if (!ENV.autentique.isConfigured()) {
+    console.warn("[ENV] Autentique not configured - Digital signatures will not work");
   }
 
   return { valid: errors.length === 0, errors };

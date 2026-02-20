@@ -68,6 +68,17 @@ async function startServer() {
   // Stricter rate limiting for auth endpoints
   app.use("/api/trpc/auth", authRateLimiter);
 
+  // Autentique webhook (must be before tRPC middleware)
+  app.post("/api/webhooks/autentique", async (req, res) => {
+    try {
+      const handler = (await import("../../api/webhooks/autentique")).default;
+      return handler(req as any, res as any);
+    } catch (err: any) {
+      console.error("[Webhook] Failed to handle Autentique webhook:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // tRPC API
   app.use(
     "/api/trpc",

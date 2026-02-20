@@ -12,6 +12,8 @@ import { supabaseAdmin } from "../supabase";
 import { sendEmail } from "./email";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { createDocument as createAutentiqueDoc, isAutentiqueConfigured } from "../integrations/autentique";
+import { ENV } from "../_core/env";
 
 // ============================================
 // HIRING ROUTER
@@ -363,11 +365,144 @@ export const hiringRouter = router({
         });
       }
 
-      // Send invitation emails
+      // Get invitations and job info
       const invitations = await hiringDb.getSigningInvitationsByHiringProcess(process.id);
       const job = await db.getJobById(process.job_id);
 
-      for (const inv of invitations) {
+      // Upload templates to Autentique if configured
+      if (isAutentiqueConfigured()) {
+        try {
+          const agencyId = company?.agency_id;
+          if (agencyId) {
+            const categoryMap: Record<string, string> = {
+              "estagio": "estagio",
+              "clt": "clt",
+              "menor-aprendiz": "menor_aprendiz",
+            };
+            const category = categoryMap[process.hiring_type] || process.hiring_type;
+            const templates = await db.getDocumentTemplates(agencyId, category);
+
+            // Build signers list (all parties)
+            const autentiqueSigners: Array<{ email: string; name: string; action: "SIGN"; role: string }> = [];
+
+            // Company signer
+            if (company?.email) {
+              autentiqueSigners.push({
+                email: company.email,
+                name: company.company_name || "Empresa",
+                action: "SIGN",
+                role: "company",
+              });
+            }
+
+            // Candidate signer
+            if (candidate?.email) {
+              autentiqueSigners.push({
+                email: candidate.email,
+                name: candidate.full_name || "Candidato",
+                action: "SIGN",
+                role: "candidate",
+              });
+            }
+
+            // Parent signer (estágio)
+            if (candidate?.parent_guardian_email) {
+              autentiqueSigners.push({
+                email: candidate.parent_guardian_email,
+                name: candidate.parent_guardian_name || "Responsável",
+                action: "SIGN",
+                role: "parent_guardian",
+              });
+            }
+
+            // School signer (estágio)
+            if (candidate?.educational_institution_email) {
+              autentiqueSigners.push({
+                email: candidate.educational_institution_email,
+                name: candidate.educational_institution_name || "Instituição",
+                action: "SIGN",
+                role: "educational_institution",
+              });
+            }
+
+            const autentiqueDocIds: string[] = [];
+
+            for (const template of templates) {
+              // Download PDF from storage
+              const pdfResponse = await fetch(template.file_url);
+              const pdfBuffer = Buffer.from(await pdfResponse.arrayBuffer());
+
+              // Upload to Autentique with all signers
+              const result = await createAutentiqueDoc(
+                template.name,
+                pdfBuffer,
+                autentiqueSigners.map((s) => ({ email: s.email, name: s.name, action: s.action })),
+                {
+                  message: `Contrato de ${process.hiring_type} - ${candidate?.full_name} - ${company?.company_name}`,
+                  reminder: "WEEKLY",
+                  sortable: true,
+                }
+              );
+
+              autentiqueDocIds.push(result.documentId);
+
+              // Track in our DB
+              await db.createAutentiqueDocument({
+                autentiqueDocumentId: result.documentId,
+                documentName: template.name,
+                contextType: "hiring_contract",
+                contextId: process.id,
+                templateId: template.id,
+                signers: result.signers.map((apiSigner) => {
+                  // Match API signer to our role by email
+                  const ourSigner = autentiqueSigners.find((s) => s.email === apiSigner.email);
+                  return {
+                    role: ourSigner?.role || "unknown",
+                    email: apiSigner.email,
+                    name: apiSigner.name,
+                    autentiqueSignerId: apiSigner.public_id,
+                    signUrl: apiSigner.signUrl,
+                  };
+                }),
+              });
+
+              // Update signing_invitations with Autentique signer IDs and URLs
+              for (const apiSigner of result.signers) {
+                const matchingInvitation = invitations.find(
+                  (inv: any) => inv.signer_email === apiSigner.email
+                );
+                if (matchingInvitation) {
+                  await supabaseAdmin
+                    .from("signing_invitations")
+                    .update({
+                      autentique_document_id: result.documentId,
+                      autentique_signer_id: apiSigner.public_id,
+                      autentique_sign_url: apiSigner.signUrl,
+                    })
+                    .eq("id", matchingInvitation.id);
+                }
+              }
+            }
+
+            // Store Autentique doc IDs on hiring process
+            if (autentiqueDocIds.length > 0) {
+              await supabaseAdmin
+                .from("hiring_processes")
+                .update({ autentique_document_ids: autentiqueDocIds })
+                .eq("id", process.id);
+            }
+          }
+        } catch (autentiqueError: any) {
+          console.error("[Hiring] Autentique upload failed:", autentiqueError.message);
+          // Fall through to legacy email flow
+        }
+      }
+
+      // Send invitation emails (with Autentique URLs if available)
+      // Refresh invitations to get updated autentique_sign_url
+      const updatedInvitations = await hiringDb.getSigningInvitationsByHiringProcess(process.id);
+
+      for (const inv of updatedInvitations) {
         if (!inv.email_sent_at) {
           try {
             await sendSigningInvitationEmail(
@@ -871,6 +1006,7 @@ export const publicSigningRouter = router({
         signerRole: invitation.signer_role,
         signerName: invitation.signer_name,
         signerEmail: invitation.signer_email,
+        autentiqueSignUrl: invitation.autentique_sign_url || null,
         candidate: {
           name: process?.candidate?.full_name,
         },
@@ -1166,7 +1302,9 @@ async function sendSigningInvitationEmail(
   startDate: Date,
   candidateName?: string
 ): Promise<void> {
-  const signingUrl = `${process.env.FRONTEND_URL || "http://localhost:5173"}/assinar/${invitation.token}`;
+  // Use Autentique signing URL if available, otherwise fallback to our signing page
+  const baseUrl = ENV.appUrl;
+  const signingUrl = invitation.autentique_sign_url || `${baseUrl}/assinar/${invitation.token}`;
   const formattedDate = format(startDate, "dd 'de' MMMM 'de' yyyy", { locale: ptBR });
 
   const roleLabel = invitation.signer_role === "candidate"
@@ -1208,12 +1346,12 @@ async function sendSigningInvitationEmail(
             <p><strong>Início:</strong> ${formattedDate}</p>
           </div>
 
-          <p>Clique no botão abaixo para acessar o documento e assinar eletronicamente.</p>
+          <p>Clique no botão abaixo para acessar o documento e assinar digitalmente${invitation.autentique_sign_url ? " pela plataforma Autentique" : ""}.</p>
 
           <a href="${signingUrl}" class="button">Assinar Documento</a>
 
           <p style="margin-top: 24px; color: #666; font-size: 14px;">
-            Este link expira em 7 dias. Se tiver dúvidas, entre em contato com a empresa.
+            ${invitation.autentique_sign_url ? "Você também receberá um email da Autentique com o link para assinatura." : "Este link expira em 7 dias."} Se tiver dúvidas, entre em contato com a empresa.
           </p>
         </div>
       </div>

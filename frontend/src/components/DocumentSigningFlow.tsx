@@ -21,6 +21,8 @@ import {
   ChevronDown,
   ChevronUp,
   Eraser,
+  ExternalLink,
+  ShieldCheck,
 } from "lucide-react";
 
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
@@ -238,101 +240,128 @@ export default function DocumentSigningFlow({
       </div>
 
       {/* Document List */}
-      {data.templates.map((template: any) => (
-        <Card key={template.id} className={template.isSigned ? "border-green-200 bg-green-50/30" : ""}>
-          <CardHeader
-            className="cursor-pointer py-3"
-            onClick={() => {
-              if (!template.isSigned) {
-                setExpandedDoc(expandedDoc === template.id ? null : template.id);
-              }
-            }}
-          >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                {template.isSigned ? (
-                  <CheckCircle className="h-5 w-5 text-green-600" />
-                ) : (
-                  <FileText className="h-5 w-5 text-muted-foreground" />
-                )}
-                <CardTitle className="text-sm font-medium">{template.name}</CardTitle>
-              </div>
-              <div className="flex items-center gap-2">
-                {template.isSigned ? (
-                  <Badge className="bg-green-100 text-green-700">Assinado</Badge>
-                ) : (
-                  <>
-                    <Badge variant="outline">Pendente</Badge>
-                    {expandedDoc === template.id ? (
-                      <ChevronUp className="h-4 w-4" />
-                    ) : (
-                      <ChevronDown className="h-4 w-4" />
-                    )}
-                  </>
-                )}
-              </div>
-            </div>
-          </CardHeader>
+      {data.templates.map((template: any) => {
+        const hasAutentique = !!template.autentiqueSignUrl;
+        const autentiqueStatus = template.autentiqueStatus;
 
-          {/* Expanded signing form */}
-          {expandedDoc === template.id && !template.isSigned && (
-            <CardContent className="space-y-4 border-t pt-4">
-              {/* PDF pages with signature overlay on last page */}
-              <PdfWithSignature
-                fileUrl={template.file_url}
-                sigPadRef={sigPadRef}
-              />
-
-              {/* Signer info + submit */}
-              <div className="space-y-3">
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <Label>Nome Completo do Assinante</Label>
-                    <Input
-                      value={signerName}
-                      onChange={(e) => setSignerName(e.target.value)}
-                      placeholder="Nome completo"
-                    />
-                  </div>
-                  <div>
-                    <Label>CPF do Assinante</Label>
-                    <Input
-                      value={signerCpf}
-                      onChange={(e) => setSignerCpf(formatCpf(e.target.value))}
-                      placeholder="000.000.000-00"
-                      maxLength={14}
-                    />
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <Checkbox
-                    id={`terms-${template.id}`}
-                    checked={acceptedTerms}
-                    onCheckedChange={(checked) => setAcceptedTerms(!!checked)}
-                  />
-                  <label htmlFor={`terms-${template.id}`} className="text-sm">
-                    Li e concordo com os termos deste documento
-                  </label>
-                </div>
-
-                <Button
-                  onClick={() => handleSign(template.id)}
-                  disabled={signMutation.isPending}
-                  className="w-full"
-                >
-                  {signMutation.isPending ? (
-                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+        return (
+          <Card key={template.id} className={template.isSigned ? "border-green-200 bg-green-50/30" : ""}>
+            <CardHeader
+              className={!template.isSigned && !hasAutentique ? "cursor-pointer py-3" : "py-3"}
+              onClick={() => {
+                if (!template.isSigned && !hasAutentique) {
+                  setExpandedDoc(expandedDoc === template.id ? null : template.id);
+                }
+              }}
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  {template.isSigned ? (
+                    <CheckCircle className="h-5 w-5 text-green-600" />
+                  ) : hasAutentique ? (
+                    <ShieldCheck className="h-5 w-5 text-blue-600" />
                   ) : (
-                    <CheckCircle className="h-4 w-4 mr-2" />
+                    <FileText className="h-5 w-5 text-muted-foreground" />
                   )}
-                  Assinar Documento
-                </Button>
+                  <CardTitle className="text-sm font-medium">{template.name}</CardTitle>
+                </div>
+                <div className="flex items-center gap-2">
+                  {template.isSigned ? (
+                    <Badge className="bg-green-100 text-green-700">Assinado</Badge>
+                  ) : autentiqueStatus === "processing" ? (
+                    <Badge variant="secondary">Processando</Badge>
+                  ) : hasAutentique ? (
+                    <Badge variant="outline" className="border-blue-300 text-blue-700">Pendente (Autentique)</Badge>
+                  ) : (
+                    <>
+                      <Badge variant="outline">Pendente</Badge>
+                      {expandedDoc === template.id ? (
+                        <ChevronUp className="h-4 w-4" />
+                      ) : (
+                        <ChevronDown className="h-4 w-4" />
+                      )}
+                    </>
+                  )}
+                </div>
               </div>
-            </CardContent>
-          )}
-        </Card>
-      ))}
+            </CardHeader>
+
+            {/* Autentique signing action */}
+            {hasAutentique && !template.isSigned && (
+              <CardContent className="border-t pt-4 space-y-3">
+                <p className="text-sm text-muted-foreground">
+                  A assinatura deste documento será realizada pela plataforma Autentique com validade jurídica.
+                </p>
+                <Button
+                  className="w-full"
+                  onClick={() => window.open(template.autentiqueSignUrl, "_blank")}
+                >
+                  <ExternalLink className="h-4 w-4 mr-2" />
+                  Assinar na Autentique
+                </Button>
+              </CardContent>
+            )}
+
+            {/* Legacy expanded signing form */}
+            {!hasAutentique && expandedDoc === template.id && !template.isSigned && (
+              <CardContent className="space-y-4 border-t pt-4">
+                {/* PDF pages with signature overlay on last page */}
+                <PdfWithSignature
+                  fileUrl={template.file_url}
+                  sigPadRef={sigPadRef}
+                />
+
+                {/* Signer info + submit */}
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <Label>Nome Completo do Assinante</Label>
+                      <Input
+                        value={signerName}
+                        onChange={(e) => setSignerName(e.target.value)}
+                        placeholder="Nome completo"
+                      />
+                    </div>
+                    <div>
+                      <Label>CPF do Assinante</Label>
+                      <Input
+                        value={signerCpf}
+                        onChange={(e) => setSignerCpf(formatCpf(e.target.value))}
+                        placeholder="000.000.000-00"
+                        maxLength={14}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      id={`terms-${template.id}`}
+                      checked={acceptedTerms}
+                      onCheckedChange={(checked) => setAcceptedTerms(!!checked)}
+                    />
+                    <label htmlFor={`terms-${template.id}`} className="text-sm">
+                      Li e concordo com os termos deste documento
+                    </label>
+                  </div>
+
+                  <Button
+                    onClick={() => handleSign(template.id)}
+                    disabled={signMutation.isPending}
+                    className="w-full"
+                  >
+                    {signMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                    ) : (
+                      <CheckCircle className="h-4 w-4 mr-2" />
+                    )}
+                    Assinar Documento
+                  </Button>
+                </div>
+              </CardContent>
+            )}
+          </Card>
+        );
+      })}
 
       {data.allSigned && (
         <div className="flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded-lg text-green-700">

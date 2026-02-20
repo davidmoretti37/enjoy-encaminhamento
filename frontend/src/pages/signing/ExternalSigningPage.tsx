@@ -7,11 +7,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { CheckCircle, Loader2, XCircle, FileText, Eraser, Calendar, Building2, Briefcase, User, ExternalLink } from "lucide-react";
+import { CheckCircle, Loader2, XCircle, FileText, Eraser, Calendar, Building2, Briefcase, User, ExternalLink, ShieldCheck } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
-type Status = "loading" | "ready" | "signing" | "success" | "error" | "already_signed" | "expired";
+type Status = "loading" | "ready" | "autentique" | "signing" | "success" | "error" | "already_signed" | "expired";
 
 export default function ExternalSigningPage() {
   const { token } = useParams<{ token: string }>();
@@ -49,6 +49,8 @@ export default function ExternalSigningPage() {
     } else if (data) {
       if (data.alreadySigned) {
         setStatus("already_signed");
+      } else if ((data as any).autentiqueSignUrl) {
+        setStatus("autentique");
       } else {
         setStatus("ready");
       }
@@ -192,6 +194,18 @@ export default function ExternalSigningPage() {
             </>
           )}
 
+          {status === "autentique" && data && (
+            <>
+              <div className="flex justify-center mb-4">
+                <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center">
+                  <ShieldCheck className="h-10 w-10 text-blue-600" />
+                </div>
+              </div>
+              <CardTitle>Contrato de {data.hiringType === "clt" ? "Trabalho (CLT)" : data.hiringType === "menor-aprendiz" ? "Menor Aprendiz" : "Estágio"}</CardTitle>
+              <CardDescription>{getRoleDescription(data.signerRole)}</CardDescription>
+            </>
+          )}
+
           {(status === "ready" || status === "signing") && data && !data.alreadySigned && (
             <>
               <div className="flex justify-center mb-4">
@@ -205,6 +219,86 @@ export default function ExternalSigningPage() {
           )}
         </CardHeader>
 
+        {/* Autentique signing flow */}
+        {status === "autentique" && data && (
+          <CardContent className="space-y-6">
+            {/* Signer Info */}
+            <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-4">
+              <p className="text-sm text-indigo-700 font-medium mb-1">
+                Assinando como: {getRoleLabel(data.signerRole)}
+              </p>
+              <p className="text-lg font-semibold text-indigo-900">{data.signerName}</p>
+              <p className="text-sm text-indigo-600">{data.signerEmail}</p>
+            </div>
+
+            {/* Contract Details */}
+            <div className="bg-gray-50 rounded-lg p-4 space-y-3">
+              <h3 className="font-semibold text-gray-900">Detalhes do Contrato</h3>
+
+              {data.candidate?.name && (
+                <div className="flex items-center gap-2 text-sm">
+                  <User className="h-4 w-4 text-gray-500" />
+                  <span className="text-gray-600">Candidato:</span>
+                  <span className="font-medium">{data.candidate.name}</span>
+                </div>
+              )}
+
+              {data.company?.name && (
+                <div className="flex items-center gap-2 text-sm">
+                  <Building2 className="h-4 w-4 text-gray-500" />
+                  <span className="text-gray-600">Empresa:</span>
+                  <span className="font-medium">{data.company.name}</span>
+                </div>
+              )}
+
+              {data.job?.title && (
+                <div className="flex items-center gap-2 text-sm">
+                  <Briefcase className="h-4 w-4 text-gray-500" />
+                  <span className="text-gray-600">Vaga:</span>
+                  <span className="font-medium">{data.job.title}</span>
+                </div>
+              )}
+
+              {data.startDate && (
+                <div className="flex items-center gap-2 text-sm">
+                  <Calendar className="h-4 w-4 text-gray-500" />
+                  <span className="text-gray-600">Início:</span>
+                  <span className="font-medium">
+                    {format(new Date(data.startDate), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* Autentique signing info */}
+            <div className="bg-green-50 border border-green-200 rounded-lg p-4 space-y-2">
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="h-5 w-5 text-green-600" />
+                <span className="font-medium text-green-800">Assinatura Digital Certificada</span>
+              </div>
+              <p className="text-sm text-green-700">
+                A assinatura será realizada pela plataforma Autentique, garantindo validade jurídica
+                conforme a Lei 14.063/2020, com registro de IP, geolocalização e carimbo de tempo.
+              </p>
+            </div>
+
+            {/* Sign on Autentique Button */}
+            <Button
+              className="w-full"
+              size="lg"
+              onClick={() => window.open((data as any).autentiqueSignUrl, "_blank")}
+            >
+              <ExternalLink className="h-4 w-4 mr-2" />
+              Assinar na Autentique
+            </Button>
+
+            <p className="text-xs text-gray-500 text-center">
+              Você será redirecionado para a plataforma Autentique para realizar a assinatura digital.
+            </p>
+          </CardContent>
+        )}
+
+        {/* Legacy canvas signing flow */}
         {(status === "ready" || status === "signing") && data && !data.alreadySigned && (
           <CardContent className="space-y-6">
             {/* Signer Info */}

@@ -118,11 +118,37 @@ export const contractRouter = router({
 
       const signedTemplateIds = new Set(signedDocs.map((s: any) => s.template_id));
 
+      // Check for Autentique documents (signing happens on Autentique)
+      let autentiqueDocuments: any[] = [];
+      // Look for autentique docs linked to any hiring process for this company
+      // or check if there's a matching context
+      try {
+        const { data: hiringProcesses } = await (await import("../supabase")).supabaseAdmin
+          .from("hiring_processes")
+          .select("id, autentique_document_ids")
+          .eq("company_id", company?.id)
+          .not("autentique_document_ids", "eq", "{}");
+
+        if (hiringProcesses && hiringProcesses.length > 0) {
+          for (const hp of hiringProcesses) {
+            const docs = await db.getAutentiqueDocumentsByContext("hiring_contract", hp.id);
+            autentiqueDocuments.push(...docs);
+          }
+        }
+      } catch {
+        // autentique_documents table may not exist yet
+      }
+
       return {
-        templates: templates.map((t: any) => ({
-          ...t,
-          isSigned: signedTemplateIds.has(t.id),
-        })),
+        templates: templates.map((t: any) => {
+          const autentiqueDoc = autentiqueDocuments.find((d: any) => d.template_id === t.id);
+          return {
+            ...t,
+            isSigned: signedTemplateIds.has(t.id) || autentiqueDoc?.status === "signed",
+            autentiqueStatus: autentiqueDoc?.status || null,
+            autentiqueSignUrl: autentiqueDoc?.signers?.[0]?.sign_url || null,
+          };
+        }),
         signed: signedDocs,
         total: templates.length,
         signedCount: signedDocs.length,
@@ -130,7 +156,7 @@ export const contractRouter = router({
       };
     }),
 
-  // Sign a document
+  // Sign a document (legacy canvas signing - kept as fallback)
   signDocument: companyProcedure
     .input(z.object({
       templateId: z.string().uuid(),

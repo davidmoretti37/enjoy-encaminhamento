@@ -985,6 +985,21 @@ export async function sendContractToMeeting(meetingId: string, agencyId?: string
   return contractToken;
 }
 
+export async function updateScheduledMeeting(
+  meetingId: string,
+  updates: Record<string, any>
+): Promise<void> {
+  const { error } = await supabaseAdmin
+    .from("scheduled_meetings")
+    .update(updates)
+    .eq("id", meetingId);
+
+  if (error) {
+    console.error("[Scheduling] Failed to update meeting:", error);
+    throw error;
+  }
+}
+
 export async function getMeetingByContractToken(token: string): Promise<any | null> {
   const { data, error } = await supabaseAdmin
     .from("scheduled_meetings")

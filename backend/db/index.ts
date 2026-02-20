@@ -64,3 +64,6 @@ export * from "./interviews";
 
 // Hiring process operations
 export * from "./hiring";
+
+// Autentique document tracking operations
+export * from "./autentique";

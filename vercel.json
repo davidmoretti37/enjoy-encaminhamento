@@ -8,6 +8,7 @@
     }
   },
   "rewrites": [
+    { "source": "/api/webhooks/autentique", "destination": "/api/webhooks/autentique" },
     { "source": "/api/trpc/:path*", "destination": "/api/trpc" },
     { "source": "/trpc/:path*", "destination": "/api/trpc" },
     { "source": "/((?!api/).*)", "destination": "/" }

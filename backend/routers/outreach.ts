@@ -8,6 +8,7 @@ import { sendEmail } from "./email";
 import * as db from "../db";
 import { createZoomMeeting, isZoomConfigured } from "../integrations/zoom";
 import { createGoogleMeeting, isGoogleMeetConfigured } from "../integrations/googleMeet";
+import { createDocument as createAutentiqueDocument, isAutentiqueConfigured, getDocumentStatus as getAutentiqueDocStatus } from "../integrations/autentique";
 import { ENV } from "../_core/env";
 import { escapeHtml } from "../_core/htmlEscape";
 import { passwordSchema } from "../_core/passwordSchema";
@@ -663,22 +664,105 @@ export const outreachRouter = router({
 
       const contractToken = await db.sendContractToMeeting(input.meetingId, agencyId);
       const baseUrl = ENV.appUrl;
-      const contractLink = `${baseUrl}/contract/${contractToken}`;
 
+      // Upload templates to Autentique for digital signing
+      if (isAutentiqueConfigured() && agencyId) {
+        try {
+          const templates = await db.getDocumentTemplates(agencyId, "contrato_inicial");
+          const signerEmail = meeting.company_email;
+          const signerName = meeting.contact_name || meeting.company_name || "Representante";
+          const autentiqueDocIds: string[] = [];
+          let firstSignUrl = "";
+
+          for (const template of templates) {
+            // Download PDF from storage
+            const pdfResponse = await fetch(template.file_url);
+            const pdfBuffer = Buffer.from(await pdfResponse.arrayBuffer());
+
+            // Upload to Autentique
+            const result = await createAutentiqueDocument(
+              template.name,
+              pdfBuffer,
+              [{ email: signerEmail, name: signerName, action: "SIGN" }],
+              {
+                message: `Por favor, assine o documento "${template.name}" para formalizar nossa parceria.`,
+                reminder: "WEEKLY",
+              }
+            );
+
+            autentiqueDocIds.push(result.documentId);
+            if (!firstSignUrl && result.signers.length > 0) {
+              firstSignUrl = result.signers[0].signUrl;
+            }
+
+            // Track in our DB
+            await db.createAutentiqueDocument({
+              autentiqueDocumentId: result.documentId,
+              documentName: template.name,
+              contextType: "outreach_contract",
+              contextId: meeting.id,
+              templateId: template.id,
+              signers: result.signers.map((s) => ({
+                role: "company",
+                email: s.email,
+                name: s.name,
+                autentiqueSignerId: s.public_id,
+                signUrl: s.signUrl,
+              })),
+            });
+          }
+
+          // Store Autentique references on the meeting
+          if (autentiqueDocIds.length > 0) {
+            await db.updateScheduledMeeting(input.meetingId, {
+              autentique_document_ids: autentiqueDocIds,
+              autentique_sign_url: firstSignUrl,
+            });
+          }
+
+          // Send email with Autentique signing link
+          const contractLink = firstSignUrl || `${baseUrl}/contract/${contractToken}`;
+          await sendEmail(
+            meeting.company_email,
+            "Contrato de Parceria - Curriculos MVP",
+            `
+              <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                <h2 style="color: #1a365d;">Contrato de Parceria</h2>
+                <p>Ola${meeting.company_name ? ` ${meeting.company_name}` : ""},</p>
+                <p>Estamos muito felizes com a nossa parceria! Por favor, acesse o link abaixo para revisar e assinar o contrato digitalmente:</p>
+                <div style="text-align: center; margin: 30px 0;">
+                  <a href="${contractLink}" style="background-color: #3b82f6; color: white; padding: 14px 28px; text-decoration: none; border-radius: 8px; font-weight: bold; display: inline-block;">
+                    Assinar Contrato
+                  </a>
+                </div>
+                <p style="color: #666; font-size: 14px;">Voce tambem recebera um email da Autentique com o link para assinatura.</p>
+              </div>
+            `
+          );
+
+          return { success: true, contractToken };
+        } catch (autentiqueError: any) {
+          console.error("[Outreach] Autentique upload failed, falling back:", autentiqueError.message);
+          // Fall through to legacy email flow
+        }
+      }
+
+      // Fallback: send link to our signing page (if Autentique not configured or failed)
+      const contractLink = `${baseUrl}/contract/${contractToken}`;
       await sendEmail(
         meeting.company_email,
-        "Contrato de Parceria - Currículos MVP",
+        "Contrato de Parceria - Curriculos MVP",
         `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
             <h2 style="color: #1a365d;">Contrato de Parceria</h2>
-            <p>Olá${meeting.company_name ? ` ${meeting.company_name}` : ""},</p>
+            <p>Ola${meeting.company_name ? ` ${meeting.company_name}` : ""},</p>
             <p>Estamos muito felizes com a nossa parceria! Por favor, acesse o link abaixo para revisar e assinar o contrato digitalmente:</p>
             <div style="text-align: center; margin: 30px 0;">
               <a href="${contractLink}" style="background-color: #3b82f6; color: white; padding: 14px 28px; text-decoration: none; border-radius: 8px; font-weight: bold; display: inline-block;">
                 Assinar Contrato
               </a>
             </div>
-            <p style="color: #666; font-size: 14px;">Este link é válido por 7 dias.</p>
+            <p style="color: #666; font-size: 14px;">Este link e valido por 7 dias.</p>
           </div>
         `
       );
@@ -721,6 +805,22 @@ export const outreachRouter = router({
         }
       }
 
+      // Get Autentique signing status if available
+      let autentiqueStatus = null;
+      if (meeting.autentique_sign_url || (meeting.autentique_document_ids && meeting.autentique_document_ids.length > 0)) {
+        const autentiqueDocs = await db.getAutentiqueDocumentsByContext("outreach_contract", meeting.id);
+        const allSigned = autentiqueDocs.length > 0 && autentiqueDocs.every((d: any) => d.status === "signed");
+        autentiqueStatus = {
+          signingUrl: meeting.autentique_sign_url,
+          documents: autentiqueDocs.map((d: any) => ({
+            name: d.document_name,
+            status: d.status,
+            signedPdfUrl: d.signed_pdf_url,
+          })),
+          allSigned,
+        };
+      }
+
       return {
         id: meeting.id,
         company_name: meeting.company_name,
@@ -729,6 +829,7 @@ export const outreachRouter = router({
         contact_phone: meeting.contact_phone,
         contract_signed_at: meeting.contract_signed_at,
         registrationUrl,
+        autentiqueStatus,
         formData: formData
           ? {
               legal_name: formData.legal_name,
@@ -1117,8 +1218,63 @@ export const outreachRouter = router({
 
       const baseUrl = ENV.appUrl;
 
+      // Upload to Autentique if configured
+      let autentiqueSignUrl = "";
+      if (isAutentiqueConfigured() && agencyId) {
+        try {
+          const templates = await db.getDocumentTemplates(agencyId, "contrato_inicial");
+          const signerEmail = meeting.company_email;
+          const signerName = (form?.contact_person || form?.legal_name || meeting.contact_name || meeting.company_name || "Representante");
+          const autentiqueDocIds: string[] = [];
+
+          for (const template of templates) {
+            const pdfResponse = await fetch(template.file_url);
+            const pdfBuffer = Buffer.from(await pdfResponse.arrayBuffer());
+
+            const result = await createAutentiqueDocument(
+              template.name,
+              pdfBuffer,
+              [{ email: signerEmail, name: signerName, action: "SIGN" }],
+              {
+                message: `Por favor, assine o documento "${template.name}" para formalizar nossa parceria.`,
+                reminder: "WEEKLY",
+              }
+            );
+
+            autentiqueDocIds.push(result.documentId);
+            if (!autentiqueSignUrl && result.signers.length > 0) {
+              autentiqueSignUrl = result.signers[0].signUrl;
+            }
+
+            await db.createAutentiqueDocument({
+              autentiqueDocumentId: result.documentId,
+              documentName: template.name,
+              contextType: "outreach_contract",
+              contextId: meeting.id,
+              templateId: template.id,
+              signers: result.signers.map((s) => ({
+                role: "company",
+                email: s.email,
+                name: s.name,
+                autentiqueSignerId: s.public_id,
+                signUrl: s.signUrl,
+              })),
+            });
+          }
+
+          if (autentiqueDocIds.length > 0) {
+            await db.updateScheduledMeeting(input.meetingId, {
+              autentique_document_ids: autentiqueDocIds,
+              autentique_sign_url: autentiqueSignUrl,
+            });
+          }
+        } catch (autentiqueError: any) {
+          console.error("[Outreach] Autentique upload failed in acceptCompany:", autentiqueError.message);
+        }
+      }
+
       if (form) {
-        const contractLink = `${baseUrl}/contract/${contractToken}`;
+        const contractLink = autentiqueSignUrl || `${baseUrl}/contract/${contractToken}`;
 
         await sendEmail(
           meeting.company_email,
@@ -1133,7 +1289,7 @@ export const outreachRouter = router({
                   Assinar Contrato
                 </a>
               </div>
-              <p style="color: #666; font-size: 14px;">Este link e valido por 7 dias.</p>
+              ${autentiqueSignUrl ? '<p style="color: #666; font-size: 14px;">Voce tambem recebera um email da Autentique com o link para assinatura.</p>' : '<p style="color: #666; font-size: 14px;">Este link e valido por 7 dias.</p>'}
             </div>
           `
         );

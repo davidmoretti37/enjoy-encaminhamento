@@ -23,6 +23,8 @@ import {
   Eraser,
   PenLine,
   AlertCircle,
+  ExternalLink,
+  ShieldCheck,
 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -83,7 +85,22 @@ export default function CandidateSignContract() {
     sigRef.current?.clear();
   };
 
+  const getAutentiqueSignUrl = (process: any): string | null => {
+    const invitations = process.signing_invitations || [];
+    const candidateInvitation = invitations.find(
+      (inv: any) => inv.signer_role === "candidate" && inv.autentique_sign_url
+    );
+    return candidateInvitation?.autentique_sign_url || null;
+  };
+
   const handleOpenSign = (process: any) => {
+    // If Autentique URL available, redirect directly
+    const autentiqueUrl = getAutentiqueSignUrl(process);
+    if (autentiqueUrl) {
+      window.open(autentiqueUrl, "_blank");
+      return;
+    }
+
     setSelectedProcess(process);
     setShowSignDialog(true);
     setSignerCpf("");
@@ -173,6 +190,7 @@ export default function CandidateSignContract() {
             <CardContent className="space-y-4">
               {pendingSignature.map((process: any) => {
                 const progress = getSignatureProgress(process);
+                const hasAutentique = !!getAutentiqueSignUrl(process);
 
                 return (
                   <div key={process.id} className="bg-white rounded-lg p-4 border border-amber-200">
@@ -195,11 +213,26 @@ export default function CandidateSignContract() {
                             </Badge>
                           )}
                         </div>
+                        {hasAutentique && (
+                          <div className="flex items-center gap-1 text-xs text-green-600">
+                            <ShieldCheck className="h-3 w-3" />
+                            Assinatura digital certificada via Autentique
+                          </div>
+                        )}
                       </div>
 
                       <Button onClick={() => handleOpenSign(process)}>
-                        <PenLine className="h-4 w-4 mr-2" />
-                        Assinar Contrato
+                        {hasAutentique ? (
+                          <>
+                            <ExternalLink className="h-4 w-4 mr-2" />
+                            Assinar na Autentique
+                          </>
+                        ) : (
+                          <>
+                            <PenLine className="h-4 w-4 mr-2" />
+                            Assinar Contrato
+                          </>
+                        )}
                       </Button>
                     </div>
                   </div>
