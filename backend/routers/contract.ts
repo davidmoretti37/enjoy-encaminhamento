@@ -139,7 +139,9 @@ export const contractRouter = router({
 
           // 2. Check onboarding_contract context (self-service onboarding)
           const contextId = company?.id || ctx.user.id;
+          console.log(`[Contract] Looking up onboarding_contract docs for contextId=${contextId}`);
           const onboardingDocs = await db.getAutentiqueDocumentsByContext("onboarding_contract", contextId);
+          console.log(`[Contract] Found ${onboardingDocs.length} onboarding Autentique docs`);
           autentiqueDocuments.push(...onboardingDocs);
         }
 
@@ -158,8 +160,8 @@ export const contractRouter = router({
             }
           }
         }
-      } catch {
-        // autentique_documents table may not exist yet
+      } catch (err: any) {
+        console.error("[Contract] Error looking up Autentique docs:", err?.message || err);
       }
 
       const enrichedTemplates = templates.map((t: any) => {
@@ -248,6 +250,8 @@ export const contractRouter = router({
             }
           );
 
+          console.log(`[Contract] Autentique doc created on API: ${result.documentId}, signUrl=${result.signers[0]?.signUrl || "EMPTY"}`);
+
           await db.createAutentiqueDocument({
             autentiqueDocumentId: result.documentId,
             documentName: template.name,
@@ -262,9 +266,10 @@ export const contractRouter = router({
               signUrl: s.signUrl,
             })),
           });
+          console.log(`[Contract] Autentique doc stored in DB: template=${template.name}, contextId=${contextId}`);
           count++;
-        } catch (err) {
-          console.error(`[Contract] Failed to create Autentique doc for template ${template.name}:`, err);
+        } catch (err: any) {
+          console.error(`[Contract] Failed to store Autentique doc for ${template.name}:`, err?.message || err);
         }
       }
 

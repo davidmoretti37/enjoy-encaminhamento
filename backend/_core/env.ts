@@ -107,7 +107,7 @@ export const ENV = {
   // Autentique Digital Signature Integration (optional)
   autentique: {
     apiKey: optionalEnv("AUTENTIQUE_API_KEY"),
-    sandbox: optionalEnv("AUTENTIQUE_SANDBOX", "true") === "true",
+    sandbox: optionalEnv("AUTENTIQUE_SANDBOX", "false") === "true",
     webhookSecret: optionalEnv("AUTENTIQUE_WEBHOOK_SECRET"),
     isConfigured(): boolean {
       return !!process.env.AUTENTIQUE_API_KEY;

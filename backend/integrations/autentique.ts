@@ -188,7 +188,8 @@ export async function createDocument(
 
   const doc = result.data.createDocument;
 
-  console.log(`[Autentique] Document created: ${doc.id}`);
+  console.log(`[Autentique] Document created: ${doc.id}, sandbox=${sandbox}`);
+  console.log(`[Autentique] Signatures:`, JSON.stringify(doc.signatures?.map((s: any) => ({ id: s.public_id, link: s.link })) || []));
 
   return {
     documentId: doc.id,
