@@ -296,6 +296,7 @@ export const hiringRouter = router({
       monthlyFee: z.number().int().min(0), // In cents
       paymentDay: z.number().int().min(1).max(28),
       monthlySalary: z.number().int().min(0).optional(), // In cents
+      selectedTemplateIds: z.array(z.string().uuid()).min(1), // Agency selects which documents to send
     }))
     .mutation(async ({ input }) => {
       const process = await hiringDb.getHiringProcessById(input.hiringProcessId);
@@ -321,6 +322,7 @@ export const hiringRouter = router({
           contract_duration_months: input.durationMonths,
           end_date: endDateStr,
           monthly_salary: input.monthlySalary || process.monthly_salary,
+          selected_template_ids: input.selectedTemplateIds,
           status: "pending_signatures",
         })
         .eq("id", input.hiringProcessId);
@@ -374,13 +376,8 @@ export const hiringRouter = router({
         try {
           const agencyId = company?.agency_id;
           if (agencyId) {
-            const categoryMap: Record<string, string> = {
-              "estagio": "estagio",
-              "clt": "clt",
-              "menor-aprendiz": "menor_aprendiz",
-            };
-            const category = categoryMap[process.hiring_type] || process.hiring_type;
-            const templates = await db.getDocumentTemplates(agencyId, category);
+            // Use only the templates selected by the agency
+            const templates = await db.getDocumentTemplatesByIds(input.selectedTemplateIds);
 
             // Build signers list (all parties)
             const autentiqueSigners: Array<{ email: string; name: string; action: "SIGN"; role: string }> = [];
@@ -576,6 +573,24 @@ export const hiringRouter = router({
     }),
 
   /**
+   * Get selected contract documents for a hiring process (company-facing)
+   */
+  getHiringProcessDocuments: companyProcedure
+    .input(z.object({
+      hiringProcessId: z.string().uuid(),
+    }))
+    .query(async ({ ctx, input }) => {
+      const company = await db.getCompanyByUserId(ctx.user.id);
+      if (!company) return [];
+
+      const process = await hiringDb.getHiringProcessById(input.hiringProcessId);
+      if (!process || process.company_id !== company.id) return [];
+      if (!process.selected_template_ids?.length) return [];
+
+      return await db.getDocumentTemplatesByIds(process.selected_template_ids);
+    }),
+
+  /**
    * Company signs the contract
    */
   signAsCompany: companyProcedure
@@ -624,43 +639,82 @@ export const hiringRouter = router({
 
       // If estágio and all signed, create follow-ups and generate payments
       if (signatureStatus.complete && process.hiring_type === "estagio") {
-        const startDate = new Date(process.start_date);
-
-        // Create follow-up schedule
-        await hiringDb.createEstagioFollowUps(
-          input.hiringProcessId,
-          process.contract_id,
-          company.id,
-          startDate
-        );
-
-        // Generate recurring payments using configured values
-        const paymentDay = process.payment_day || hiringDb.calculatePaymentDay(startDate);
-        const monthlyFee = process.calculated_fee;
-        const durationMonths = process.contract_duration_months || 12;
-
-        for (let i = 0; i < durationMonths; i++) {
-          const dueDate = new Date(startDate);
-          dueDate.setMonth(dueDate.getMonth() + i);
-          dueDate.setDate(paymentDay);
-
-          await db.createPayment({
-            contract_id: process.contract_id || undefined,
-            company_id: company.id,
-            amount: monthlyFee,
-            payment_type: "monthly-fee",
-            due_date: dueDate.toISOString(),
-            status: "pending",
-            billing_period: `${dueDate.getFullYear()}-${String(dueDate.getMonth() + 1).padStart(2, "0")}`,
-            notes: `Taxa mensal estágio - ${process.candidate?.full_name}`,
-          });
-        }
+        await handleEstagioSignaturesComplete(input.hiringProcessId, process, company);
       }
 
       return {
         success: true,
         signatureStatus,
       };
+    }),
+
+  /**
+   * Confirm company signed via Autentique (called when DocumentSigningFlow reports all docs signed)
+   */
+  confirmCompanyAutentiqueSign: companyProcedure
+    .input(z.object({
+      hiringProcessId: z.string().uuid(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const company = await db.getCompanyByUserId(ctx.user.id);
+      if (!company) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Company not found" });
+      }
+
+      const process = await hiringDb.getHiringProcessById(input.hiringProcessId);
+      if (!process || process.company_id !== company.id) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Not authorized" });
+      }
+
+      if (process.company_signed) {
+        return { success: true, alreadySigned: true };
+      }
+
+      // Verify on Autentique that the company actually signed
+      const { data: autentiqueDocs } = await supabaseAdmin
+        .from("autentique_documents")
+        .select("*")
+        .eq("context_type", "hiring_contract")
+        .eq("context_id", input.hiringProcessId);
+
+      if (autentiqueDocs && autentiqueDocs.length > 0) {
+        // Check that the company signer has signed all documents
+        const companyEmail = company.email;
+        const allSignedByCompany = autentiqueDocs.every((doc: any) => {
+          const companySigner = doc.signers?.find((s: any) => s.email === companyEmail);
+          return companySigner?.signed_at != null;
+        });
+
+        if (!allSignedByCompany) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "A empresa ainda não assinou todos os documentos na Autentique",
+          });
+        }
+      }
+
+      // Record company signature
+      await supabaseAdmin
+        .from("hiring_processes")
+        .update({
+          company_signed: true,
+          company_signed_at: new Date().toISOString(),
+        })
+        .eq("id", input.hiringProcessId);
+
+      // Check if all signatures complete
+      const signatureStatus = await hiringDb.checkAllSignaturesComplete(input.hiringProcessId);
+
+      if (signatureStatus.complete && !signatureStatus.wasAlreadyComplete) {
+        await sendSignaturesCompleteNotifications(input.hiringProcessId, process, company);
+      }
+
+      // If estágio and all signed, create follow-ups and generate payments
+      if (signatureStatus.complete && process.hiring_type === "estagio") {
+        await handleEstagioSignaturesComplete(input.hiringProcessId, process, company);
+      }
+
+      return { success: true, signatureStatus };
     }),
 
   /**
@@ -707,6 +761,144 @@ export const hiringRouter = router({
       await hiringDb.markInvitationEmailSent(input.invitationId);
 
       return { success: true };
+    }),
+
+  /**
+   * Company adds a missing signer (parent/school) to an existing hiring process.
+   * Creates signing_invitation + adds signer to Autentique documents.
+   */
+  addMissingSigner: companyProcedure
+    .input(z.object({
+      hiringProcessId: z.string().uuid(),
+      signerRole: z.enum(["parent_guardian", "educational_institution"]),
+      signerName: z.string().min(1),
+      signerEmail: z.string().email(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const company = await db.getCompanyByUserId(ctx.user.id);
+      if (!company) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Company not found" });
+      }
+
+      const process = await hiringDb.getHiringProcessById(input.hiringProcessId);
+      if (!process || process.company_id !== company.id) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Not authorized" });
+      }
+
+      // Check no existing invitation for this role
+      const existingInvitations = await hiringDb.getSigningInvitationsByHiringProcess(input.hiringProcessId);
+      const alreadyExists = existingInvitations.find(
+        (inv: any) => inv.signer_role === input.signerRole && !inv.signed_at
+      );
+      if (alreadyExists) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Já existe um convite de assinatura para este papel",
+        });
+      }
+
+      // Update candidate profile with the new contact info
+      const candidate = await db.getCandidateById(process.candidate_id);
+      if (!candidate) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Candidate not found" });
+      }
+
+      if (input.signerRole === "parent_guardian") {
+        await db.updateCandidate(candidate.id, {
+          parent_guardian_name: input.signerName,
+          parent_guardian_email: input.signerEmail,
+        });
+      } else {
+        await db.updateCandidate(candidate.id, {
+          educational_institution_name: input.signerName,
+          educational_institution_email: input.signerEmail,
+        });
+      }
+
+      // Create signing invitation
+      const invitation = await hiringDb.createSigningInvitation({
+        hiringProcessId: input.hiringProcessId,
+        signerRole: input.signerRole,
+        signerName: input.signerName,
+        signerEmail: input.signerEmail,
+      });
+
+      // Add signer to existing Autentique documents
+      let autentiqueSignUrl: string | null = null;
+      if (isAutentiqueConfigured() && process.autentique_document_ids?.length) {
+        try {
+          const { addSignerToDocument } = await import("../integrations/autentique");
+
+          for (const docId of process.autentique_document_ids) {
+            const result = await addSignerToDocument(docId, {
+              name: input.signerName,
+              action: "SIGN",
+            });
+
+            if (!autentiqueSignUrl && result.signUrl) {
+              autentiqueSignUrl = result.signUrl;
+            }
+
+            // Update autentique_documents tracking record
+            const autentiqueDoc = await db.getAutentiqueDocumentByAutentiqueId(docId);
+            if (autentiqueDoc) {
+              const updatedSigners = [
+                ...(autentiqueDoc.signers as any[]),
+                {
+                  role: input.signerRole,
+                  email: input.signerEmail,
+                  name: input.signerName,
+                  autentique_signer_id: result.signerId,
+                  sign_url: result.signUrl,
+                  signed_at: null,
+                },
+              ];
+              await supabaseAdmin
+                .from("autentique_documents")
+                .update({ signers: updatedSigners })
+                .eq("autentique_document_id", docId);
+            }
+          }
+
+          // Update the signing invitation with Autentique info
+          if (autentiqueSignUrl) {
+            await supabaseAdmin
+              .from("signing_invitations")
+              .update({
+                autentique_sign_url: autentiqueSignUrl,
+                autentique_document_id: process.autentique_document_ids[0],
+              })
+              .eq("id", invitation.id);
+          }
+        } catch (err: any) {
+          console.error("[Hiring] Failed to add signer to Autentique:", err.message);
+          // Fall through - invitation still works via fallback flow
+        }
+      }
+
+      // Send invitation email
+      const job = await db.getJobById(process.job_id);
+      try {
+        const updatedInvitation = await hiringDb.getSigningInvitationById(invitation.id);
+        await sendSigningInvitationEmail(
+          updatedInvitation || invitation,
+          input.signerName,
+          company.company_name || "Empresa",
+          job?.title || "Vaga",
+          new Date(process.start_date),
+          candidate.full_name
+        );
+        await hiringDb.markInvitationEmailSent(invitation.id);
+      } catch (err) {
+        console.error(`[Hiring] Failed to send invitation email to ${input.signerEmail}:`, err);
+      }
+
+      return {
+        success: true,
+        invitationId: invitation.id,
+        token: invitation.token,
+        autentiqueSignUrl,
+      };
     }),
 
   /**
@@ -979,25 +1171,14 @@ export const publicSigningRouter = router({
 
       const process = invitation.hiring_process;
 
-      // Fetch the contract templates for the specific employee type from agency_document_templates
+      // Fetch only the selected contract templates for this hiring process
       let contractTemplates: { name: string; fileUrl: string }[] = [];
-      const agencyId = process?.company?.agency_id;
-      const hiringType = process?.hiring_type || process?.job?.contract_type;
-      if (agencyId && hiringType) {
-        // Map hiring_type to template category (menor-aprendiz → menor_aprendiz)
-        const categoryMap: Record<string, string> = {
-          "estagio": "estagio",
-          "clt": "clt",
-          "menor-aprendiz": "menor_aprendiz",
-        };
-        const category = categoryMap[hiringType];
-        if (category) {
-          const templates = await db.getDocumentTemplates(agencyId, category);
-          contractTemplates = templates.map((t: any) => ({
-            name: t.name,
-            fileUrl: t.file_url,
-          }));
-        }
+      if (process?.selected_template_ids?.length) {
+        const templates = await db.getDocumentTemplatesByIds(process.selected_template_ids);
+        contractTemplates = templates.map((t: any) => ({
+          name: t.name,
+          fileUrl: t.file_url,
+        }));
       }
 
       return {
@@ -1117,6 +1298,47 @@ export const publicSigningRouter = router({
 // ============================================
 // HELPER FUNCTIONS
 // ============================================
+
+/**
+ * Handle estágio follow-ups and payment generation when all signatures complete
+ */
+async function handleEstagioSignaturesComplete(
+  hiringProcessId: string,
+  process: any,
+  company: any
+): Promise<void> {
+  const startDate = new Date(process.start_date);
+
+  // Create follow-up schedule
+  await hiringDb.createEstagioFollowUps(
+    hiringProcessId,
+    process.contract_id,
+    company.id,
+    startDate
+  );
+
+  // Generate recurring payments using configured values
+  const paymentDay = process.payment_day || hiringDb.calculatePaymentDay(startDate);
+  const monthlyFee = process.calculated_fee;
+  const durationMonths = process.contract_duration_months || 12;
+
+  for (let i = 0; i < durationMonths; i++) {
+    const dueDate = new Date(startDate);
+    dueDate.setMonth(dueDate.getMonth() + i);
+    dueDate.setDate(paymentDay);
+
+    await db.createPayment({
+      contract_id: process.contract_id || undefined,
+      company_id: company.id,
+      amount: monthlyFee,
+      payment_type: "monthly-fee",
+      due_date: dueDate.toISOString(),
+      status: "pending",
+      billing_period: `${dueDate.getFullYear()}-${String(dueDate.getMonth() + 1).padStart(2, "0")}`,
+      notes: `Taxa mensal estágio - ${process.candidate?.full_name}`,
+    });
+  }
+}
 
 /**
  * Send notifications when all signatures are complete

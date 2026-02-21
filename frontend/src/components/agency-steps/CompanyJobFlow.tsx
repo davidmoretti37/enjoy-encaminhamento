@@ -54,6 +54,8 @@ import {
   Send,
   Copy,
   Link,
+  FileText,
+  ExternalLink,
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { Progress } from '@/components/ui/progress';
@@ -119,7 +121,25 @@ function MatchedCandidatesList({ jobId, onGroupCreated }: { jobId: string; onGro
   const [showAll, setShowAll] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
+  // Manual search state
+  const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
+  const [manualCandidates, setManualCandidates] = useState<any[]>([]);
+  const [searchFocused, setSearchFocused] = useState(false);
+
   const utils = trpc.useUtils();
+
+  // Debounce search query
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedQuery(searchQuery), 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  // Search candidates by name
+  const { data: searchResults } = trpc.agency.searchCandidatesByName.useQuery(
+    { query: debouncedQuery },
+    { enabled: debouncedQuery.length >= 2 }
+  );
 
   // Check if a batch already exists for this job
   const { data: existingBatches } = trpc.batch.getBatchesByJobId.useQuery(
@@ -137,6 +157,7 @@ function MatchedCandidatesList({ jobId, onGroupCreated }: { jobId: string; onGro
     onSuccess: () => {
       toast.success(`Grupo criado com ${selectedIds.size} candidato(s)!`);
       setSelectedIds(new Set());
+      setManualCandidates([]);
       utils.batch.getBatchesByJobId.invalidate({ jobId });
       onGroupCreated?.();
     },
@@ -149,6 +170,7 @@ function MatchedCandidatesList({ jobId, onGroupCreated }: { jobId: string; onGro
     onSuccess: () => {
       toast.success(`${selectedIds.size} candidato(s) adicionado(s) ao grupo!`);
       setSelectedIds(new Set());
+      setManualCandidates([]);
       utils.batch.getBatchesByJobId.invalidate({ jobId });
       onGroupCreated?.();
     },
@@ -180,7 +202,34 @@ function MatchedCandidatesList({ jobId, onGroupCreated }: { jobId: string; onGro
     }
   };
 
+  const addManualCandidate = (candidate: any) => {
+    // Don't add duplicates
+    if (manualCandidates.some((c) => c.id === candidate.id)) return;
+    setManualCandidates(prev => [...prev, candidate]);
+    setSelectedIds(prev => new Set([...prev, candidate.id]));
+    setSearchQuery('');
+    setSearchFocused(false);
+  };
+
+  const removeManualCandidate = (candidateId: string) => {
+    setManualCandidates(prev => prev.filter(c => c.id !== candidateId));
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      next.delete(candidateId);
+      return next;
+    });
+  };
+
   const isMutating = createBatchMutation.isPending || addCandidatesMutation.isPending;
+
+  // IDs already in AI matches or manually added
+  const aiMatchedIds = new Set((data?.matches || []).map((m: any) => m.candidateId));
+  const manualIds = new Set(manualCandidates.map((c) => c.id));
+
+  // Filter search results to exclude already-added candidates
+  const filteredSearchResults = (searchResults || []).filter(
+    (r: any) => !aiMatchedIds.has(r.id) && !manualIds.has(r.id)
+  );
 
   if (isLoading) {
     return (
@@ -196,25 +245,118 @@ function MatchedCandidatesList({ jobId, onGroupCreated }: { jobId: string; onGro
     );
   }
 
-  if (!data?.matches || data.matches.length === 0) {
-    return null;
-  }
-
   // Filter by min score on the client
-  const filteredMatches = data.matches.filter((m: any) => m.compositeScore >= minScore);
+  const matches = data?.matches || [];
+  const filteredMatches = matches.filter((m: any) => m.compositeScore >= minScore);
   const displayedMatches = showAll ? filteredMatches : filteredMatches.slice(0, 10);
 
   return (
     <div className="mt-4">
-      {/* Header with filter */}
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <Users className="h-4 w-4 text-orange-600" />
-          <h4 className="text-sm font-medium text-gray-700">
-            Candidatos Compatíveis ({filteredMatches.length})
-          </h4>
+      {/* Manual search */}
+      <div className="mb-4">
+        <div className="flex items-center gap-2 mb-2">
+          <Search className="h-4 w-4 text-gray-500" />
+          <h4 className="text-sm font-medium text-gray-700">Buscar candidato manualmente</h4>
+        </div>
+        <div className="relative">
+          <Input
+            placeholder="Digite o nome do candidato..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            onFocus={() => setSearchFocused(true)}
+            onBlur={() => setTimeout(() => setSearchFocused(false), 200)}
+            className="w-full"
+          />
+          {/* Search results dropdown */}
+          {searchFocused && debouncedQuery.length >= 2 && (
+            <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-20 max-h-60 overflow-y-auto">
+              {filteredSearchResults.length > 0 ? (
+                filteredSearchResults.map((candidate: any) => (
+                  <button
+                    key={candidate.id}
+                    className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-gray-50 text-left transition-colors border-b border-gray-100 last:border-0"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => addManualCandidate(candidate)}
+                  >
+                    <div className="h-8 w-8 rounded-full bg-[#0A2342] flex items-center justify-center text-white font-medium text-xs shrink-0">
+                      {candidate.full_name?.charAt(0)?.toUpperCase() || '?'}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-900 truncate">{candidate.full_name}</p>
+                      <p className="text-xs text-gray-500 truncate">
+                        {[candidate.city, candidate.state, candidate.education_level].filter(Boolean).join(' · ')}
+                      </p>
+                    </div>
+                    <Plus className="h-4 w-4 text-gray-400 shrink-0" />
+                  </button>
+                ))
+              ) : (
+                <div className="px-3 py-4 text-center text-sm text-gray-500">
+                  Nenhum candidato encontrado
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
+
+      {/* Manually added candidates */}
+      {manualCandidates.length > 0 && (
+        <div className="mb-4">
+          <div className="flex items-center gap-2 mb-2">
+            <UserPlus className="h-4 w-4 text-blue-600" />
+            <h4 className="text-sm font-medium text-gray-700">
+              Adicionados Manualmente ({manualCandidates.length})
+            </h4>
+          </div>
+          <div className="space-y-2">
+            {manualCandidates.map((candidate: any) => (
+              <Card key={candidate.id} className="overflow-hidden">
+                <div className="w-full p-4 text-left flex items-center gap-3">
+                  <div className="shrink-0" onClick={(e) => e.stopPropagation()}>
+                    <Checkbox
+                      checked={selectedIds.has(candidate.id)}
+                      onCheckedChange={() => toggleSelection(candidate.id)}
+                      className="h-4.5 w-4.5"
+                    />
+                  </div>
+                  <div className="h-10 w-10 rounded-full bg-blue-700 flex items-center justify-center text-white font-medium text-sm shrink-0">
+                    {candidate.full_name?.charAt(0)?.toUpperCase() || '?'}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-gray-900 text-sm truncate">{candidate.full_name}</p>
+                    <p className="text-xs text-gray-500 truncate">
+                      {[candidate.city, candidate.state, candidate.education_level].filter(Boolean).join(' · ')}
+                    </p>
+                  </div>
+                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-blue-50 text-blue-700 border-blue-200 shrink-0">
+                    Manual
+                  </Badge>
+                  <button
+                    onClick={() => removeManualCandidate(candidate.id)}
+                    className="text-gray-400 hover:text-red-500 transition-colors shrink-0 p-1"
+                    title="Remover"
+                  >
+                    <span className="text-xs font-medium">x</span>
+                  </button>
+                </div>
+              </Card>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* AI-matched candidates header */}
+      {matches.length > 0 && (
+        <>
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <Users className="h-4 w-4 text-orange-600" />
+              <h4 className="text-sm font-medium text-gray-700">
+                Candidatos Compatíveis ({filteredMatches.length})
+              </h4>
+            </div>
+          </div>
 
       {/* Score filter */}
       {data.matches.length > 5 && (
@@ -478,6 +620,8 @@ function MatchedCandidatesList({ jobId, onGroupCreated }: { jobId: string; onGro
           Mostrar menos
         </Button>
       )}
+        </>
+      )}
 
       {/* Floating selection action bar */}
       {selectedIds.size > 0 && (
@@ -707,6 +851,37 @@ function ConfigureContractButton({
   const [monthlySalary, setMonthlySalary] = useState(
     hiringProcess.monthly_salary ? String(hiringProcess.monthly_salary / 100) : ''
   );
+  const [selectedTemplateIds, setSelectedTemplateIds] = useState<string[]>([]);
+
+  // Map hiring type to template category
+  const categoryMap: Record<string, string> = {
+    estagio: 'estagio',
+    clt: 'clt',
+    'menor-aprendiz': 'menor_aprendiz',
+  };
+  const templateCategory = categoryMap[hiringProcess.hiring_type] || hiringProcess.hiring_type;
+
+  // Fetch available document templates for this hiring type
+  const { data: templates, isLoading: templatesLoading } = trpc.agency.getDocumentTemplates.useQuery(
+    { category: templateCategory },
+    {
+      enabled: open,
+      onSuccess: (data: any[]) => {
+        // Select all by default when first loaded
+        if (selectedTemplateIds.length === 0 && data.length > 0) {
+          setSelectedTemplateIds(data.map((t: any) => t.id));
+        }
+      },
+    }
+  );
+
+  const toggleTemplate = (templateId: string) => {
+    setSelectedTemplateIds((prev) =>
+      prev.includes(templateId)
+        ? prev.filter((id) => id !== templateId)
+        : [...prev, templateId]
+    );
+  };
 
   const mutation = trpc.hiring.configureAndSendContract.useMutation({
     onSuccess: () => {
@@ -718,6 +893,11 @@ function ConfigureContractButton({
   });
 
   const handleSubmit = () => {
+    if (selectedTemplateIds.length === 0) {
+      toast.error('Selecione pelo menos um documento');
+      return;
+    }
+
     const feeInCents = Math.round(parseFloat(monthlyFee || '0') * 100);
     const salaryInCents = monthlySalary ? Math.round(parseFloat(monthlySalary) * 100) : undefined;
 
@@ -727,6 +907,7 @@ function ConfigureContractButton({
       monthlyFee: feeInCents,
       paymentDay: parseInt(paymentDay),
       monthlySalary: salaryInCents,
+      selectedTemplateIds,
     });
   };
 
@@ -742,7 +923,7 @@ function ConfigureContractButton({
       </Button>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-md" onClick={(e) => e.stopPropagation()}>
+        <DialogContent className="max-w-lg" onClick={(e) => e.stopPropagation()}>
           <DialogHeader>
             <DialogTitle>Configurar Contrato</DialogTitle>
             <DialogDescription>
@@ -750,7 +931,59 @@ function ConfigureContractButton({
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4 py-2">
+          <div className="space-y-4 py-2 max-h-[60vh] overflow-y-auto">
+            {/* Document selection */}
+            <div className="space-y-2">
+              <Label className="flex items-center gap-1.5">
+                <FileText className="w-4 h-4" />
+                Documentos do contrato
+              </Label>
+              {templatesLoading ? (
+                <div className="flex items-center gap-2 py-3 text-sm text-slate-500">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Carregando documentos...
+                </div>
+              ) : templates && templates.length > 0 ? (
+                <div className="space-y-1.5">
+                  {templates.map((template: any) => (
+                    <label
+                      key={template.id}
+                      className={`flex items-center gap-3 p-2.5 rounded-lg border cursor-pointer transition-colors ${
+                        selectedTemplateIds.includes(template.id)
+                          ? 'border-purple-300 bg-purple-50'
+                          : 'border-slate-200 hover:border-slate-300'
+                      }`}
+                    >
+                      <Checkbox
+                        checked={selectedTemplateIds.includes(template.id)}
+                        onCheckedChange={() => toggleTemplate(template.id)}
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-[#0A2342] truncate">{template.name}</p>
+                      </div>
+                      <a
+                        href={template.file_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        className="text-slate-400 hover:text-purple-600 transition-colors shrink-0"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" />
+                      </a>
+                    </label>
+                  ))}
+                  <p className="text-xs text-slate-500">
+                    {selectedTemplateIds.length} de {templates.length} documento{templates.length !== 1 ? 's' : ''} selecionado{selectedTemplateIds.length !== 1 ? 's' : ''}
+                  </p>
+                </div>
+              ) : (
+                <div className="p-3 rounded-lg border border-amber-200 bg-amber-50 text-sm text-amber-700">
+                  Nenhum documento cadastrado para este tipo de contrato.
+                  Cadastre documentos nas configurações da agência.
+                </div>
+              )}
+            </div>
+
             <div className="space-y-1.5">
               <Label>Duração do contrato</Label>
               <Select value={durationMonths} onValueChange={setDurationMonths}>
@@ -826,7 +1059,7 @@ function ConfigureContractButton({
             </Button>
             <Button
               onClick={handleSubmit}
-              disabled={mutation.isPending || !monthlyFee}
+              disabled={mutation.isPending || !monthlyFee || selectedTemplateIds.length === 0}
               className="bg-purple-600 hover:bg-purple-700"
             >
               {mutation.isPending ? (

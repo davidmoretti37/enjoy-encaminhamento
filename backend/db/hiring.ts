@@ -213,7 +213,7 @@ export async function getHiringProcessesByCompany(
       *,
       candidate:candidates(id, full_name, email, phone),
       job:jobs(id, title, contract_type),
-      signing_invitations:signing_invitations(id, signer_role, signer_name, signed_at, email_sent_at, viewed_at)
+      signing_invitations:signing_invitations(id, signer_role, signer_name, signer_email, signed_at, email_sent_at, viewed_at, token, autentique_sign_url)
     `)
     .eq("company_id", companyId);
 

@@ -7,6 +7,8 @@ import { publicProcedure } from "../_core/trpc";
 import { adminProcedure, agencyProcedure } from "./procedures";
 import { sendEmail } from "./email";
 import * as db from "../db";
+import { supabaseAdmin } from "../supabase";
+import { generateCompanySummary } from "../services/ai/summarizer";
 import { ENV } from "../_core/env";
 import { parseExcelWithAI, suggestColumnMappings as suggestColumnMappingsAI, identifyBasicColumns, suggestCompanyColumnMappings, getCompanyFieldsList } from "../services/ai/columnMapper";
 
@@ -226,6 +228,27 @@ export const agencyRouter = router({
     }
     return await db.getCandidatesByAgencyId(agency.id);
   }),
+
+  // Search candidates by name (for manual selection)
+  searchCandidatesByName: agencyProcedure
+    .input(z.object({ query: z.string().min(2) }))
+    .query(async ({ ctx, input }) => {
+      const agency = await db.getAgencyForUserContext(ctx.user.id, ctx.user.role);
+      if (!agency) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Agency not found' });
+      }
+
+      const { data, error } = await supabaseAdmin
+        .from("candidates")
+        .select("id, full_name, email, city, state, education_level, skills, photo_url")
+        .eq("agency_id", agency.id)
+        .ilike("full_name", `%${input.query}%`)
+        .order("full_name")
+        .limit(20);
+
+      if (error) return [];
+      return data || [];
+    }),
 
   // Get applications from agency's candidates
   getApplications: agencyProcedure.query(async ({ ctx }) => {
@@ -554,6 +577,221 @@ export const agencyRouter = router({
         created: result.created.length,
         failed: result.errors.length,
         errors: result.errors.map(e => e.message),
+      };
+    }),
+
+  // ============================================
+  // REGISTER COMPANY (agency creates a company)
+  // ============================================
+
+  registerCompany: agencyProcedure
+    .input(z.object({
+      // Agency override (for admins in all-agencies mode)
+      agencyId: z.string().uuid().optional(),
+      // Credentials
+      email: z.string().email(),
+      password: z.string().min(6),
+      // Company data
+      cnpj: z.string().optional(),
+      legalName: z.string().min(1),
+      businessName: z.string().optional(),
+      contactPerson: z.string().optional(),
+      phoneNumbers: z.array(z.object({
+        label: z.string(),
+        number: z.string(),
+      })).optional(),
+      emails: z.array(z.object({
+        label: z.string(),
+        email: z.string(),
+        isPrimary: z.boolean(),
+      })).optional(),
+      website: z.string().optional(),
+      employeeCount: z.string().optional(),
+      cep: z.string().optional(),
+      address: z.string().optional(),
+      complement: z.string().optional(),
+      neighborhood: z.string().optional(),
+      city: z.string().optional(),
+      state: z.string().optional(),
+      // Job data
+      jobTitle: z.string().min(1),
+      compensation: z.string().min(1),
+      mainActivities: z.string().min(1),
+      requiredSkills: z.string().min(1),
+      employmentType: z.string().optional(),
+      urgency: z.string().optional(),
+      ageRange: z.string().optional(),
+      educationLevel: z.string().min(1),
+      benefits: z.array(z.string()).optional(),
+      workSchedule: z.string().min(1),
+      positionsCount: z.string().optional(),
+      genderPreference: z.string().optional(),
+      notes: z.string().optional(),
+      // Contract flag
+      contractSigned: z.boolean(),
+      contractFileBase64: z.string().optional(),
+      contractFileName: z.string().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      let agency = await db.getAgencyForUserContext(ctx.user.id, ctx.user.role);
+      // Allow admins to specify an agency directly (for all-agencies mode)
+      if (!agency && input.agencyId && (ctx.user.role === 'admin' || ctx.user.role === 'super_admin')) {
+        agency = await db.getAgencyById(input.agencyId);
+      }
+      if (!agency) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Agency not found' });
+      }
+
+      // Get primary phone from phoneNumbers array
+      const primaryPhone = input.phoneNumbers?.find(p => p.number)?.number || undefined;
+
+      // Create auth user + user record + company record
+      const result = await db.createCompanyWithUser({
+        email: input.email,
+        password: input.password,
+        companyName: input.legalName,
+        cnpj: input.cnpj?.replace(/\D/g, ''),
+        phone: primaryPhone,
+        address: input.address,
+        city: input.city,
+        state: input.state,
+        agencyId: agency.id,
+        affiliateId: agency.affiliate_id || undefined,
+        contactPerson: input.contactPerson,
+        businessName: input.businessName,
+        website: input.website,
+        employeeCount: input.employeeCount,
+        cep: input.cep?.replace(/\D/g, ''),
+        complement: input.complement,
+        neighborhood: input.neighborhood,
+        pendingContractSigning: !input.contractSigned,
+        contractSignedAt: input.contractSigned ? new Date().toISOString() : undefined,
+      });
+
+      // Save phone numbers
+      if (input.phoneNumbers && input.phoneNumbers.length > 0) {
+        const phoneRecords = input.phoneNumbers
+          .filter(p => p.number.trim())
+          .map(p => ({
+            company_id: result.companyId,
+            label: p.label || 'Principal',
+            phone_number: p.number,
+          }));
+        if (phoneRecords.length > 0) {
+          await supabaseAdmin.from('company_phone_numbers').insert(phoneRecords);
+        }
+      }
+
+      // Save emails
+      if (input.emails && input.emails.length > 0) {
+        const emailRecords = input.emails
+          .filter(e => e.email.trim())
+          .map(e => ({
+            company_id: result.companyId,
+            label: e.label || 'Principal',
+            email: e.email,
+            is_primary: e.isPrimary,
+          }));
+        if (emailRecords.length > 0) {
+          await supabaseAdmin.from('company_emails').insert(emailRecords);
+        }
+      }
+
+      // Create the job (reuse logic from submitOnboarding)
+      const description = `${input.mainActivities}\n\nRequisitos: ${input.requiredSkills}${input.notes ? `\n\nObservações: ${input.notes}` : ''}`;
+
+      const contractTypeMap: Record<string, 'estagio' | 'clt' | 'menor-aprendiz'> = {
+        'clt': 'clt',
+        'estagio': 'estagio',
+        'jovem_aprendiz': 'menor-aprendiz',
+        'pj': 'clt',
+        'temporario': 'clt',
+      };
+      const contractType = contractTypeMap[input.employmentType || 'clt'] || 'clt';
+
+      const salaryMatch = input.compensation?.match(/[\d.,]+/);
+      const salary = salaryMatch ? parseFloat(salaryMatch[0].replace(/\./g, '').replace(',', '.')) : null;
+
+      const educationMap: Record<string, 'fundamental' | 'medio' | 'superior' | 'pos-graduacao'> = {
+        'fundamental_incompleto': 'fundamental',
+        'fundamental_completo': 'fundamental',
+        'medio_incompleto': 'medio',
+        'medio_completo': 'medio',
+        'tecnico': 'medio',
+        'superior_incompleto': 'superior',
+        'superior_completo': 'superior',
+        'pos_graduacao': 'pos-graduacao',
+        'mestrado': 'pos-graduacao',
+        'doutorado': 'pos-graduacao',
+      };
+
+      const location = input.city && input.state
+        ? `${input.city}, ${input.state}`
+        : input.city || input.state || null;
+
+      await db.createJobForOnboarding(result.companyId, {
+        title: input.jobTitle,
+        description,
+        contract_type: contractType,
+        work_type: 'presencial',
+        salary: salary ? Math.round(salary) : null,
+        salary_min: salary,
+        salary_max: salary,
+        benefits: input.benefits || [],
+        min_education_level: educationMap[input.educationLevel] || null,
+        required_skills: input.requiredSkills ? [input.requiredSkills] : [],
+        requirements: input.requiredSkills || null,
+        work_schedule: input.workSchedule,
+        location,
+        openings: input.positionsCount ? parseInt(input.positionsCount) : 1,
+        status: 'open',
+        published_at: new Date().toISOString(),
+        agency_id: agency.id,
+      });
+
+      // Upload signed contract PDF if provided
+      if (input.contractSigned && input.contractFileBase64 && input.contractFileName) {
+        const { storagePut } = await import('../storage');
+        const buffer = Buffer.from(input.contractFileBase64, 'base64');
+        const key = `contracts/signed/company-${result.companyId}/${Date.now()}-${input.contractFileName}`;
+        const { url } = await storagePut(key, buffer, 'application/pdf');
+        await supabaseAdmin
+          .from('companies')
+          .update({ contract_pdf_url: url, contract_pdf_key: key })
+          .eq('id', result.companyId);
+      }
+
+      // Generate company summary in background
+      generateCompanySummary({
+        companyName: input.legalName,
+        cnpj: input.cnpj,
+        website: input.website,
+        city: input.city,
+        state: input.state,
+        jobTitle: input.jobTitle,
+        contractType: input.employmentType,
+        workType: 'presencial',
+        compensation: input.compensation,
+        mainActivities: input.mainActivities,
+        requiredSkills: input.requiredSkills,
+        benefits: input.benefits,
+        educationLevel: input.educationLevel,
+        notes: input.notes,
+      }).then(async (summary) => {
+        if (summary) {
+          await supabaseAdmin
+            .from("companies")
+            .update({ summary, summary_generated_at: new Date().toISOString() })
+            .eq("id", result.companyId);
+        }
+      }).catch((err) => {
+        console.error('Failed to generate company summary:', err);
+      });
+
+      return {
+        success: true,
+        companyId: result.companyId,
+        credentials: { email: input.email },
       };
     }),
 

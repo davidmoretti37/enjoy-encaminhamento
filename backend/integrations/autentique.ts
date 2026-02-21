@@ -270,6 +270,49 @@ export async function getSignedPdfUrl(documentId: string): Promise<string | null
 }
 
 /**
+ * Add a new signer to an existing Autentique document.
+ * Passes only name (not email) so Autentique returns the sign URL in the response.
+ */
+export async function addSignerToDocument(
+  documentId: string,
+  signer: { name: string; action: "SIGN" | "SIGN_AS_A_WITNESS" | "APPROVE" | "RECOGNIZE" }
+): Promise<{ signerId: string; signUrl: string }> {
+  const query = `
+    mutation CreateSignerMutation(
+      $documentId: UUID!
+      $signer: SignerInput!
+    ) {
+      createSigner(
+        document_id: $documentId
+        signer: $signer
+      ) {
+        public_id
+        name
+        link { short_link }
+      }
+    }
+  `;
+
+  const variables = {
+    documentId,
+    signer: {
+      name: signer.name,
+      action: signer.action,
+    },
+  };
+
+  const data = await graphqlRequest(query, variables);
+  const result = data.createSigner;
+
+  console.log(`[Autentique] Signer added to document ${documentId}: ${signer.name}`);
+
+  return {
+    signerId: result.public_id,
+    signUrl: result.link?.short_link || "",
+  };
+}
+
+/**
  * Delete a document from Autentique
  */
 export async function deleteDocument(documentId: string): Promise<boolean> {
