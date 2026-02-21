@@ -12,6 +12,46 @@ import { supabaseAdmin } from "../supabase";
 import { generateJobSummary } from "../services/ai/summarizer";
 import { generateJobEmbedding, findMatchingCandidates } from "../services/matching";
 
+/**
+ * Shared helper: run matching pipeline for a job and save results.
+ * Used by both company and agency matching triggers.
+ */
+async function executeMatchingPipeline(jobId: string) {
+  const { runMatchingPipeline, saveMatchResults } = await import('../services/matching/index');
+  const result = await runMatchingPipeline(jobId, {});
+  await saveMatchResults(jobId, result.results, result.weightProfile);
+  return { matchesFound: result.results.length };
+}
+
+/**
+ * Shared helper: generate AI summary and embedding for a job (fire-and-forget).
+ */
+function generateJobAISummary(jobId: string, params: {
+  title: string;
+  description: string;
+  contractType: string;
+  workType: string;
+  city?: string;
+  state?: string;
+  requirements?: string;
+  benefits?: string;
+  salary?: string;
+  companyName?: string;
+}) {
+  generateJobSummary(params).then(async (summary) => {
+    if (summary) {
+      await db.updateJob(jobId, {
+        summary,
+        summary_generated_at: new Date().toISOString(),
+      });
+      console.log(`Generated summary for job ${jobId}`);
+      await generateJobEmbedding(jobId);
+    }
+  }).catch((err) => {
+    console.error('Failed to generate job summary:', err);
+  });
+}
+
 export const jobRouter = router({
   // Create job posting
   create: companyProcedure
@@ -33,14 +73,12 @@ export const jobRouter = router({
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Company not found' });
       }
 
-      // Create job in database
       const jobId = await db.createJob({
         companyId: company.id,
         ...input,
       });
 
-      // Generate AI summary in background (fire and forget)
-      generateJobSummary({
+      generateJobAISummary(jobId, {
         title: input.title,
         description: input.description,
         contractType: input.contractType,
@@ -51,25 +89,13 @@ export const jobRouter = router({
         benefits: input.benefits,
         salary: input.salary ? `R$ ${input.salary}` : undefined,
         companyName: company.company_name,
-      }).then(async (summary) => {
-        if (summary) {
-          await db.updateJob(jobId, {
-            summary,
-            summary_generated_at: new Date().toISOString(),
-          });
-          console.log(`Generated summary for job ${jobId}`);
-          // Generate embedding from summary
-          await generateJobEmbedding(jobId);
-        }
-      }).catch((err) => {
-        console.error('Failed to generate job summary:', err);
       });
 
       return { jobId };
     }),
 
   // Create job for a specific company (admin/agency access)
-  createForCompany: protectedProcedure
+  createForCompany: agencyProcedure
     .input(z.object({
       companyId: z.string().uuid(),
       title: z.string().min(1),
@@ -83,14 +109,6 @@ export const jobRouter = router({
       openings: z.number().default(1),
     }))
     .mutation(async ({ ctx, input }) => {
-      // Allow admin and agency roles
-      if (ctx.user.role !== 'admin' && ctx.user.role !== 'agency') {
-        throw new TRPCError({
-          code: 'FORBIDDEN',
-          message: 'Acesso negado',
-        });
-      }
-
       // Get agency_id for the job (only for agency users)
       let agencyId = null;
       if (ctx.user.role === 'agency') {
@@ -98,7 +116,6 @@ export const jobRouter = router({
         agencyId = agency?.id;
       }
 
-      // Insert job directly
       const { data, error } = await supabaseAdmin.from('jobs').insert({
         company_id: input.companyId,
         agency_id: agencyId,
@@ -117,58 +134,27 @@ export const jobRouter = router({
 
       if (error) {
         console.error('[Job.createForCompany] Error creating job:', error);
-        throw new TRPCError({
-          code: 'INTERNAL_SERVER_ERROR',
-          message: error.message,
-        });
+        throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: error.message });
       }
 
-      // Generate AI summary in background (fire and forget)
-      generateJobSummary({
+      generateJobAISummary(data.id, {
         title: input.title,
         description: input.description,
         contractType: input.contractType,
         workType: input.workType,
         requirements: input.requirements,
-      }).then(async (summary) => {
-        if (summary && data?.id) {
-          await db.updateJob(data.id, {
-            summary,
-            summary_generated_at: new Date().toISOString(),
-          });
-          console.log(`Generated summary for job ${data.id}`);
-          // Generate embedding from summary
-          await generateJobEmbedding(data.id);
-        }
-      }).catch((err) => {
-        console.error('Failed to generate job summary:', err);
       });
 
       return { jobId: data.id };
     }),
 
-  // Trigger matching pipeline for a job (admin/agency access)
-  triggerMatchingForAgency: protectedProcedure
+  // Trigger matching pipeline (agency/admin access)
+  triggerMatchingForAgency: agencyProcedure
     .input(z.object({ jobId: z.string().uuid() }))
-    .mutation(async ({ ctx, input }) => {
-      // Allow admin and agency roles
-      if (ctx.user.role !== 'admin' && ctx.user.role !== 'agency') {
-        throw new TRPCError({
-          code: 'FORBIDDEN',
-          message: 'Acesso negado',
-        });
-      }
-
+    .mutation(async ({ input }) => {
       try {
-        // Import and run matching pipeline
-        const { runMatchingPipeline, saveMatchResults } = await import('../services/matching/index');
-        const result = await runMatchingPipeline(input.jobId, {});
-        await saveMatchResults(input.jobId, result.results, result.weightProfile);
-
-        return {
-          success: true,
-          matchesFound: result.results.length,
-        };
+        const { matchesFound } = await executeMatchingPipeline(input.jobId);
+        return { success: true, matchesFound };
       } catch (error: any) {
         console.error('[Job.triggerMatchingForAgency] Error:', error);
         throw new TRPCError({
@@ -178,7 +164,7 @@ export const jobRouter = router({
       }
     }),
 
-  // Trigger matching pipeline for a job (company access)
+  // Trigger matching pipeline (company access)
   triggerMatching: companyProcedure
     .input(z.object({ jobId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
@@ -191,11 +177,9 @@ export const jobRouter = router({
       if (!job) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Vaga não encontrada' });
       }
-
       if (job.company_id !== company.id) {
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Acesso negado' });
       }
-
       if (!['pending_review', 'paused'].includes(job.status)) {
         throw new TRPCError({
           code: 'BAD_REQUEST',
@@ -204,14 +188,8 @@ export const jobRouter = router({
       }
 
       try {
-        const { runMatchingPipeline, saveMatchResults } = await import('../services/matching/index');
-        const result = await runMatchingPipeline(input.jobId, {});
-        await saveMatchResults(input.jobId, result.results, result.weightProfile);
-
-        return {
-          success: true,
-          matchesFound: result.results.length,
-        };
+        const { matchesFound } = await executeMatchingPipeline(input.jobId);
+        return { success: true, matchesFound };
       } catch (error: any) {
         console.error('[Job.triggerMatching] Error:', error);
         throw new TRPCError({
@@ -221,18 +199,10 @@ export const jobRouter = router({
       }
     }),
 
-  // Get matching progress/status for a job (admin/agency access)
-  getMatchingProgress: protectedProcedure
+  // Get matching progress/status for a job
+  getMatchingProgress: agencyProcedure
     .input(z.object({ jobId: z.string().uuid() }))
-    .query(async ({ ctx, input }) => {
-      if (ctx.user.role !== 'admin' && ctx.user.role !== 'agency') {
-        throw new TRPCError({
-          code: 'FORBIDDEN',
-          message: 'Acesso negado',
-        });
-      }
-
-      // Check if matches exist for this job
+    .query(async ({ input }) => {
       const { count, error } = await supabaseAdmin
         .from('job_matches')
         .select('*', { count: 'exact', head: true })
@@ -243,35 +213,20 @@ export const jobRouter = router({
       }
 
       if (count && count > 0) {
-        return {
-          status: 'completed',
-          matchesFound: count,
-          percentComplete: 100,
-        };
+        return { status: 'completed', matchesFound: count, percentComplete: 100 };
       }
 
-      return {
-        status: 'not_started',
-        matchesFound: 0,
-        percentComplete: 0,
-      };
+      return { status: 'not_started', matchesFound: 0, percentComplete: 0 };
     }),
 
-  // Get matched candidates for a job (admin/agency access)
-  getMatchesForJob: protectedProcedure
+  // Get matched candidates for a job
+  getMatchesForJob: agencyProcedure
     .input(z.object({
       jobId: z.string().uuid(),
       minScore: z.number().min(0).max(100).default(0),
       limit: z.number().min(1).max(100).default(50),
     }))
-    .query(async ({ ctx, input }) => {
-      if (ctx.user.role !== 'admin' && ctx.user.role !== 'agency') {
-        throw new TRPCError({
-          code: 'FORBIDDEN',
-          message: 'Acesso negado',
-        });
-      }
-
+    .query(async ({ input }) => {
       const { data, error } = await supabaseAdmin
         .from('job_matches')
         .select(`
@@ -305,10 +260,7 @@ export const jobRouter = router({
 
       if (error) {
         console.error('[Job.getMatchesForJob] Error:', error);
-        throw new TRPCError({
-          code: 'INTERNAL_SERVER_ERROR',
-          message: error.message,
-        });
+        throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: error.message });
       }
 
       return {
@@ -359,16 +311,8 @@ export const jobRouter = router({
     }),
 
   // Generate missing embeddings for jobs (admin only)
-  generateMissingEmbeddings: protectedProcedure
-    .mutation(async ({ ctx }) => {
-      if (ctx.user.role !== 'admin') {
-        throw new TRPCError({
-          code: 'FORBIDDEN',
-          message: 'Apenas administradores podem executar esta ação',
-        });
-      }
-
-      // Get jobs with summary but no embedding
+  generateMissingEmbeddings: adminProcedure
+    .mutation(async () => {
       const { data: jobs, error } = await supabaseAdmin
         .from('jobs')
         .select('id, title')
@@ -376,10 +320,7 @@ export const jobRouter = router({
         .is('embedding', null);
 
       if (error) {
-        throw new TRPCError({
-          code: 'INTERNAL_SERVER_ERROR',
-          message: error.message,
-        });
+        throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: error.message });
       }
 
       let generated = 0;
@@ -393,10 +334,7 @@ export const jobRouter = router({
         }
       }
 
-      return {
-        total: jobs?.length || 0,
-        generated,
-      };
+      return { total: jobs?.length || 0, generated };
     }),
 
   // Update job
@@ -462,7 +400,6 @@ export const jobRouter = router({
   // Get open jobs for candidates (NO company names - privacy rule)
   getOpenJobsForCandidates: candidateProcedure.query(async () => {
     const jobs = await db.getAllOpenJobs();
-    // Strip company information - candidates should not see company names until hired
     return jobs.map(job => ({
       id: job.id,
       title: job.title,
@@ -483,7 +420,6 @@ export const jobRouter = router({
       hours_per_week: job.hours_per_week,
       openings: job.openings,
       published_at: job.published_at,
-      // Explicitly NOT including: company_id, companies
     }));
   }),
 
@@ -520,78 +456,47 @@ export const jobRouter = router({
       return { success: true };
     }),
 
-  // Get jobs for an agency (all jobs from companies linked to this agency)
+  // Get jobs for an agency
   getByAgency: agencyProcedure.query(async ({ ctx }) => {
     const agency = await db.getAgencyForUserContext(ctx.user.id, ctx.user.role);
     if (!agency) {
-      throw new TRPCError({
-        code: 'NOT_FOUND',
-        message: 'Agência não encontrada',
-      });
+      throw new TRPCError({ code: 'NOT_FOUND', message: 'Agência não encontrada' });
     }
 
-    // Get all jobs where agency_id matches
     const { data, error } = await supabaseAdmin
       .from('jobs')
-      .select(`
-        *,
-        company:companies(id, company_name, email)
-      `)
+      .select(`*, company:companies(id, company_name, email)`)
       .eq('agency_id', agency.id)
       .order('created_at', { ascending: false });
 
     if (error) {
       console.error('[Job.getByAgency] Error fetching jobs:', error);
-      throw new TRPCError({
-        code: 'INTERNAL_SERVER_ERROR',
-        message: 'Erro ao buscar vagas',
-      });
+      throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Erro ao buscar vagas' });
     }
 
     return data || [];
   }),
 
   // Get jobs for a specific company (agency/admin access)
-  getByCompanyId: protectedProcedure
-    .input(z.object({
-      companyId: z.string(),
-    }))
+  getByCompanyId: agencyProcedure
+    .input(z.object({ companyId: z.string() }))
     .query(async ({ ctx, input }) => {
-      // Allow admin and agency roles to access this endpoint
-      if (ctx.user.role !== 'admin' && ctx.user.role !== 'agency') {
-        throw new TRPCError({
-          code: 'FORBIDDEN',
-          message: 'Acesso negado',
-        });
-      }
-
-      // For agency users, verify they have a valid agency
       if (ctx.user.role === 'agency') {
         const agency = await db.getAgencyForUserContext(ctx.user.id, ctx.user.role);
         if (!agency) {
-          throw new TRPCError({
-            code: 'NOT_FOUND',
-            message: 'Agência não encontrada',
-          });
+          throw new TRPCError({ code: 'NOT_FOUND', message: 'Agência não encontrada' });
         }
       }
 
-      // Get jobs for company
       const { data, error } = await supabaseAdmin
         .from('jobs')
-        .select(`
-          *,
-          company:companies(id, company_name, email)
-        `)
+        .select(`*, company:companies(id, company_name, email)`)
         .eq('company_id', input.companyId)
         .order('created_at', { ascending: false });
 
       if (error) {
         console.error('[Job.getByCompanyId] Error fetching jobs:', error);
-        throw new TRPCError({
-          code: 'INTERNAL_SERVER_ERROR',
-          message: 'Erro ao buscar vagas da empresa',
-        });
+        throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Erro ao buscar vagas da empresa' });
       }
 
       return data || [];
@@ -605,7 +510,6 @@ export const jobRouter = router({
       limit: z.number().min(1).max(100).default(50),
     }))
     .query(async ({ ctx, input }) => {
-      // Verify job belongs to company
       const company = await db.getCompanyByUserId(ctx.user.id);
       if (!company) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Company not found' });
@@ -616,12 +520,10 @@ export const jobRouter = router({
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Job not found or access denied' });
       }
 
-      const matches = await findMatchingCandidates(input.jobId, {
+      return await findMatchingCandidates(input.jobId, {
         threshold: input.threshold,
         limit: input.limit,
       });
-
-      return matches;
     }),
 
   // Get matching candidates for a job (agency/admin access)
@@ -637,7 +539,6 @@ export const jobRouter = router({
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Agency not found' });
       }
 
-      // Verify job belongs to a company linked to this agency
       const { data: job, error } = await supabaseAdmin
         .from('jobs')
         .select('id, agency_id')
@@ -648,28 +549,21 @@ export const jobRouter = router({
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Job not found or access denied' });
       }
 
-      const matches = await findMatchingCandidates(input.jobId, {
+      return await findMatchingCandidates(input.jobId, {
         threshold: input.threshold,
         limit: input.limit,
       });
-
-      return matches;
     }),
 
   // Regenerate embedding for a job (admin only)
   regenerateEmbedding: adminProcedure
-    .input(z.object({
-      jobId: z.string().uuid(),
-    }))
+    .input(z.object({ jobId: z.string().uuid() }))
     .mutation(async ({ input }) => {
       const success = await generateJobEmbedding(input.jobId);
       return { success };
     }),
 
-  /**
-   * Set interview preference for a job (company sets their preferred format)
-   * Saves whether company prefers online or in-person interviews and location details
-   */
+  // Set interview preference for a job
   setInterviewPreference: companyProcedure
     .input(z.object({
       jobId: z.string().uuid(),
@@ -692,7 +586,6 @@ export const jobRouter = router({
         throw new TRPCError({ code: "NOT_FOUND", message: "Company not found" });
       }
 
-      // Verify job belongs to this company
       const { data: job, error: jobError } = await supabaseAdmin
         .from("jobs")
         .select("id, company_id")
@@ -705,9 +598,7 @@ export const jobRouter = router({
 
       const isInPerson = input.preferredInterviewType === "in_person";
 
-      // Update job with interview preference
-      const { error } = await (supabaseAdmin
-        .from("jobs") as any)
+      const { error } = await (supabaseAdmin.from("jobs") as any)
         .update({
           preferred_interview_type: input.preferredInterviewType,
           interview_location_cep: isInPerson ? input.locationCep : null,
@@ -731,29 +622,22 @@ export const jobRouter = router({
       return { success: true };
     }),
 
-  /**
-   * Get interview preference for a job
-   */
+  // Get interview preference for a job
   getInterviewPreference: companyProcedure
-    .input(z.object({
-      jobId: z.string().uuid(),
-    }))
+    .input(z.object({ jobId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
       const company = await db.getCompanyByUserId(ctx.user.id);
       if (!company) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Company not found" });
       }
 
-      const { data: job, error } = await (supabaseAdmin
-        .from("jobs") as any)
+      const { data: job, error } = await (supabaseAdmin.from("jobs") as any)
         .select("preferred_interview_type, interview_location_cep, interview_location_address, interview_location_number, interview_location_complement, interview_location_neighborhood, interview_location_city, interview_location_state, preferred_days, preferred_time_start, preferred_time_end, scheduling_notes")
         .eq("id", input.jobId)
         .eq("company_id", company.id)
         .single();
 
-      if (error || !job) {
-        return null;
-      }
+      if (error || !job) return null;
 
       return {
         preferredInterviewType: job.preferred_interview_type,

@@ -1,4 +1,3 @@
-// @ts-nocheck
 // Invitation router - agency invitations management
 import { z } from "zod";
 import { router } from "../_core/trpc";

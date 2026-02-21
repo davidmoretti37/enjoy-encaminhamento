@@ -1,4 +1,3 @@
-// @ts-nocheck
 // Notification router - notification endpoints
 import { z } from "zod";
 import { router, protectedProcedure } from "../_core/trpc";

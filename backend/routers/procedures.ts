@@ -1,4 +1,3 @@
-// @ts-nocheck
 // Shared tRPC procedures with role-based access control
 import { TRPCError } from "@trpc/server";
 import { protectedProcedure } from "../_core/trpc";

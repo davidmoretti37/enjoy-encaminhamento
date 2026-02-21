@@ -1,4 +1,3 @@
-// @ts-nocheck
 // Application router - job application management
 import { z } from "zod";
 import { router } from "../_core/trpc";

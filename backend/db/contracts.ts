@@ -1,4 +1,3 @@
-// @ts-nocheck
 // Contract database operations
 import { supabase, supabaseAdmin } from "../supabase";
 import type { Contract, InsertContract } from "./types";

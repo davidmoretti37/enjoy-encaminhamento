@@ -1,4 +1,3 @@
-// @ts-nocheck
 // Auth router - authentication endpoints
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";

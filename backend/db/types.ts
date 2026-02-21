@@ -1,4 +1,3 @@
-// @ts-nocheck
 // Shared database types for all db modules
 import type { Database } from "../types/database";
 

@@ -1,4 +1,3 @@
-// @ts-nocheck
 // User database operations
 import { supabase, supabaseAdmin } from "../supabase";
 import type { User, InsertUser } from "./types";

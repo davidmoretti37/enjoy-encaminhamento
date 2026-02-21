@@ -1,33 +1,27 @@
 // @ts-nocheck
-// Hiring router - handles the flow from interview to employee
-// Different processes for Estágio (4-party signing, recurring) vs CLT (one-time payment)
+/**
+ * Hiring Router - handles the flow from interview to employee
+ * Different processes for Estágio (4-party signing, recurring) vs CLT (one-time payment)
+ *
+ * Email templates are in ./hiringEmails.ts
+ * Public signing router is in ./publicSigning.ts
+ */
 
 import { z } from "zod";
-import { router, publicProcedure } from "../_core/trpc";
+import { router } from "../_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { companyProcedure, candidateProcedure, agencyProcedure } from "./procedures";
 import * as db from "../db";
 import * as hiringDb from "../db/hiring";
 import { supabaseAdmin } from "../supabase";
-import { sendEmail } from "./email";
-import { format } from "date-fns";
-import { ptBR } from "date-fns/locale";
 import { createDocument as createAutentiqueDoc, isAutentiqueConfigured } from "../integrations/autentique";
-import { ENV } from "../_core/env";
-
-// ============================================
-// HIRING ROUTER
-// ============================================
+import { sendCandidateSelectedEmail, sendSigningInvitationEmail, sendContractCompleteEmail } from "./hiringEmails";
 
 export const hiringRouter = router({
   // ============================================
   // COMPANY ENDPOINTS
   // ============================================
 
-  /**
-   * Get hiring preview before initiating
-   * Returns candidate info, calculated fee, and required fields
-   */
   getHiringPreview: companyProcedure
     .input(z.object({
       applicationId: z.string().uuid(),
@@ -38,19 +32,16 @@ export const hiringRouter = router({
         throw new TRPCError({ code: "NOT_FOUND", message: "Company not found" });
       }
 
-      // Get application with related data
       const application = await db.getApplicationById(input.applicationId);
       if (!application) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Application not found" });
       }
 
-      // Get job
       const job = await db.getJobById(application.job_id);
       if (!job || job.company_id !== company.id) {
         throw new TRPCError({ code: "FORBIDDEN", message: "Not authorized" });
       }
 
-      // Get candidate with parent/school info
       const candidate = await db.getCandidateById(application.candidate_id);
       if (!candidate) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Candidate not found" });
@@ -58,7 +49,6 @@ export const hiringRouter = router({
 
       const hiringType = job.contract_type as "estagio" | "clt" | "menor-aprendiz";
 
-      // Check if first intern (for estágio pricing)
       let isFirstIntern = false;
       let calculatedFee = 0;
 
@@ -67,12 +57,10 @@ export const hiringRouter = router({
         isFirstIntern = activeEstagios === 0;
         calculatedFee = hiringDb.calculateEstagioFee(isFirstIntern);
       } else if (hiringType === "clt") {
-        // CLT: 50% of salary
         const salary = job.salary || candidate.expected_salary || 0;
         calculatedFee = hiringDb.calculateCLTFee(salary);
       }
 
-      // Check if parent/school info is needed (estágio) and if it's already on profile
       const needsParentInfo = hiringType === "estagio" && !candidate.parent_guardian_email;
       const needsSchoolInfo = hiringType === "estagio" && !candidate.educational_institution_email;
 
@@ -84,12 +72,10 @@ export const hiringRouter = router({
           email: candidate.email,
           phone: candidate.phone,
           cpf: candidate.cpf,
-          // Parent info (if exists)
           parentGuardianName: candidate.parent_guardian_name,
           parentGuardianEmail: candidate.parent_guardian_email,
           parentGuardianCpf: candidate.parent_guardian_cpf,
           parentGuardianPhone: candidate.parent_guardian_phone,
-          // School info (if exists)
           educationalInstitutionName: candidate.educational_institution_name,
           educationalInstitutionEmail: candidate.educational_institution_email,
           educationalInstitutionContact: candidate.educational_institution_contact,
@@ -102,7 +88,7 @@ export const hiringRouter = router({
         },
         hiringType,
         isFirstIntern,
-        calculatedFee, // In cents
+        calculatedFee,
         feeDisplay: hiringType === "estagio"
           ? `R$ ${(calculatedFee / 100).toFixed(2)}/mês`
           : `R$ ${(calculatedFee / 100).toFixed(2)} (único)`,
@@ -112,24 +98,18 @@ export const hiringRouter = router({
       };
     }),
 
-  /**
-   * Initiate hiring process
-   * Creates hiring_process record and triggers appropriate flow
-   */
   initiateHiring: companyProcedure
     .input(z.object({
       applicationId: z.string().uuid(),
       batchId: z.string().uuid().optional(),
-      startDate: z.string(), // ISO date string
-      monthlySalary: z.number().optional(), // In cents
-      // Parent info (for estágio, if not on candidate profile)
+      startDate: z.string(),
+      monthlySalary: z.number().optional(),
       parentInfo: z.object({
         name: z.string(),
         email: z.string().email(),
         cpf: z.string(),
         phone: z.string().optional(),
       }).optional(),
-      // School info (for estágio, if not on candidate profile)
       schoolInfo: z.object({
         name: z.string(),
         email: z.string().email(),
@@ -142,25 +122,21 @@ export const hiringRouter = router({
         throw new TRPCError({ code: "NOT_FOUND", message: "Company not found" });
       }
 
-      // Get application
       const application = await db.getApplicationById(input.applicationId);
       if (!application) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Application not found" });
       }
 
-      // Get job
       const job = await db.getJobById(application.job_id);
       if (!job || job.company_id !== company.id) {
         throw new TRPCError({ code: "FORBIDDEN", message: "Not authorized" });
       }
 
-      // Get candidate
       const candidate = await db.getCandidateById(application.candidate_id);
       if (!candidate) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Candidate not found" });
       }
 
-      // Check if already has a hiring process
       const existingProcess = await hiringDb.getHiringProcessByApplication(input.applicationId);
       if (existingProcess) {
         throw new TRPCError({
@@ -172,7 +148,6 @@ export const hiringRouter = router({
       const hiringType = job.contract_type as "estagio" | "clt" | "menor-aprendiz";
       const startDate = new Date(input.startDate);
 
-      // Calculate fee
       let isFirstIntern = false;
       let calculatedFee = 0;
 
@@ -185,11 +160,8 @@ export const hiringRouter = router({
         calculatedFee = hiringDb.calculateCLTFee(salary);
       }
 
-      // For estágio, end date will be set by agency in configuration step
-      // For CLT, no end date (indefinite)
       let endDate: string | undefined;
 
-      // Update candidate with parent/school info if provided
       if (input.parentInfo) {
         await db.updateCandidate(candidate.id, {
           parent_guardian_name: input.parentInfo.name,
@@ -207,9 +179,6 @@ export const hiringRouter = router({
         });
       }
 
-      // Create hiring process
-      // For estágio: status is awaiting_configuration (agency must configure before contracts go out)
-      // For CLT: status is pending_signatures (immediate)
       const hiringProcess = await hiringDb.createHiringProcess({
         applicationId: input.applicationId,
         batchId: input.batchId,
@@ -225,21 +194,13 @@ export const hiringRouter = router({
         status: hiringType === "estagio" ? "awaiting_configuration" : "pending_signatures",
       });
 
-      // Update application status to 'selected'
       await db.updateApplication(input.applicationId, { status: "selected" });
 
-      // Update batch status if provided
       if (input.batchId) {
         await db.updateBatch(input.batchId, { status: "completed" });
       }
 
-      // Get updated candidate info (with parent/school if just added)
-      const updatedCandidate = await db.getCandidateById(candidate.id);
-
-      // For estágio: signing invitations and payments are created later in configureAndSendContract
-      // For CLT: create invitations and payment immediately
       if (hiringType !== "estagio") {
-        // For CLT, create one-time payment
         await db.createPayment({
           company_id: company.id,
           amount: calculatedFee,
@@ -249,11 +210,9 @@ export const hiringRouter = router({
           notes: `Taxa de encaminhamento CLT - ${candidate.full_name} - ${job.title}`,
         });
 
-        // Create 30-day follow-up
         await hiringDb.createCLTFollowUp(hiringProcess.id, company.id, startDate);
       }
 
-      // Notify candidate
       if (candidate.user_id) {
         await db.createNotification({
           user_id: candidate.user_id,
@@ -265,7 +224,6 @@ export const hiringRouter = router({
         });
       }
 
-      // Send email to candidate
       if (candidate.email) {
         await sendCandidateSelectedEmail(
           candidate.email,
@@ -286,17 +244,14 @@ export const hiringRouter = router({
       };
     }),
 
-  /**
-   * Agency configures contract terms and sends for signing (estágio only)
-   */
   configureAndSendContract: agencyProcedure
     .input(z.object({
       hiringProcessId: z.string().uuid(),
       durationMonths: z.number().int().min(1).max(36),
-      monthlyFee: z.number().int().min(0), // In cents
+      monthlyFee: z.number().int().min(0),
       paymentDay: z.number().int().min(1).max(28),
-      monthlySalary: z.number().int().min(0).optional(), // In cents
-      selectedTemplateIds: z.array(z.string().uuid()).min(1), // Agency selects which documents to send
+      monthlySalary: z.number().int().min(0).optional(),
+      selectedTemplateIds: z.array(z.string().uuid()).min(1),
     }))
     .mutation(async ({ input }) => {
       const process = await hiringDb.getHiringProcessById(input.hiringProcessId);
@@ -307,13 +262,11 @@ export const hiringRouter = router({
         throw new TRPCError({ code: "BAD_REQUEST", message: "This contract has already been configured" });
       }
 
-      // Calculate end date from start date + duration
       const startDate = new Date(process.start_date);
       const endDate = new Date(startDate);
       endDate.setMonth(endDate.getMonth() + input.durationMonths);
       const endDateStr = endDate.toISOString().split("T")[0];
 
-      // Update hiring process with configuration
       await supabaseAdmin
         .from("hiring_processes")
         .update({
@@ -327,7 +280,6 @@ export const hiringRouter = router({
         })
         .eq("id", input.hiringProcessId);
 
-      // Get candidate info for signing invitations
       const candidate = await db.getCandidateById(process.candidate_id);
       const company = await db.getCompanyById(process.company_id);
 
@@ -342,32 +294,25 @@ export const hiringRouter = router({
         });
       }
 
-      // Parent invitation
-      const parentEmail = candidate?.parent_guardian_email;
-      const parentName = candidate?.parent_guardian_name;
-      if (parentEmail && parentName) {
+      if (candidate?.parent_guardian_email && candidate?.parent_guardian_name) {
         await hiringDb.createSigningInvitation({
           hiringProcessId: process.id,
           signerRole: "parent_guardian",
-          signerName: parentName,
-          signerEmail: parentEmail,
-          signerPhone: candidate?.parent_guardian_phone,
+          signerName: candidate.parent_guardian_name,
+          signerEmail: candidate.parent_guardian_email,
+          signerPhone: candidate.parent_guardian_phone,
         });
       }
 
-      // School invitation
-      const schoolEmail = candidate?.educational_institution_email;
-      const schoolName = candidate?.educational_institution_name;
-      if (schoolEmail && schoolName) {
+      if (candidate?.educational_institution_email && candidate?.educational_institution_name) {
         await hiringDb.createSigningInvitation({
           hiringProcessId: process.id,
           signerRole: "educational_institution",
-          signerName: schoolName,
-          signerEmail: schoolEmail,
+          signerName: candidate.educational_institution_name,
+          signerEmail: candidate.educational_institution_email,
         });
       }
 
-      // Get invitations and job info
       const invitations = await hiringDb.getSigningInvitationsByHiringProcess(process.id);
       const job = await db.getJobById(process.job_id);
 
@@ -376,60 +321,29 @@ export const hiringRouter = router({
         try {
           const agencyId = company?.agency_id;
           if (agencyId) {
-            // Use only the templates selected by the agency
             const templates = await db.getDocumentTemplatesByIds(input.selectedTemplateIds);
 
-            // Build signers list (all parties)
             const autentiqueSigners: Array<{ email: string; name: string; action: "SIGN"; role: string }> = [];
 
-            // Company signer
             if (company?.email) {
-              autentiqueSigners.push({
-                email: company.email,
-                name: company.company_name || "Empresa",
-                action: "SIGN",
-                role: "company",
-              });
+              autentiqueSigners.push({ email: company.email, name: company.company_name || "Empresa", action: "SIGN", role: "company" });
             }
-
-            // Candidate signer
             if (candidate?.email) {
-              autentiqueSigners.push({
-                email: candidate.email,
-                name: candidate.full_name || "Candidato",
-                action: "SIGN",
-                role: "candidate",
-              });
+              autentiqueSigners.push({ email: candidate.email, name: candidate.full_name || "Candidato", action: "SIGN", role: "candidate" });
             }
-
-            // Parent signer (estágio)
             if (candidate?.parent_guardian_email) {
-              autentiqueSigners.push({
-                email: candidate.parent_guardian_email,
-                name: candidate.parent_guardian_name || "Responsável",
-                action: "SIGN",
-                role: "parent_guardian",
-              });
+              autentiqueSigners.push({ email: candidate.parent_guardian_email, name: candidate.parent_guardian_name || "Responsável", action: "SIGN", role: "parent_guardian" });
             }
-
-            // School signer (estágio)
             if (candidate?.educational_institution_email) {
-              autentiqueSigners.push({
-                email: candidate.educational_institution_email,
-                name: candidate.educational_institution_name || "Instituição",
-                action: "SIGN",
-                role: "educational_institution",
-              });
+              autentiqueSigners.push({ email: candidate.educational_institution_email, name: candidate.educational_institution_name || "Instituição", action: "SIGN", role: "educational_institution" });
             }
 
             const autentiqueDocIds: string[] = [];
 
             for (const template of templates) {
-              // Download PDF from storage
               const pdfResponse = await fetch(template.file_url);
               const pdfBuffer = Buffer.from(await pdfResponse.arrayBuffer());
 
-              // Upload to Autentique with all signers
               const result = await createAutentiqueDoc(
                 template.name,
                 pdfBuffer,
@@ -443,7 +357,6 @@ export const hiringRouter = router({
 
               autentiqueDocIds.push(result.documentId);
 
-              // Track in our DB
               await db.createAutentiqueDocument({
                 autentiqueDocumentId: result.documentId,
                 documentName: template.name,
@@ -451,7 +364,6 @@ export const hiringRouter = router({
                 contextId: process.id,
                 templateId: template.id,
                 signers: result.signers.map((apiSigner) => {
-                  // Match API signer to our role by email
                   const ourSigner = autentiqueSigners.find((s) => s.email === apiSigner.email);
                   return {
                     role: ourSigner?.role || "unknown",
@@ -463,7 +375,6 @@ export const hiringRouter = router({
                 }),
               });
 
-              // Update signing_invitations with Autentique signer IDs and URLs
               for (const apiSigner of result.signers) {
                 const matchingInvitation = invitations.find(
                   (inv: any) => inv.signer_email === apiSigner.email
@@ -481,7 +392,6 @@ export const hiringRouter = router({
               }
             }
 
-            // Store Autentique doc IDs on hiring process
             if (autentiqueDocIds.length > 0) {
               await supabaseAdmin
                 .from("hiring_processes")
@@ -491,12 +401,10 @@ export const hiringRouter = router({
           }
         } catch (autentiqueError: any) {
           console.error("[Hiring] Autentique upload failed:", autentiqueError.message);
-          // Fall through to legacy email flow
         }
       }
 
-      // Send invitation emails (with Autentique URLs if available)
-      // Refresh invitations to get updated autentique_sign_url
+      // Send invitation emails
       const updatedInvitations = await hiringDb.getSigningInvitationsByHiringProcess(process.id);
 
       for (const inv of updatedInvitations) {
@@ -517,7 +425,6 @@ export const hiringRouter = router({
         }
       }
 
-      // Notify company
       if (company?.user_id) {
         await db.createNotification({
           user_id: company.user_id,
@@ -532,13 +439,8 @@ export const hiringRouter = router({
       return { success: true };
     }),
 
-  /**
-   * Get hiring process status
-   */
   getHiringStatus: companyProcedure
-    .input(z.object({
-      hiringProcessId: z.string().uuid(),
-    }))
+    .input(z.object({ hiringProcessId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
       const company = await db.getCompanyByUserId(ctx.user.id);
       if (!company) {
@@ -551,34 +453,19 @@ export const hiringRouter = router({
       }
 
       const signatureStatus = await hiringDb.checkAllSignaturesComplete(input.hiringProcessId);
-
-      return {
-        ...process,
-        signatureStatus,
-      };
+      return { ...process, signatureStatus };
     }),
 
-  /**
-   * Get all hiring processes for company
-   */
   getCompanyHiringProcesses: companyProcedure
-    .input(z.object({
-      status: z.string().optional(),
-    }).optional())
+    .input(z.object({ status: z.string().optional() }).optional())
     .query(async ({ ctx, input }) => {
       const company = await db.getCompanyByUserId(ctx.user.id);
       if (!company) return [];
-
       return await hiringDb.getHiringProcessesByCompany(company.id, input?.status);
     }),
 
-  /**
-   * Get selected contract documents for a hiring process (company-facing)
-   */
   getHiringProcessDocuments: companyProcedure
-    .input(z.object({
-      hiringProcessId: z.string().uuid(),
-    }))
+    .input(z.object({ hiringProcessId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
       const company = await db.getCompanyByUserId(ctx.user.id);
       if (!company) return [];
@@ -590,15 +477,12 @@ export const hiringRouter = router({
       return await db.getDocumentTemplatesByIds(process.selected_template_ids);
     }),
 
-  /**
-   * Company signs the contract
-   */
   signAsCompany: companyProcedure
     .input(z.object({
       hiringProcessId: z.string().uuid(),
       signerName: z.string().min(1),
       signerCpf: z.string().min(11),
-      signature: z.string().min(1), // Base64 signature image
+      signature: z.string().min(1),
     }))
     .mutation(async ({ ctx, input }) => {
       const company = await db.getCompanyByUserId(ctx.user.id);
@@ -612,49 +496,26 @@ export const hiringRouter = router({
       }
 
       if (process.company_signed) {
-        throw new TRPCError({
-          code: "BAD_REQUEST",
-          message: "Company has already signed",
-        });
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Company has already signed" });
       }
 
-      await hiringDb.recordCompanySignature(
-        input.hiringProcessId,
-        input.signerName,
-        input.signerCpf,
-        input.signature
-      );
+      await hiringDb.recordCompanySignature(input.hiringProcessId, input.signerName, input.signerCpf, input.signature);
 
-      // Check if all signatures complete
       const signatureStatus = await hiringDb.checkAllSignaturesComplete(input.hiringProcessId);
 
-      // If all signed, send completion notifications
       if (signatureStatus.complete && !signatureStatus.wasAlreadyComplete) {
-        await sendSignaturesCompleteNotifications(
-          input.hiringProcessId,
-          process,
-          company
-        );
+        await sendSignaturesCompleteNotifications(input.hiringProcessId, process, company);
       }
 
-      // If estágio and all signed, create follow-ups and generate payments
       if (signatureStatus.complete && process.hiring_type === "estagio") {
         await handleEstagioSignaturesComplete(input.hiringProcessId, process, company);
       }
 
-      return {
-        success: true,
-        signatureStatus,
-      };
+      return { success: true, signatureStatus };
     }),
 
-  /**
-   * Confirm company signed via Autentique (called when DocumentSigningFlow reports all docs signed)
-   */
   confirmCompanyAutentiqueSign: companyProcedure
-    .input(z.object({
-      hiringProcessId: z.string().uuid(),
-    }))
+    .input(z.object({ hiringProcessId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
       const company = await db.getCompanyByUserId(ctx.user.id);
       if (!company) {
@@ -670,7 +531,6 @@ export const hiringRouter = router({
         return { success: true, alreadySigned: true };
       }
 
-      // Verify on Autentique that the company actually signed
       const { data: autentiqueDocs } = await supabaseAdmin
         .from("autentique_documents")
         .select("*")
@@ -678,7 +538,6 @@ export const hiringRouter = router({
         .eq("context_id", input.hiringProcessId);
 
       if (autentiqueDocs && autentiqueDocs.length > 0) {
-        // Check that the company signer has signed all documents
         const companyEmail = company.email;
         const allSignedByCompany = autentiqueDocs.every((doc: any) => {
           const companySigner = doc.signers?.find((s: any) => s.email === companyEmail);
@@ -693,23 +552,17 @@ export const hiringRouter = router({
         }
       }
 
-      // Record company signature
       await supabaseAdmin
         .from("hiring_processes")
-        .update({
-          company_signed: true,
-          company_signed_at: new Date().toISOString(),
-        })
+        .update({ company_signed: true, company_signed_at: new Date().toISOString() })
         .eq("id", input.hiringProcessId);
 
-      // Check if all signatures complete
       const signatureStatus = await hiringDb.checkAllSignaturesComplete(input.hiringProcessId);
 
       if (signatureStatus.complete && !signatureStatus.wasAlreadyComplete) {
         await sendSignaturesCompleteNotifications(input.hiringProcessId, process, company);
       }
 
-      // If estágio and all signed, create follow-ups and generate payments
       if (signatureStatus.complete && process.hiring_type === "estagio") {
         await handleEstagioSignaturesComplete(input.hiringProcessId, process, company);
       }
@@ -717,38 +570,25 @@ export const hiringRouter = router({
       return { success: true, signatureStatus };
     }),
 
-  /**
-   * Resend signing invitation email
-   */
   resendSigningInvitation: companyProcedure
-    .input(z.object({
-      invitationId: z.string().uuid(),
-    }))
+    .input(z.object({ invitationId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
       const company = await db.getCompanyByUserId(ctx.user.id);
       if (!company) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Company not found" });
       }
 
-      // Get invitation with hiring process
       const invitation = await hiringDb.getSigningInvitationById(input.invitationId);
-
       if (!invitation) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Invitation not found" });
       }
-
       if (invitation.hiring_process?.company_id !== company.id) {
         throw new TRPCError({ code: "FORBIDDEN", message: "Not authorized" });
       }
-
       if (invitation.signed_at) {
-        throw new TRPCError({
-          code: "BAD_REQUEST",
-          message: "This invitation has already been signed",
-        });
+        throw new TRPCError({ code: "BAD_REQUEST", message: "This invitation has already been signed" });
       }
 
-      // Resend email
       await sendSigningInvitationEmail(
         invitation,
         invitation.signer_name,
@@ -759,14 +599,9 @@ export const hiringRouter = router({
       );
 
       await hiringDb.markInvitationEmailSent(input.invitationId);
-
       return { success: true };
     }),
 
-  /**
-   * Company adds a missing signer (parent/school) to an existing hiring process.
-   * Creates signing_invitation + adds signer to Autentique documents.
-   */
   addMissingSigner: companyProcedure
     .input(z.object({
       hiringProcessId: z.string().uuid(),
@@ -785,19 +620,14 @@ export const hiringRouter = router({
         throw new TRPCError({ code: "FORBIDDEN", message: "Not authorized" });
       }
 
-      // Check no existing invitation for this role
       const existingInvitations = await hiringDb.getSigningInvitationsByHiringProcess(input.hiringProcessId);
       const alreadyExists = existingInvitations.find(
         (inv: any) => inv.signer_role === input.signerRole && !inv.signed_at
       );
       if (alreadyExists) {
-        throw new TRPCError({
-          code: "BAD_REQUEST",
-          message: "Já existe um convite de assinatura para este papel",
-        });
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Já existe um convite de assinatura para este papel" });
       }
 
-      // Update candidate profile with the new contact info
       const candidate = await db.getCandidateById(process.candidate_id);
       if (!candidate) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Candidate not found" });
@@ -815,7 +645,6 @@ export const hiringRouter = router({
         });
       }
 
-      // Create signing invitation
       const invitation = await hiringDb.createSigningInvitation({
         hiringProcessId: input.hiringProcessId,
         signerRole: input.signerRole,
@@ -823,23 +652,18 @@ export const hiringRouter = router({
         signerEmail: input.signerEmail,
       });
 
-      // Add signer to existing Autentique documents
       let autentiqueSignUrl: string | null = null;
       if (isAutentiqueConfigured() && process.autentique_document_ids?.length) {
         try {
           const { addSignerToDocument } = await import("../integrations/autentique");
 
           for (const docId of process.autentique_document_ids) {
-            const result = await addSignerToDocument(docId, {
-              name: input.signerName,
-              action: "SIGN",
-            });
+            const result = await addSignerToDocument(docId, { name: input.signerName, action: "SIGN" });
 
             if (!autentiqueSignUrl && result.signUrl) {
               autentiqueSignUrl = result.signUrl;
             }
 
-            // Update autentique_documents tracking record
             const autentiqueDoc = await db.getAutentiqueDocumentByAutentiqueId(docId);
             if (autentiqueDoc) {
               const updatedSigners = [
@@ -860,7 +684,6 @@ export const hiringRouter = router({
             }
           }
 
-          // Update the signing invitation with Autentique info
           if (autentiqueSignUrl) {
             await supabaseAdmin
               .from("signing_invitations")
@@ -872,11 +695,9 @@ export const hiringRouter = router({
           }
         } catch (err: any) {
           console.error("[Hiring] Failed to add signer to Autentique:", err.message);
-          // Fall through - invitation still works via fallback flow
         }
       }
 
-      // Send invitation email
       const job = await db.getJobById(process.job_id);
       try {
         const updatedInvitation = await hiringDb.getSigningInvitationById(invitation.id);
@@ -893,21 +714,11 @@ export const hiringRouter = router({
         console.error(`[Hiring] Failed to send invitation email to ${input.signerEmail}:`, err);
       }
 
-      return {
-        success: true,
-        invitationId: invitation.id,
-        token: invitation.token,
-        autentiqueSignUrl,
-      };
+      return { success: true, invitationId: invitation.id, token: invitation.token, autentiqueSignUrl };
     }),
 
-  /**
-   * Confirm CLT payment and activate hiring process
-   */
   confirmCLTPayment: companyProcedure
-    .input(z.object({
-      hiringProcessId: z.string().uuid(),
-    }))
+    .input(z.object({ hiringProcessId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
       const company = await db.getCompanyByUserId(ctx.user.id);
       if (!company) {
@@ -920,16 +731,11 @@ export const hiringRouter = router({
       }
 
       if (process.status !== "pending_payment" && process.status !== "pending_signatures") {
-        throw new TRPCError({
-          code: "BAD_REQUEST",
-          message: "Processo não está aguardando pagamento",
-        });
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Processo não está aguardando pagamento" });
       }
 
-      // Update hiring process to active
       await hiringDb.updateHiringProcess(input.hiringProcessId, { status: "active" });
 
-      // Create 30-day follow-up if not already created
       const startDate = new Date(process.start_date);
       try {
         await hiringDb.createCLTFollowUp(input.hiringProcessId, company.id, startDate);
@@ -937,7 +743,6 @@ export const hiringRouter = router({
         // Follow-up may already exist from initiateHiring
       }
 
-      // Notify candidate
       if (process.candidate?.user_id) {
         await db.createNotification({
           user_id: process.candidate.user_id,
@@ -952,13 +757,9 @@ export const hiringRouter = router({
       return { success: true };
     }),
 
-  /**
-   * Get upcoming follow-ups for company
-   */
   getUpcomingFollowUps: companyProcedure.query(async ({ ctx }) => {
     const company = await db.getCompanyByUserId(ctx.user.id);
     if (!company) return [];
-
     return await hiringDb.getUpcomingFollowUps(company.id);
   }),
 
@@ -966,28 +767,17 @@ export const hiringRouter = router({
   // AGENCY ENDPOINTS
   // ============================================
 
-  /**
-   * Get hiring processes for a job (agency visibility into contract status)
-   */
   getHiringProcessesByJobId: agencyProcedure
     .input(z.object({ jobId: z.string().uuid() }))
     .query(async ({ input }) => {
       return await hiringDb.getHiringProcessesByJobId(input.jobId);
     }),
 
-  /**
-   * Send signing invitation emails for a hiring process (agency triggers manually)
-   */
   sendSigningInvitations: agencyProcedure
-    .input(z.object({
-      hiringProcessId: z.string().uuid(),
-    }))
+    .input(z.object({ hiringProcessId: z.string().uuid() }))
     .mutation(async ({ input }) => {
       const unsent = await hiringDb.getUnsentInvitations(input.hiringProcessId);
-
-      if (unsent.length === 0) {
-        return { sent: 0 };
-      }
+      if (unsent.length === 0) return { sent: 0 };
 
       let sent = 0;
       for (const invitation of unsent) {
@@ -1012,9 +802,6 @@ export const hiringRouter = router({
       return { sent };
     }),
 
-  /**
-   * Create a signing invitation for a specific role (agency adds missing parent/school)
-   */
   createSigningInvitationForRole: agencyProcedure
     .input(z.object({
       hiringProcessId: z.string().uuid(),
@@ -1023,7 +810,6 @@ export const hiringRouter = router({
       signerEmail: z.string().email(),
     }))
     .mutation(async ({ input }) => {
-      // Check no existing invitation for this role
       const existing = await hiringDb.getSigningInvitationsByHiringProcess(input.hiringProcessId);
       const alreadyExists = existing.find((inv: any) => inv.signer_role === input.signerRole);
       if (alreadyExists) {
@@ -1044,9 +830,6 @@ export const hiringRouter = router({
   // CANDIDATE ENDPOINTS
   // ============================================
 
-  /**
-   * Get hiring processes for candidate (to see contracts to sign)
-   */
   getCandidateHiringProcesses: candidateProcedure.query(async ({ ctx }) => {
     const candidate = await db.getCandidateByUserId(ctx.user.id);
     if (!candidate) return [];
@@ -1066,9 +849,6 @@ export const hiringRouter = router({
     return data || [];
   }),
 
-  /**
-   * Candidate signs contract
-   */
   signAsCandidate: candidateProcedure
     .input(z.object({
       hiringProcessId: z.string().uuid(),
@@ -1087,30 +867,20 @@ export const hiringRouter = router({
       }
 
       if (process.candidate_signed) {
-        throw new TRPCError({
-          code: "BAD_REQUEST",
-          message: "You have already signed",
-        });
+        throw new TRPCError({ code: "BAD_REQUEST", message: "You have already signed" });
       }
 
       await hiringDb.recordCandidateSignature(input.hiringProcessId, input.signerCpf);
 
-      // Update the signing invitation if exists
       const invitation = process.signing_invitations?.find(
         (i: any) => i.signer_role === "candidate" && !i.signed_at
       );
       if (invitation) {
-        await hiringDb.completeSigningInvitation(
-          invitation.id,
-          input.signature,
-          input.signerCpf
-        );
+        await hiringDb.completeSigningInvitation(invitation.id, input.signature, input.signerCpf);
       }
 
-      // Check status
       const signatureStatus = await hiringDb.checkAllSignaturesComplete(input.hiringProcessId);
 
-      // Notify company
       const company = await db.getCompanyById(process.company_id);
       if (company?.user_id) {
         await db.createNotification({
@@ -1123,13 +893,8 @@ export const hiringRouter = router({
         });
       }
 
-      // If all signatures complete, send completion notifications
       if (signatureStatus.complete) {
-        await sendSignaturesCompleteNotifications(
-          input.hiringProcessId,
-          process,
-          company
-        );
+        await sendSignaturesCompleteNotifications(input.hiringProcessId, process, company);
       }
 
       return { success: true, signatureStatus };
@@ -1137,171 +902,9 @@ export const hiringRouter = router({
 });
 
 // ============================================
-// PUBLIC SIGNING ROUTER (for parent/school)
+// HELPER FUNCTIONS (exported for publicSigning router)
 // ============================================
 
-export const publicSigningRouter = router({
-  /**
-   * Get signing details by token
-   */
-  getSigningDetails: publicProcedure
-    .input(z.object({
-      token: z.string().uuid(),
-    }))
-    .query(async ({ input }) => {
-      const invitation = await hiringDb.getSigningInvitationByToken(input.token);
-
-      if (!invitation) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Convite não encontrado" });
-      }
-
-      if (invitation.signed_at) {
-        return {
-          alreadySigned: true,
-          signedAt: invitation.signed_at,
-        };
-      }
-
-      if (new Date(invitation.expires_at) < new Date()) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "Este convite expirou" });
-      }
-
-      // Mark as viewed
-      await hiringDb.markInvitationViewed(invitation.id);
-
-      const process = invitation.hiring_process;
-
-      // Fetch only the selected contract templates for this hiring process
-      let contractTemplates: { name: string; fileUrl: string }[] = [];
-      if (process?.selected_template_ids?.length) {
-        const templates = await db.getDocumentTemplatesByIds(process.selected_template_ids);
-        contractTemplates = templates.map((t: any) => ({
-          name: t.name,
-          fileUrl: t.file_url,
-        }));
-      }
-
-      return {
-        alreadySigned: false,
-        invitationId: invitation.id,
-        signerRole: invitation.signer_role,
-        signerName: invitation.signer_name,
-        signerEmail: invitation.signer_email,
-        autentiqueSignUrl: invitation.autentique_sign_url || null,
-        candidate: {
-          name: process?.candidate?.full_name,
-        },
-        company: {
-          name: process?.company?.company_name,
-        },
-        job: {
-          title: process?.job?.title,
-        },
-        startDate: process?.start_date,
-        hiringType: process?.hiring_type,
-        contractTemplates,
-      };
-    }),
-
-  /**
-   * Sign document by token
-   */
-  signByToken: publicProcedure
-    .input(z.object({
-      token: z.string().uuid(),
-      signerCpf: z.string().min(11),
-      signature: z.string().min(1),
-    }))
-    .mutation(async ({ input, ctx }) => {
-      const invitation = await hiringDb.getSigningInvitationByToken(input.token);
-
-      if (!invitation) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Convite não encontrado" });
-      }
-
-      if (invitation.signed_at) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "Este documento já foi assinado" });
-      }
-
-      if (new Date(invitation.expires_at) < new Date()) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "Este convite expirou" });
-      }
-
-      // Get client IP from request headers if available
-      const signerIp = ctx.req?.headers?.["x-forwarded-for"] as string ||
-                       ctx.req?.socket?.remoteAddress;
-
-      // Complete the invitation
-      await hiringDb.completeSigningInvitation(
-        invitation.id,
-        input.signature,
-        input.signerCpf,
-        signerIp
-      );
-
-      // Update hiring process based on role
-      const hiringProcessId = invitation.hiring_process_id;
-
-      if (invitation.signer_role === "parent_guardian") {
-        await hiringDb.recordParentSignature(
-          hiringProcessId,
-          invitation.signer_name,
-          input.signerCpf
-        );
-      } else if (invitation.signer_role === "educational_institution") {
-        await hiringDb.recordSchoolSignature(
-          hiringProcessId,
-          invitation.signer_name,
-          invitation.signer_email
-        );
-      }
-
-      // Check if all signatures complete
-      const signatureStatus = await hiringDb.checkAllSignaturesComplete(hiringProcessId);
-
-      // Notify company
-      const process = invitation.hiring_process;
-      if (process) {
-        const company = await db.getCompanyById(process.company_id);
-        if (company?.user_id) {
-          const roleLabel = invitation.signer_role === "parent_guardian"
-            ? "Responsável"
-            : "Instituição de Ensino";
-
-          await db.createNotification({
-            user_id: company.user_id,
-            title: `${roleLabel} assinou o contrato`,
-            message: `${invitation.signer_name} (${roleLabel}) assinou o contrato de estágio para ${process.candidate?.full_name}.${signatureStatus.complete ? " Todas as assinaturas foram coletadas!" : ""}`,
-            type: "success",
-            related_to_type: "hiring",
-            related_to_id: hiringProcessId,
-          });
-        }
-
-        // If all signatures complete, send completion notifications
-        if (signatureStatus.complete) {
-          await sendSignaturesCompleteNotifications(
-            hiringProcessId,
-            process,
-            company
-          );
-        }
-      }
-
-      return {
-        success: true,
-        signatureStatus,
-      };
-    }),
-});
-
-// ============================================
-// HELPER FUNCTIONS
-// ============================================
-
-/**
- * Handle estágio follow-ups and payment generation when all signatures complete
- */
 async function handleEstagioSignaturesComplete(
   hiringProcessId: string,
   process: any,
@@ -1309,7 +912,6 @@ async function handleEstagioSignaturesComplete(
 ): Promise<void> {
   const startDate = new Date(process.start_date);
 
-  // Create follow-up schedule
   await hiringDb.createEstagioFollowUps(
     hiringProcessId,
     process.contract_id,
@@ -1317,7 +919,6 @@ async function handleEstagioSignaturesComplete(
     startDate
   );
 
-  // Generate recurring payments using configured values
   const paymentDay = process.payment_day || hiringDb.calculatePaymentDay(startDate);
   const monthlyFee = process.calculated_fee;
   const durationMonths = process.contract_duration_months || 12;
@@ -1340,10 +941,7 @@ async function handleEstagioSignaturesComplete(
   }
 }
 
-/**
- * Send notifications when all signatures are complete
- */
-async function sendSignaturesCompleteNotifications(
+export async function sendSignaturesCompleteNotifications(
   hiringProcessId: string,
   process: any,
   company: any
@@ -1351,7 +949,6 @@ async function sendSignaturesCompleteNotifications(
   const jobTitle = process.job?.title || "Vaga";
   const candidateName = process.candidate?.full_name || "Candidato";
 
-  // Notify company
   if (company?.user_id) {
     await db.createNotification({
       user_id: company.user_id,
@@ -1363,7 +960,6 @@ async function sendSignaturesCompleteNotifications(
     });
   }
 
-  // Notify candidate
   if (process.candidate?.user_id) {
     await db.createNotification({
       user_id: process.candidate.user_id,
@@ -1375,220 +971,13 @@ async function sendSignaturesCompleteNotifications(
     });
   }
 
-  // Send email to candidate
   if (process.candidate?.email) {
-    const startDate = new Date(process.start_date);
-    const formattedDate = format(startDate, "dd 'de' MMMM 'de' yyyy", { locale: ptBR });
-
-    const emailHtml = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <meta charset="utf-8">
-        <style>
-          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-          .header { background: #10B981; color: white; padding: 20px; border-radius: 8px 8px 0 0; text-align: center; }
-          .content { background: #f9fafb; padding: 20px; border: 1px solid #e5e7eb; border-radius: 0 0 8px 8px; }
-          .info-box { background: white; padding: 16px; border-radius: 6px; margin: 16px 0; border: 1px solid #e5e7eb; }
-          .check { font-size: 48px; text-align: center; margin: 16px 0; }
-        </style>
-      </head>
-      <body>
-        <div class="container">
-          <div class="header">
-            <h1 style="margin:0;">Contrato Finalizado!</h1>
-          </div>
-          <div class="content">
-            <div class="check">✅</div>
-            <p>Olá ${candidateName},</p>
-            <p>Ótima notícia! Todas as assinaturas do seu contrato de estágio foram coletadas com sucesso.</p>
-
-            <div class="info-box">
-              <p><strong>Empresa:</strong> ${company?.company_name}</p>
-              <p><strong>Vaga:</strong> ${jobTitle}</p>
-              <p><strong>Início:</strong> ${formattedDate}</p>
-            </div>
-
-            <p><strong>Próximos passos:</strong></p>
-            <ul>
-              <li>Apresente-se na empresa na data de início</li>
-              <li>Leve seus documentos pessoais</li>
-              <li>Em caso de dúvidas, entre em contato com a empresa</li>
-            </ul>
-
-            <p style="margin-top: 24px; color: #666; font-size: 14px;">
-              Desejamos muito sucesso no seu estágio!
-            </p>
-          </div>
-        </div>
-      </body>
-      </html>
-    `;
-
-    try {
-      await sendEmail(
-        process.candidate.email,
-        `✅ Contrato de estágio finalizado - ${jobTitle}`,
-        emailHtml
-      );
-    } catch (err) {
-      console.error("[Hiring] Failed to send contract complete email:", err);
-    }
-  }
-}
-
-/**
- * Send email to candidate when they're selected for a job
- */
-async function sendCandidateSelectedEmail(
-  email: string,
-  candidateName: string,
-  companyName: string,
-  jobTitle: string,
-  startDate: Date,
-  hiringType: string
-): Promise<void> {
-  const formattedDate = format(startDate, "dd 'de' MMMM 'de' yyyy", { locale: ptBR });
-  const portalUrl = `${process.env.FRONTEND_URL || "http://localhost:5173"}/candidate/contratos`;
-
-  const isEstagio = hiringType === "estagio";
-
-  const emailHtml = `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <meta charset="utf-8">
-      <style>
-        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-        .header { background: #10B981; color: white; padding: 20px; border-radius: 8px 8px 0 0; text-align: center; }
-        .content { background: #f9fafb; padding: 20px; border: 1px solid #e5e7eb; border-radius: 0 0 8px 8px; }
-        .button { display: inline-block; background: #4F46E5; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; margin-top: 16px; }
-        .info-box { background: white; padding: 16px; border-radius: 6px; margin: 16px 0; border: 1px solid #e5e7eb; }
-        .celebration { font-size: 48px; text-align: center; margin: 16px 0; }
-      </style>
-    </head>
-    <body>
-      <div class="container">
-        <div class="header">
-          <h1 style="margin:0;">Parabéns!</h1>
-          <p style="margin:8px 0 0 0;">Você foi selecionado!</p>
-        </div>
-        <div class="content">
-          <div class="celebration">🎉</div>
-          <p>Olá ${candidateName},</p>
-          <p>Temos uma ótima notícia! Você foi <strong>selecionado(a)</strong> para a vaga de <strong>${jobTitle}</strong>!</p>
-
-          <div class="info-box">
-            <p><strong>Empresa:</strong> ${companyName}</p>
-            <p><strong>Vaga:</strong> ${jobTitle}</p>
-            <p><strong>Tipo:</strong> ${isEstagio ? "Estágio" : "CLT"}</p>
-            <p><strong>Início previsto:</strong> ${formattedDate}</p>
-          </div>
-
-          ${isEstagio ? `
-          <p><strong>Próximos passos:</strong></p>
-          <p>Você precisa assinar o contrato de estágio para finalizar sua contratação. Acesse o portal para visualizar e assinar seu contrato.</p>
-          <a href="${portalUrl}" class="button">Acessar Meus Contratos</a>
-          ` : `
-          <p><strong>Próximos passos:</strong></p>
-          <p>A empresa entrará em contato com você para os próximos passos da contratação.</p>
-          `}
-
-          <p style="margin-top: 24px; color: #666; font-size: 14px;">
-            Desejamos muito sucesso nessa nova jornada!
-          </p>
-        </div>
-      </div>
-    </body>
-    </html>
-  `;
-
-  try {
-    await sendEmail(
-      email,
-      `🎉 Parabéns! Você foi selecionado para ${jobTitle}`,
-      emailHtml
+    await sendContractCompleteEmail(
+      process.candidate.email,
+      candidateName,
+      company?.company_name || "Empresa",
+      jobTitle,
+      new Date(process.start_date)
     );
-  } catch (err) {
-    console.error("[Hiring] Failed to send candidate selected email:", err);
-  }
-}
-
-async function sendSigningInvitationEmail(
-  invitation: any,
-  signerName: string,
-  companyName: string,
-  jobTitle: string,
-  startDate: Date,
-  candidateName?: string
-): Promise<void> {
-  // Use Autentique signing URL if available, otherwise fallback to our signing page
-  const baseUrl = ENV.appUrl;
-  const signingUrl = invitation.autentique_sign_url || `${baseUrl}/assinar/${invitation.token}`;
-  const formattedDate = format(startDate, "dd 'de' MMMM 'de' yyyy", { locale: ptBR });
-
-  const roleLabel = invitation.signer_role === "candidate"
-    ? "candidato"
-    : invitation.signer_role === "parent_guardian"
-    ? "responsável legal"
-    : "instituição de ensino";
-
-  const forCandidateText = candidateName
-    ? `para o(a) candidato(a) <strong>${candidateName}</strong>`
-    : "";
-
-  const emailHtml = `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <meta charset="utf-8">
-      <style>
-        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-        .header { background: #4F46E5; color: white; padding: 20px; border-radius: 8px 8px 0 0; }
-        .content { background: #f9fafb; padding: 20px; border: 1px solid #e5e7eb; border-radius: 0 0 8px 8px; }
-        .button { display: inline-block; background: #4F46E5; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; margin-top: 16px; }
-        .info-box { background: white; padding: 16px; border-radius: 6px; margin: 16px 0; border: 1px solid #e5e7eb; }
-      </style>
-    </head>
-    <body>
-      <div class="container">
-        <div class="header">
-          <h1 style="margin:0;">Assinatura de Contrato de Estágio</h1>
-        </div>
-        <div class="content">
-          <p>Olá ${signerName},</p>
-          <p>Você foi convidado como <strong>${roleLabel}</strong> para assinar o contrato de estágio ${forCandidateText}.</p>
-
-          <div class="info-box">
-            <p><strong>Empresa:</strong> ${companyName}</p>
-            <p><strong>Vaga:</strong> ${jobTitle}</p>
-            <p><strong>Início:</strong> ${formattedDate}</p>
-          </div>
-
-          <p>Clique no botão abaixo para acessar o documento e assinar digitalmente${invitation.autentique_sign_url ? " pela plataforma Autentique" : ""}.</p>
-
-          <a href="${signingUrl}" class="button">Assinar Documento</a>
-
-          <p style="margin-top: 24px; color: #666; font-size: 14px;">
-            ${invitation.autentique_sign_url ? "Você também receberá um email da Autentique com o link para assinatura." : "Este link expira em 7 dias."} Se tiver dúvidas, entre em contato com a empresa.
-          </p>
-        </div>
-      </div>
-    </body>
-    </html>
-  `;
-
-  try {
-    await sendEmail(
-      invitation.signer_email,
-      `Assinatura de Contrato de Estágio - ${jobTitle}`,
-      emailHtml
-    );
-    await hiringDb.markInvitationEmailSent(invitation.id);
-  } catch (err) {
-    console.error("[Hiring] Failed to send signing invitation email:", err);
   }
 }

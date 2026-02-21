@@ -1,4 +1,3 @@
-// @ts-nocheck
 // Agency context router for admin agency switching
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";

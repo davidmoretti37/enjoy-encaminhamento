@@ -1,4 +1,3 @@
-// @ts-nocheck
 // Email helper functions for routers
 import nodemailer from "nodemailer";
 import { ENV } from "../_core/env";

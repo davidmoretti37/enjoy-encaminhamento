@@ -1,4 +1,3 @@
-// @ts-nocheck
 // Dashboard router - analytics and stats endpoints
 import { router, protectedProcedure } from "../_core/trpc";
 import { adminProcedure, companyProcedure, candidateProcedure } from "./procedures";

@@ -1,4 +1,3 @@
-// @ts-nocheck
 // Analytics and dashboard statistics
 import { supabase, supabaseAdmin } from "../supabase";
 
