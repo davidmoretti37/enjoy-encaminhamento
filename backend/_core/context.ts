@@ -10,10 +10,57 @@ export type TrpcContext = {
   user: User | null;
 };
 
-// Helper function for retry with exponential backoff
+// ============ Auth Cache ============
+// Cache auth results in memory to avoid calling Supabase on every request
+const authCache = new Map<string, { user: User; expiresAt: number }>();
+const AUTH_CACHE_TTL_MS = 60_000; // 1 minute
+
+function getCachedUser(token: string): User | null {
+  const cached = authCache.get(token);
+  if (cached && Date.now() < cached.expiresAt) {
+    return cached.user;
+  }
+  if (cached) authCache.delete(token);
+  return null;
+}
+
+function setCachedUser(token: string, user: User) {
+  authCache.set(token, { user, expiresAt: Date.now() + AUTH_CACHE_TTL_MS });
+  // Evict old entries periodically
+  if (authCache.size > 500) {
+    const now = Date.now();
+    for (const [key, val] of authCache) {
+      if (now >= val.expiresAt) authCache.delete(key);
+    }
+  }
+}
+
+// ============ Circuit Breaker ============
+// Stop hammering Supabase when it's unreachable
+let circuitOpen = false;
+let circuitOpenUntil = 0;
+const CIRCUIT_COOLDOWN_MS = 15_000; // 15 seconds
+
+function isCircuitOpen(): boolean {
+  if (!circuitOpen) return false;
+  if (Date.now() >= circuitOpenUntil) {
+    circuitOpen = false;
+    console.log('[Auth] Circuit breaker reset - retrying Supabase');
+    return false;
+  }
+  return true;
+}
+
+function tripCircuit() {
+  circuitOpen = true;
+  circuitOpenUntil = Date.now() + CIRCUIT_COOLDOWN_MS;
+  console.warn('[Auth] Circuit breaker tripped - skipping Supabase auth for 15s');
+}
+
+// ============ Retry (reduced) ============
 async function withRetry<T>(
   fn: () => Promise<T>,
-  maxRetries: number = 5,
+  maxRetries: number = 2,
   baseDelayMs: number = 500
 ): Promise<T> {
   let lastError: any;
@@ -23,16 +70,17 @@ async function withRetry<T>(
     } catch (e: any) {
       lastError = e;
       const isNetworkError = e?.cause?.code === 'ECONNRESET' ||
+                             e?.cause?.code === 'ETIMEDOUT' ||
                              e?.code === 'ECONNRESET' ||
-                             e?.message?.includes('fetch failed') ||
-                             e?.message?.includes('ECONNRESET');
+                             e?.code === 'ETIMEDOUT' ||
+                             e?.message?.includes('fetch failed');
 
       if (!isNetworkError || attempt === maxRetries - 1) {
         throw e;
       }
 
-      const delay = baseDelayMs * Math.pow(2, attempt); // 500, 1000, 2000, 4000, 8000
-      console.log(`[Auth] Retry attempt ${attempt + 1}/${maxRetries} after ${delay}ms...`);
+      const delay = baseDelayMs * Math.pow(2, attempt);
+      console.log(`[Auth] Retry ${attempt + 1}/${maxRetries} after ${delay}ms...`);
       await new Promise(r => setTimeout(r, delay));
     }
   }
@@ -45,15 +93,23 @@ export async function createContext(
   let user: User | null = null;
 
   try {
-    // Extract JWT token from Authorization header or cookie
     const authHeader = opts.req.headers.authorization;
     const token = authHeader?.replace('Bearer ', '') || opts.req.cookies?.['sb-access-token'];
 
     if (token) {
-      // Verify the Supabase token with retry logic
-      let authUser = null;
-      let authError = null;
+      // 1. Check cache first
+      const cached = getCachedUser(token);
+      if (cached) {
+        return { req: opts.req, res: opts.res, user: cached };
+      }
 
+      // 2. If circuit breaker is open, skip Supabase entirely
+      if (isCircuitOpen()) {
+        return { req: opts.req, res: opts.res, user: null };
+      }
+
+      // 3. Verify with Supabase (reduced retries)
+      let authUser = null;
       try {
         const result = await withRetry(async () => {
           const res = await supabase.auth.getUser(token);
@@ -62,13 +118,17 @@ export async function createContext(
         });
         authUser = result.data?.user;
       } catch (e: any) {
-        authError = e;
-        console.error('[Auth] Supabase auth error after retries:', e.message || e);
+        const isNetworkError = e?.message?.includes('fetch failed') ||
+                               e?.cause?.code === 'ECONNRESET' ||
+                               e?.cause?.code === 'ETIMEDOUT';
+        if (isNetworkError) {
+          tripCircuit();
+        } else {
+          console.error('[Auth] Auth error:', e.message || e);
+        }
       }
 
-      if (!authError && authUser) {
-        // Get user profile from our users table using admin client to bypass RLS
-        // Use maybeSingle() to handle case where user profile doesn't exist yet
+      if (authUser) {
         try {
           const { data: userProfile, error: profileError } = await withRetry(async () => {
             return await supabaseAdmin
@@ -84,9 +144,8 @@ export async function createContext(
 
           if (userProfile) {
             user = userProfile;
+            setCachedUser(token, user);
           } else {
-            // User authenticated but no profile yet - create minimal user object from auth data
-            // This can happen right after signup before the profile insert completes
             console.log('[Auth] No profile found for user, using auth data:', authUser.id);
             user = {
               id: authUser.id,
@@ -100,14 +159,21 @@ export async function createContext(
               last_login: null,
               profile_photo_url: null,
             };
+            setCachedUser(token, user);
           }
         } catch (e: any) {
-          console.error('[Auth] Profile fetch error after retries:', e.message || e);
+          const isNetworkError = e?.message?.includes('fetch failed') ||
+                                 e?.cause?.code === 'ECONNRESET' ||
+                                 e?.cause?.code === 'ETIMEDOUT';
+          if (isNetworkError) {
+            tripCircuit();
+          } else {
+            console.error('[Auth] Profile fetch error:', e.message || e);
+          }
         }
       }
     }
   } catch (error) {
-    // Authentication is optional for public procedures.
     console.error('[Auth] Error in createContext:', error);
     user = null;
   }

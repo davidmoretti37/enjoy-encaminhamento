@@ -1,15 +1,11 @@
 import { useAuth } from "@/_core/hooks/useAuth";
-import ClassicLoader from "./ui/ClassicLoader";
+import { DashboardLayoutSkeleton } from "@/components/DashboardLayoutSkeleton";
 
 export default function AuthGuard({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth({ redirectOnUnauthenticated: true });
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <ClassicLoader />
-      </div>
-    );
+    return <DashboardLayoutSkeleton />;
   }
 
   if (!user) return null;

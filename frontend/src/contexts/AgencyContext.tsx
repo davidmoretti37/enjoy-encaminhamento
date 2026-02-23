@@ -13,6 +13,7 @@ interface AgencyContextType {
   availableAgencies: Agency[];
   isLoading: boolean;
   isAllAgenciesMode: boolean;
+  isServerSynced: boolean;
   setCurrentAgency: (agencyId: string | null) => void;
 }
 
@@ -63,10 +64,15 @@ export function AgencyProvider({ children }: { children: ReactNode }) {
     : null;
 
   const setCurrentAgency = useCallback((agencyId: string | null) => {
-    setSelectedAgencyId(agencyId);
     saveToStorage(agencyId);
-    // Best-effort server persistence
-    setCurrentMutation.mutate({ agencyId });
+    // Update server context FIRST, then update state to trigger query refetch
+    // This prevents queries from firing with stale server-side context
+    setCurrentMutation.mutate({ agencyId }, {
+      onSettled: () => {
+        // Update state after server is synced (whether success or error)
+        setSelectedAgencyId(agencyId);
+      },
+    });
   }, [setCurrentMutation]);
 
   // If the stored agency ID is not in the available list (e.g., agency was deleted), reset
@@ -82,13 +88,18 @@ export function AgencyProvider({ children }: { children: ReactNode }) {
   }, [selectedAgencyId, availableAgencies]);
 
   // Sync localStorage selection to the backend on load so server-side context stays in sync
+  const [serverSynced, setServerSynced] = useState(false);
   useEffect(() => {
     if (
       selectedAgencyId &&
       availableAgencies.length > 0 &&
       availableAgencies.find(a => a.id === selectedAgencyId)
     ) {
-      setCurrentMutation.mutate({ agencyId: selectedAgencyId });
+      setCurrentMutation.mutate({ agencyId: selectedAgencyId }, {
+        onSettled: () => setServerSynced(true),
+      });
+    } else if (availableAgencies.length > 0) {
+      setServerSynced(true);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [availableAgencies]);
@@ -98,6 +109,7 @@ export function AgencyProvider({ children }: { children: ReactNode }) {
     availableAgencies,
     isLoading: isLoadingAgencies,
     isAllAgenciesMode: currentAgency === null,
+    isServerSynced: isAdmin ? serverSynced : true,
     setCurrentAgency,
   };
 

@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { useLocation } from "wouter";
 import { supabase } from "@/lib/supabase";
-import ClassicLoader from "@/components/ui/ClassicLoader";
+import { DashboardLayoutSkeleton } from "@/components/DashboardLayoutSkeleton";
 
 export default function AuthCallback() {
   const [, setLocation] = useLocation();
@@ -51,12 +51,5 @@ export default function AuthCallback() {
     handleCallback();
   }, [setLocation]);
 
-  return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50">
-      <div className="text-center space-y-4">
-        <ClassicLoader />
-        <p className="text-slate-600">Autenticando...</p>
-      </div>
-    </div>
-  );
+  return <DashboardLayoutSkeleton />;
 }

@@ -185,7 +185,7 @@ export default function CompanyDocumentsModal({
     signer_name: companyData?.contract_signer_name || realMeeting?.contract_signer_name || latestSignedDoc?.signer_name,
     signer_cpf: companyData?.contract_signer_cpf || realMeeting?.contract_signer_cpf || latestSignedDoc?.signer_cpf,
     sent_at: realMeeting?.contract_sent_at,
-    pdf_url: realMeeting?.contract_pdf_url || latestSignedDoc?.signed_pdf_url,
+    pdf_url: companyData?.contract_pdf_url || realMeeting?.contract_pdf_url || latestSignedDoc?.signed_pdf_url,
   };
 
   const getContractStatus = () => {

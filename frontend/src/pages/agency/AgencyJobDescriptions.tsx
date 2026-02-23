@@ -10,7 +10,9 @@ import { useState } from 'react';
 import { useRoute, useLocation } from 'wouter';
 import { trpc } from '@/lib/trpc';
 import DashboardLayout from '@/components/DashboardLayout';
-import ClassicLoader from '@/components/ui/ClassicLoader';
+import ContentTransition from '@/components/ui/ContentTransition';
+import { SearchBarSkeleton, ListSkeleton } from '@/components/ui/skeletons';
+import { Skeleton } from '@/components/ui/skeleton';
 import { WorkSchedulePicker } from '@/components/ui/WorkSchedulePicker';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -152,8 +154,17 @@ function MatchedCandidatesList({ jobId }: { jobId: string }) {
           <Users className="h-4 w-4 text-gray-500" />
           <h4 className="text-sm font-medium text-gray-700">Candidatos Compatíveis</h4>
         </div>
-        <div className="flex justify-center py-8">
-          <ClassicLoader />
+        <div className="space-y-2">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="flex items-center gap-3 p-4 border rounded-lg">
+              <Skeleton className="h-10 w-10 rounded-full shrink-0" />
+              <div className="flex-1 space-y-2">
+                <Skeleton className="h-4 w-36" />
+                <Skeleton className="h-3 w-24" />
+              </div>
+              <Skeleton className="h-6 w-14 rounded-full" />
+            </div>
+          ))}
         </div>
       </div>
     );
@@ -846,12 +857,12 @@ export default function AgencyJobDescriptions() {
         </Dialog>
 
         {/* Jobs List */}
+        <ContentTransition
+          isLoading={jobsLoading}
+          skeleton={<><SearchBarSkeleton /><ListSkeleton count={5} /></>}
+        >
         <div className="space-y-6">
-          {jobsLoading ? (
-            <div className="flex justify-center py-12">
-              <ClassicLoader />
-            </div>
-          ) : jobs && jobs.length > 0 ? (
+          {jobs && jobs.length > 0 ? (
             jobs.map((job: any) => {
               const statusConfig = jobStatusConfig[job.status] || jobStatusConfig.open;
 
@@ -1045,6 +1056,7 @@ export default function AgencyJobDescriptions() {
             </div>
           )}
         </div>
+        </ContentTransition>
       </div>
     </DashboardLayout>
   );

@@ -9,20 +9,21 @@ import {
   Briefcase
 } from "lucide-react";
 import { useLocation } from "wouter";
-import ClassicLoader from "@/components/ui/ClassicLoader";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { useAgencyContext } from "@/contexts/AgencyContext";
 
 export default function DashboardContent() {
   const [, setLocation] = useLocation();
   const { user } = useAuth();
-  const { isAllAgenciesMode } = useAgencyContext();
+  const { isAllAgenciesMode, isServerSynced } = useAgencyContext();
   const isTodasMode = (user?.role === 'admin' || user?.role === 'super_admin') && isAllAgenciesMode;
+  const agencyQueriesEnabled = !isTodasMode && isServerSynced;
 
-  // Agency-specific queries (disabled in Todas mode)
-  const { data: agencyStats } = trpc.agency.getDashboardStats.useQuery(undefined, { enabled: !isTodasMode });
-  const { data: agencyCandidates, isLoading: agencyCandidatesLoading } = trpc.agency.getCandidates.useQuery(undefined, { enabled: !isTodasMode });
-  const { data: agencyApplications, isLoading: agencyApplicationsLoading } = trpc.agency.getApplications.useQuery(undefined, { enabled: !isTodasMode });
+  // Agency-specific queries (disabled in Todas mode or before server sync)
+  const { data: agencyStats } = trpc.agency.getDashboardStats.useQuery(undefined, { enabled: agencyQueriesEnabled });
+  const { data: agencyCandidates, isLoading: agencyCandidatesLoading } = trpc.agency.getCandidates.useQuery(undefined, { enabled: agencyQueriesEnabled });
+  const { data: agencyApplications, isLoading: agencyApplicationsLoading } = trpc.agency.getApplications.useQuery(undefined, { enabled: agencyQueriesEnabled });
 
   // Affiliate-level queries (enabled in Todas mode)
   const { data: affiliateStats } = trpc.affiliate.getDashboardStats.useQuery({ agencyId: null }, { enabled: isTodasMode });
@@ -125,8 +126,17 @@ export default function DashboardContent() {
           </CardHeader>
           <CardContent className="pt-4">
             {candidatesLoading ? (
-              <div className="flex justify-center py-8">
-                <ClassicLoader />
+              <div className="space-y-3 py-2">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <div key={i} className="flex items-center gap-3 p-3">
+                    <Skeleton className="h-10 w-10 rounded-full" />
+                    <div className="flex-1 space-y-2">
+                      <Skeleton className="h-4 w-32" />
+                      <Skeleton className="h-3 w-24" />
+                    </div>
+                    <Skeleton className="h-6 w-16 rounded-full" />
+                  </div>
+                ))}
               </div>
             ) : candidates && candidates.length > 0 ? (
               <div className="space-y-2">
@@ -193,8 +203,17 @@ export default function DashboardContent() {
           </CardHeader>
           <CardContent className="pt-4">
             {applicationsLoading ? (
-              <div className="flex justify-center py-8">
-                <ClassicLoader />
+              <div className="space-y-3 py-2">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <div key={i} className="flex items-center gap-3 p-3">
+                    <Skeleton className="h-10 w-10 rounded-full" />
+                    <div className="flex-1 space-y-2">
+                      <Skeleton className="h-4 w-32" />
+                      <Skeleton className="h-3 w-24" />
+                    </div>
+                    <Skeleton className="h-6 w-16 rounded-full" />
+                  </div>
+                ))}
               </div>
             ) : applications && applications.length > 0 ? (
               <div className="space-y-2">

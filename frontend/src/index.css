@@ -289,3 +289,38 @@
 .animate-shimmer {
   animation: shimmer 2s infinite;
 }
+
+/* ========================================
+   SKELETON SHIMMER LOADING ANIMATION
+   ======================================== */
+
+@keyframes skeleton-shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.skeleton-shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--accent) 25%,
+    oklch(0.985 0.001 286) 50%,
+    var(--accent) 75%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.5s ease-in-out infinite;
+}
+
+.dark .skeleton-shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--accent) 25%,
+    oklch(0.35 0.006 286) 50%,
+    var(--accent) 75%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.5s ease-in-out infinite;
+}

@@ -1,5 +1,6 @@
 import { useAuth } from "@/_core/hooks/useAuth";
-import ClassicLoader from "@/components/ui/ClassicLoader";
+import ContentTransition from "@/components/ui/ContentTransition";
+import { PageHeaderSkeleton, SearchBarSkeleton, TableSkeleton } from "@/components/ui/skeletons";
 import { useAgencyContext } from "@/contexts/AgencyContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -265,15 +266,7 @@ export default function CompanyPage() {
     },
   });
 
-  if (authLoading || isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <ClassicLoader />
-      </div>
-    );
-  }
-
-  if (!user || !user.role || !['admin', 'agency'].includes(user.role)) {
+  if (!isLoading && (!user || !user.role || !['admin', 'agency'].includes(user.role))) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Card className="max-w-md">
@@ -354,6 +347,13 @@ export default function CompanyPage() {
 
   return (
     <DashboardLayout>
+      <ContentTransition isLoading={isLoading} skeleton={
+        <>
+          <PageHeaderSkeleton />
+          <SearchBarSkeleton />
+          <TableSkeleton columns={5} rows={6} />
+        </>
+      }>
       <div className="space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
@@ -672,6 +672,7 @@ export default function CompanyPage() {
           }}
         />
       </div>
+      </ContentTransition>
     </DashboardLayout>
   );
 }

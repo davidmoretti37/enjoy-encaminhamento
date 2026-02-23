@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { useAuth } from "@/_core/hooks/useAuth";
-import ClassicLoader from "@/components/ui/ClassicLoader";
+import ContentTransition from "@/components/ui/ContentTransition";
+import { PageHeaderSkeleton, SearchBarSkeleton, TableSkeleton } from "@/components/ui/skeletons";
 import { useAgencyContext } from "@/contexts/AgencyContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -89,17 +90,9 @@ export default function JobPage() {
     { enabled: !!selectedJobForMatches?.id && showMatchesDialog }
   );
 
-  const isLoading = authLoading || jobsLoading;
+  const isLoading = jobsLoading;
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <ClassicLoader />
-      </div>
-    );
-  }
-
-  if (!user || !['admin', 'agency'].includes(user.role)) {
+  if (!isLoading && (!user || !['admin', 'agency'].includes(user.role))) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Card className="max-w-md">
@@ -206,6 +199,13 @@ export default function JobPage() {
 
   return (
     <DashboardLayout>
+      <ContentTransition isLoading={isLoading} skeleton={
+        <>
+          <PageHeaderSkeleton />
+          <SearchBarSkeleton />
+          <TableSkeleton columns={6} rows={6} />
+        </>
+      }>
       <div className="space-y-8">
         {/* Header */}
         <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-6 border">
@@ -680,6 +680,7 @@ export default function JobPage() {
           </DialogContent>
         </Dialog>
       </div>
+      </ContentTransition>
     </DashboardLayout>
   );
 }

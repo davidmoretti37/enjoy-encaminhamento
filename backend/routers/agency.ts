@@ -753,7 +753,12 @@ export const agencyRouter = router({
       if (input.contractSigned && input.contractFileBase64 && input.contractFileName) {
         const { storagePut } = await import('../storage');
         const buffer = Buffer.from(input.contractFileBase64, 'base64');
-        const key = `contracts/signed/company-${result.companyId}/${Date.now()}-${input.contractFileName}`;
+        // Sanitize filename: remove accents, replace spaces/special chars with hyphens
+        const sanitizedName = input.contractFileName
+          .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+          .replace(/[^a-zA-Z0-9._-]/g, '-')
+          .replace(/-+/g, '-');
+        const key = `contracts/signed/company-${result.companyId}/${Date.now()}-${sanitizedName}`;
         const { url } = await storagePut(key, buffer, 'application/pdf');
         await supabaseAdmin
           .from('companies')
@@ -793,6 +798,96 @@ export const agencyRouter = router({
         companyId: result.companyId,
         credentials: { email: input.email },
       };
+    }),
+
+  // ============================================
+  // COMPANY PAYMENT SCHEDULE (agency creates payments for a company)
+  // ============================================
+
+  createCompanyPaymentSchedule: agencyProcedure
+    .input(z.object({
+      companyId: z.string().uuid(),
+      monthlyAmount: z.number().positive(), // in BRL (will be converted to cents)
+      startDate: z.string(), // ISO date
+      endDate: z.string().optional(), // ISO date, optional (defaults to 12 months)
+      paymentDay: z.number().min(1).max(31).optional(), // Day of month for payment
+      paidMonths: z.number().min(0).optional(), // Number of months already paid
+      notes: z.string().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const isAdmin = ctx.user.role === 'admin' || ctx.user.role === 'super_admin';
+
+      // Verify the company exists
+      const { data: company } = await supabaseAdmin
+        .from('companies')
+        .select('id, agency_id')
+        .eq('id', input.companyId)
+        .single();
+
+      if (!company) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Company not found' });
+      }
+
+      // For non-admin users, verify company belongs to their agency
+      if (!isAdmin) {
+        const agency = await db.getAgencyForUserContext(ctx.user.id, ctx.user.role);
+        if (!agency || company.agency_id !== agency.id) {
+          throw new TRPCError({ code: 'FORBIDDEN', message: 'Company does not belong to this agency' });
+        }
+      }
+
+      const amountCents = Math.round(input.monthlyAmount * 100);
+      const startDate = new Date(input.startDate);
+      const endDate = input.endDate ? new Date(input.endDate) : null;
+      const paymentDay = input.paymentDay || startDate.getDate();
+
+      // Calculate number of months
+      let maxMonths: number;
+      if (endDate) {
+        maxMonths = Math.ceil((endDate.getTime() - startDate.getTime()) / (30.44 * 24 * 60 * 60 * 1000)) + 1;
+      } else {
+        maxMonths = 12;
+      }
+
+      const paidMonths = input.paidMonths || 0;
+      const payments: any[] = [];
+      let current = new Date(startDate.getFullYear(), startDate.getMonth(), paymentDay);
+      if (current < startDate) {
+        current.setMonth(current.getMonth() + 1);
+      }
+
+      let count = 0;
+      while (count < maxMonths) {
+        if (endDate && current > endDate) break;
+
+        const year = current.getFullYear();
+        const month = String(current.getMonth() + 1).padStart(2, '0');
+        const isPaid = count < paidMonths;
+
+        payments.push({
+          company_id: input.companyId,
+          amount: amountCents,
+          payment_type: 'monthly-fee',
+          due_date: current.toISOString(),
+          status: isPaid ? 'paid' : 'pending',
+          ...(isPaid ? { paid_at: new Date().toISOString() } : {}),
+          billing_period: `${year}-${month}`,
+          notes: input.notes || 'Mensalidade',
+        });
+
+        current = new Date(current.getFullYear(), current.getMonth() + 1, paymentDay);
+        count++;
+      }
+
+      if (payments.length > 0) {
+        const { error: insertError } = await supabaseAdmin.from('payments').insert(payments);
+        if (insertError) {
+          console.error('[Agency] Failed to create payment schedule:', insertError);
+          throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Failed to create payment schedule' });
+        }
+      }
+
+      return { success: true, paymentsCreated: payments.length };
     }),
 
   // ============================================

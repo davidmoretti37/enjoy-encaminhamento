@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { useAuth } from "@/_core/hooks/useAuth";
-import ClassicLoader from "@/components/ui/ClassicLoader";
+import ContentTransition from "@/components/ui/ContentTransition";
+import { StatsCardsSkeleton, TableSkeleton } from "@/components/ui/skeletons";
 import { useAgencyContext } from "@/contexts/AgencyContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -140,19 +141,7 @@ export default function PaymentPage() {
     },
   });
 
-  const isLoading = authLoading || paymentsLoading;
-
-  if (isLoading) {
-    return (
-      <DashboardLayout>
-        <div className="flex items-center justify-center py-16">
-          <ClassicLoader />
-        </div>
-      </DashboardLayout>
-    );
-  }
-
-  if (!user || !['admin', 'agency'].includes(user.role)) {
+  if (!authLoading && (!user || !['admin', 'agency'].includes(user.role))) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Card className="max-w-md">
@@ -270,6 +259,7 @@ export default function PaymentPage() {
 
   return (
     <DashboardLayout>
+      <ContentTransition isLoading={paymentsLoading} skeleton={<><StatsCardsSkeleton count={3} /><TableSkeleton columns={5} rows={6} /></>}>
       <div className="space-y-6">
         {/* Centered Header */}
         <div className="text-center mb-6">
@@ -609,6 +599,7 @@ export default function PaymentPage() {
           </DialogContent>
         </Dialog>
       </div>
+      </ContentTransition>
     </DashboardLayout>
   );
 }

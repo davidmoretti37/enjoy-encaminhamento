@@ -19,7 +19,9 @@ import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Building, CheckCircle, Briefcase, ArrowRight, ArrowLeft, FileText, Bot, Users, DollarSign, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import ClassicLoader from "@/components/ui/ClassicLoader";
+import ContentTransition from "@/components/ui/ContentTransition";
+import { FormSkeleton } from "@/components/ui/skeletons";
+import { Skeleton } from "@/components/ui/skeleton";
 import DocumentSigningFlow from "@/components/DocumentSigningFlow";
 
 const EMPLOYMENT_TYPES = [
@@ -373,7 +375,7 @@ export default function CompanyOnboarding() {
   if (authLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <ClassicLoader />
+        <FormSkeleton fields={6} />
       </div>
     );
   }
@@ -383,7 +385,7 @@ export default function CompanyOnboarding() {
     window.location.href = '/login?tab=signup&role=company';
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <ClassicLoader />
+        <FormSkeleton fields={6} />
       </div>
     );
   }
@@ -1047,7 +1049,7 @@ export default function CompanyOnboarding() {
               <CardContent className="p-8 space-y-6">
                 {prepareAutentiqueDocs.isPending ? (
                   <div className="flex flex-col items-center justify-center py-12 gap-3">
-                    <ClassicLoader />
+                    <FormSkeleton fields={6} />
                     <p className="text-sm text-muted-foreground">Preparando documentos para assinatura...</p>
                   </div>
                 ) : (
@@ -1065,7 +1067,7 @@ export default function CompanyOnboarding() {
                   <Button type="submit" disabled={submitting || !allDocsSigned} size="lg" className="px-8 bg-green-600 hover:bg-green-700">
                     {submitting ? (
                       <>
-                        <ClassicLoader />
+                        <Skeleton className="h-4 w-4 rounded-full" />
                         Finalizando...
                       </>
                     ) : (

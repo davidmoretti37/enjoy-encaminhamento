@@ -1,7 +1,7 @@
 // @ts-nocheck
 import { useRef, useState } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
-import ClassicLoader from "@/components/ui/ClassicLoader";
+import { Skeleton } from "@/components/ui/skeleton";
 import DashboardLayout from "@/components/DashboardLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -147,9 +147,26 @@ export default function CandidateSignContract() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <ClassicLoader />
-      </div>
+      <DashboardLayout>
+        <div className="space-y-6">
+          <div className="text-center py-4">
+            <Skeleton className="h-8 w-48 mx-auto" />
+            <Skeleton className="h-4 w-64 mx-auto mt-2" />
+          </div>
+          <div className="space-y-4">
+            {Array.from({ length: 2 }).map((_, i) => (
+              <div key={i} className="rounded-lg border p-4 space-y-3">
+                <Skeleton className="h-5 w-40" />
+                <div className="flex gap-3">
+                  <Skeleton className="h-4 w-24" />
+                  <Skeleton className="h-4 w-32" />
+                </div>
+                <Skeleton className="h-9 w-36" />
+              </div>
+            ))}
+          </div>
+        </div>
+      </DashboardLayout>
     );
   }
 

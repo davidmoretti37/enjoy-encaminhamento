@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from "react";
-import ClassicLoader from "@/components/ui/ClassicLoader";
+import ContentTransition from "@/components/ui/ContentTransition";
+import { FormSkeleton } from "@/components/ui/skeletons";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -244,10 +246,10 @@ export default function AgencyRegistration() {
   // Validating
   if (step === 'validating' || validating) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
-        <div className="text-center">
-          <ClassicLoader />
-          <p className="text-muted-foreground mt-4">Validando convite...</p>
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
+        <div className="max-w-xl w-full">
+          <FormSkeleton fields={4} />
+          <p className="text-muted-foreground mt-4 text-center">Validando convite...</p>
         </div>
       </div>
     );
@@ -303,10 +305,10 @@ export default function AgencyRegistration() {
   // Submitting
   if (step === 'submitting') {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
-        <div className="text-center">
-          <ClassicLoader />
-          <p className="text-muted-foreground mt-4">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
+        <div className="max-w-xl w-full">
+          <FormSkeleton fields={4} />
+          <p className="text-muted-foreground mt-4 text-center">
             {uploading ? "Fazendo upload do contrato..." : "Finalizando cadastro..."}
           </p>
         </div>

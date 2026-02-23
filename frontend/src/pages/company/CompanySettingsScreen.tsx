@@ -1,7 +1,9 @@
 import { useState, useEffect, useMemo } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { FunnelLayout, CardEntrance } from "@/components/funnel";
-import ClassicLoader from "@/components/ui/ClassicLoader";
+import ContentTransition from "@/components/ui/ContentTransition";
+import { FormSkeleton } from "@/components/ui/skeletons";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -95,7 +97,7 @@ export default function CompanySettingsScreen() {
   if (authLoading) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <ClassicLoader />
+        <FormSkeleton fields={5} />
       </div>
     );
   }
@@ -168,9 +170,7 @@ export default function CompanySettingsScreen() {
               </div>
 
               {infoLoading ? (
-                <div className="text-center py-8">
-                  <ClassicLoader />
-                </div>
+                <FormSkeleton fields={5} />
               ) : companyInfo ? (
                 <>
                   <div className="grid grid-cols-2 gap-6 mb-6">
@@ -234,8 +234,8 @@ export default function CompanySettingsScreen() {
             <CardEntrance>
               <div className="bg-white rounded-xl border-2 border-slate-200 shadow-sm overflow-hidden">
                 {usersLoading ? (
-                  <div className="text-center py-8">
-                    <ClassicLoader />
+                  <div className="p-4">
+                    <FormSkeleton fields={5} />
                   </div>
                 ) : companyUsers && companyUsers.length > 0 ? (
                   <Table>
@@ -289,9 +289,7 @@ export default function CompanySettingsScreen() {
         {activeTab === "notifications" && (
           <div className="space-y-6">
             {prefsLoading ? (
-              <div className="text-center py-8">
-                <ClassicLoader />
-              </div>
+              <FormSkeleton fields={5} />
             ) : (
               <>
                 {/* Email Notifications */}
@@ -411,9 +409,7 @@ export default function CompanySettingsScreen() {
         {activeTab === "employees" && (
           <div className="space-y-6">
             {hiringLoading ? (
-              <div className="text-center py-8">
-                <ClassicLoader />
-              </div>
+              <FormSkeleton fields={5} />
             ) : activeEmployees.length === 0 ? (
               <CardEntrance>
                 <div className="bg-white rounded-xl border-2 border-slate-200 shadow-sm p-8">

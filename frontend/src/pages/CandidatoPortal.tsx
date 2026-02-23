@@ -7,7 +7,8 @@ import {
   useCandidateFunnel,
   CANDIDATE_STEPS,
 } from "@/contexts/CandidateFunnelContext";
-import ClassicLoader from "@/components/ui/ClassicLoader";
+import { Skeleton } from "@/components/ui/skeleton";
+import { FunnelContentSkeleton } from "@/components/ui/skeletons";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   User,
@@ -204,7 +205,7 @@ function CandidatoPortalContent() {
   if (isLoading) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <ClassicLoader />
+        <FunnelContentSkeleton />
       </div>
     );
   }
@@ -288,7 +289,7 @@ export default function CandidatoPortal() {
   if (authLoading) {
     return (
       <div className="min-h-screen bg-[#0A0A0B] flex items-center justify-center">
-        <ClassicLoader />
+        <FunnelContentSkeleton />
       </div>
     );
   }

@@ -1,5 +1,6 @@
 import { useAuth } from "@/_core/hooks/useAuth";
-import ClassicLoader from "@/components/ui/ClassicLoader";
+import ContentTransition from "@/components/ui/ContentTransition";
+import { PageHeaderSkeleton, ListSkeleton } from "@/components/ui/skeletons";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -43,9 +44,12 @@ export default function FeedbackManagement() {
 
   if (authLoading || isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <ClassicLoader />
-      </div>
+      <DashboardLayout>
+        <div className="space-y-6">
+          <PageHeaderSkeleton />
+          <ListSkeleton count={5} />
+        </div>
+      </DashboardLayout>
     );
   }
 

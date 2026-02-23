@@ -8,7 +8,7 @@
 import { useState, useCallback, useEffect, useMemo } from 'react';
 import { useAgencyFunnel } from '@/contexts/AgencyFunnelContext';
 import { trpc } from '@/lib/trpc';
-import ClassicLoader from '@/components/ui/ClassicLoader';
+import { Skeleton } from '@/components/ui/skeleton';
 import { WorkSchedulePicker } from '@/components/ui/WorkSchedulePicker';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -238,8 +238,17 @@ function MatchedCandidatesList({ jobId, onGroupCreated }: { jobId: string; onGro
           <Users className="h-4 w-4 text-gray-500" />
           <h4 className="text-sm font-medium text-gray-700">Candidatos Compatíveis</h4>
         </div>
-        <div className="flex justify-center py-8">
-          <ClassicLoader />
+        <div className="space-y-3">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="flex items-center gap-3 p-3">
+              <Skeleton className="h-10 w-10 rounded-full" />
+              <div className="flex-1 space-y-2">
+                <Skeleton className="h-4 w-32" />
+                <Skeleton className="h-3 w-24" />
+              </div>
+              <Skeleton className="h-6 w-16 rounded-full" />
+            </div>
+          ))}
         </div>
       </div>
     );
@@ -2026,8 +2035,17 @@ export default function CompanyJobFlow() {
       {/* Jobs List */}
       <div className="space-y-12">
         {jobsLoading ? (
-          <div className="flex justify-center py-12">
-            <ClassicLoader />
+          <div className="space-y-3">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="flex items-center gap-3 p-3">
+                <Skeleton className="h-10 w-10 rounded-lg" />
+                <div className="flex-1 space-y-2">
+                  <Skeleton className="h-4 w-32" />
+                  <Skeleton className="h-3 w-24" />
+                </div>
+                <Skeleton className="h-6 w-16 rounded-full" />
+              </div>
+            ))}
           </div>
         ) : jobs && jobs.length > 0 ? (
           jobs.map((job: any) => (

@@ -104,20 +104,12 @@ export const affiliateRouter = router({
       return { success: true };
     }),
 
-  // Get agencies in admin's region
+  // Get agencies in admin's region (always returns all, regardless of context selection)
   getAgencies: protectedProcedure.query(async ({ ctx }) => {
     const affiliate = await db.getAffiliateByUserId(ctx.user.id);
     if (!affiliate) {
       throw new TRPCError({ code: 'NOT_FOUND', message: 'Affiliate not found' });
     }
-    // Check if user has a specific agency selected
-    const agencyId = await db.getAdminAgencyContext(ctx.user.id);
-    if (agencyId) {
-      // Return only the selected agency
-      const agency = await db.getAgencyById(agencyId);
-      return agency ? [agency] : [];
-    }
-    // Return all agencies
     return await db.getAgenciesByAffiliateId(affiliate.id);
   }),
 

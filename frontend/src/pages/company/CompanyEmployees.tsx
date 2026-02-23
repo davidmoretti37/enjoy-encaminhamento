@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import DashboardLayout from "@/components/DashboardLayout";
-import ClassicLoader from "@/components/ui/ClassicLoader";
+import ContentTransition from "@/components/ui/ContentTransition";
+import { PageHeaderSkeleton, SearchBarSkeleton, ListSkeleton } from "@/components/ui/skeletons";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -83,14 +84,6 @@ export default function CompanyEmployees() {
       toast.error(error.message || 'Erro ao enviar relatório');
     },
   });
-
-  if (authLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <ClassicLoader />
-      </div>
-    );
-  }
 
   if (!user || user.role !== 'company') {
     return (
@@ -201,9 +194,10 @@ export default function CompanyEmployees() {
           </Alert>
         )}
 
-        {isLoading ? (
-          <div className="text-center py-8"><ClassicLoader /></div>
-        ) : (
+        <ContentTransition
+          isLoading={isLoading}
+          skeleton={<><PageHeaderSkeleton /><SearchBarSkeleton /><ListSkeleton count={5} /></>}
+        >
           <Tabs value={activeTab} onValueChange={setActiveTab}>
             <TabsList className={`grid w-full ${pendingHiring.length > 0 ? 'grid-cols-3' : 'grid-cols-2'}`}>
               {pendingHiring.length > 0 && (
@@ -443,7 +437,7 @@ export default function CompanyEmployees() {
               )}
             </TabsContent>
           </Tabs>
-        )}
+        </ContentTransition>
 
         {/* Report Modal */}
         <Dialog open={reportModalOpen} onOpenChange={setReportModalOpen}>

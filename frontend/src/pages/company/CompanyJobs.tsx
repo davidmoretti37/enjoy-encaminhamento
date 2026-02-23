@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import DashboardLayout from "@/components/DashboardLayout";
-import ClassicLoader from "@/components/ui/ClassicLoader";
+import ContentTransition from "@/components/ui/ContentTransition";
+import { PageHeaderSkeleton, SearchBarSkeleton, ListSkeleton } from "@/components/ui/skeletons";
 import { WorkSchedulePicker } from "@/components/ui/WorkSchedulePicker";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -249,12 +250,12 @@ export default function CompanyJobs() {
         </Dialog>
 
         {/* Jobs List */}
+        <ContentTransition
+          isLoading={isLoading}
+          skeleton={<><PageHeaderSkeleton /><SearchBarSkeleton /><ListSkeleton count={4} /></>}
+        >
         <div className="space-y-6">
-          {isLoading ? (
-            <div className="flex justify-center py-12">
-              <ClassicLoader />
-            </div>
-          ) : jobs && jobs.length > 0 ? (
+          {jobs && jobs.length > 0 ? (
             jobs.map((job: any) => {
               const statusConfig = jobStatusConfig[job.status] || jobStatusConfig.pending_review;
               const presentation = job.presentation?.[0];
@@ -535,6 +536,7 @@ export default function CompanyJobs() {
             </div>
           )}
         </div>
+        </ContentTransition>
       </div>
     </DashboardLayout>
   );

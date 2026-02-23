@@ -84,30 +84,33 @@ export function AgencyFunnelProvider({ children }: { children: ReactNode }) {
   // tRPC queries
   const utils = trpc.useUtils();
   const { user } = useAuth();
-  const { isAllAgenciesMode } = useAgencyContext();
+  const { isAllAgenciesMode, isServerSynced } = useAgencyContext();
 
   // Admin in "Todas as Agências" mode uses affiliate-level endpoints
   const isTodasMode = (user?.role === 'admin' || user?.role === 'super_admin') && isAllAgenciesMode;
 
-  // === Agency-specific queries (disabled in Todas mode) ===
+  // Only enable agency queries after server context is synced (prevents stale data)
+  const agencyQueriesEnabled = !isTodasMode && isServerSynced;
+
+  // === Agency-specific queries (disabled in Todas mode or before server sync) ===
   const { data: agencyProfile } = trpc.agency.getProfile.useQuery(
     undefined,
-    { staleTime: 60000, enabled: !isTodasMode }
+    { staleTime: 60000, enabled: agencyQueriesEnabled }
   );
 
   const { data: agencyDirectCompanies = [], isLoading: isAgencyCompaniesLoading } = trpc.agency.getCompanies.useQuery(
     undefined,
-    { staleTime: 30000, enabled: !isTodasMode }
+    { staleTime: 30000, enabled: agencyQueriesEnabled }
   );
 
   const { data: agencyMeetings = [], isLoading: isAgencyMeetingsLoading } = trpc.agency.getMeetings.useQuery(
     undefined,
-    { staleTime: 30000, enabled: !isTodasMode }
+    { staleTime: 30000, enabled: agencyQueriesEnabled }
   );
 
   const { data: agencyCandidates = [], isLoading: isAgencyCandidatesLoading } = trpc.agency.getCandidates.useQuery(
     undefined,
-    { staleTime: 30000, enabled: !isTodasMode }
+    { staleTime: 30000, enabled: agencyQueriesEnabled }
   );
 
   // === Affiliate-level queries (enabled only in Todas mode) ===

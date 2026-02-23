@@ -1,7 +1,9 @@
 import { useState } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import DashboardLayout from "@/components/DashboardLayout";
-import ClassicLoader from "@/components/ui/ClassicLoader";
+import ContentTransition from "@/components/ui/ContentTransition";
+import { ProfileSkeleton, FormSkeleton } from "@/components/ui/skeletons";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -69,12 +71,12 @@ export default function CompanyEmployeeDetail() {
     },
   });
 
-  if (authLoading || isLoading) {
+  if (isLoading) {
     return (
       <DashboardLayout>
-        <div className="min-h-screen flex items-center justify-center">
-          <ClassicLoader />
-        </div>
+        <ContentTransition isLoading={true} skeleton={<><ProfileSkeleton /><div className="mt-6"><FormSkeleton fields={4} /></div></>}>
+          <div />
+        </ContentTransition>
       </DashboardLayout>
     );
   }
@@ -379,8 +381,8 @@ export default function CompanyEmployeeDetail() {
           </CardHeader>
           <CardContent>
             {paymentsLoading ? (
-              <div className="flex justify-center py-8">
-                <ClassicLoader />
+              <div className="py-4">
+                <FormSkeleton fields={4} />
               </div>
             ) : paymentHistory && paymentHistory.length > 0 ? (
               <Table>

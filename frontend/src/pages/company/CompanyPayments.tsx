@@ -1,7 +1,9 @@
 import { useState, useRef } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import DashboardLayout from "@/components/DashboardLayout";
-import ClassicLoader from "@/components/ui/ClassicLoader";
+import ContentTransition from "@/components/ui/ContentTransition";
+import { StatsCardsSkeleton, ListSkeleton } from "@/components/ui/skeletons";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -68,14 +70,6 @@ export default function CompanyPayments() {
       toast.error(error.message || 'Erro ao enviar comprovante');
     },
   });
-
-  if (authLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <ClassicLoader />
-      </div>
-    );
-  }
 
   if (!user || user.role !== 'company') {
     return (
@@ -249,7 +243,7 @@ export default function CompanyPayments() {
 
         {/* Upcoming Payments */}
         {upcomingLoading ? (
-          <div className="text-center py-4"><ClassicLoader /></div>
+          <ListSkeleton count={4} />
         ) : upcomingPayments && upcomingPayments.length > 0 ? (
           <Card>
             <CardHeader>

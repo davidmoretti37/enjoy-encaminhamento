@@ -19,7 +19,9 @@ import {
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import DashboardLayout from "@/components/DashboardLayout";
-import ClassicLoader from "@/components/ui/ClassicLoader";
+import ContentTransition from "@/components/ui/ContentTransition";
+import { StatsCardsSkeleton, ListSkeleton, PageHeaderSkeleton } from "@/components/ui/skeletons";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export default function AdminDashboard() {
   const { user, loading: authLoading } = useAuth();
@@ -30,18 +32,7 @@ export default function AdminDashboard() {
   const { data: companies, isLoading: companiesLoading } = trpc.company.getAll.useQuery();
   const { data: candidates, isLoading: candidatesLoading } = trpc.candidate.getAll.useQuery();
 
-  if (authLoading || statsLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
-        <div className="text-center">
-          <div className="flex justify-center mb-4">
-            <ClassicLoader />
-          </div>
-          <p className="text-muted-foreground">Carregando dashboard...</p>
-        </div>
-      </div>
-    );
-  }
+  const isLoading = authLoading || statsLoading;
 
   if (!user || (user.role !== 'admin' && user.role !== 'super_admin')) {
     return (
@@ -66,7 +57,24 @@ export default function AdminDashboard() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-8">
+      <ContentTransition
+        isLoading={isLoading}
+        skeleton={
+          <div className="space-y-8">
+            <PageHeaderSkeleton />
+            <StatsCardsSkeleton count={4} />
+            <div className="grid gap-4 md:grid-cols-2">
+              <ListSkeleton count={3} />
+              <ListSkeleton count={3} />
+            </div>
+            <div className="grid gap-6 md:grid-cols-2">
+              <ListSkeleton count={5} />
+              <ListSkeleton count={5} />
+            </div>
+          </div>
+        }
+      >
+        <div className="space-y-8">
         {/* Header */}
         <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-6 border">
           <h1 className="text-3xl font-bold flex items-center gap-3">
@@ -86,7 +94,10 @@ export default function AdminDashboard() {
               </CardHeader>
               <CardContent>
                 {adminStatsLoading ? (
-                  <ClassicLoader />
+                  <div className="space-y-2">
+                    <Skeleton className="h-8 w-16" />
+                    <Skeleton className="h-3 w-32" />
+                  </div>
                 ) : (
                   <>
                     <div className="text-3xl font-semibold mb-1 text-slate-900">{adminStats?.totalCompanies || 0}</div>
@@ -105,7 +116,10 @@ export default function AdminDashboard() {
               </CardHeader>
               <CardContent>
                 {adminStatsLoading ? (
-                  <ClassicLoader />
+                  <div className="space-y-2">
+                    <Skeleton className="h-8 w-16" />
+                    <Skeleton className="h-3 w-32" />
+                  </div>
                 ) : (
                   <>
                     <div className="text-3xl font-semibold mb-1 text-emerald-900">{adminStats?.totalCandidates || 0}</div>
@@ -124,7 +138,10 @@ export default function AdminDashboard() {
               </CardHeader>
               <CardContent>
                 {adminStatsLoading ? (
-                  <ClassicLoader />
+                  <div className="space-y-2">
+                    <Skeleton className="h-8 w-16" />
+                    <Skeleton className="h-3 w-32" />
+                  </div>
                 ) : (
                   <>
                     <div className="text-3xl font-semibold mb-1 text-blue-900">{adminStats?.totalJobs || 0}</div>
@@ -143,7 +160,10 @@ export default function AdminDashboard() {
               </CardHeader>
               <CardContent>
                 {adminStatsLoading ? (
-                  <ClassicLoader />
+                  <div className="space-y-2">
+                    <Skeleton className="h-8 w-16" />
+                    <Skeleton className="h-3 w-32" />
+                  </div>
                 ) : (
                   <>
                     <div className="text-3xl font-semibold mb-1 text-purple-900">{adminStats?.totalApplications || 0}</div>
@@ -169,8 +189,11 @@ export default function AdminDashboard() {
             </CardHeader>
             <CardContent className="pt-6">
               {adminStatsLoading ? (
-                <div className="flex justify-center py-8">
-                  <ClassicLoader />
+                <div className="space-y-4">
+                  <Skeleton className="h-5 w-full" />
+                  <Skeleton className="h-5 w-full" />
+                  <Skeleton className="h-5 w-full" />
+                  <Skeleton className="h-8 w-24 mt-4" />
                 </div>
               ) : (
                 <div className="space-y-4">
@@ -216,8 +239,11 @@ export default function AdminDashboard() {
             </CardHeader>
             <CardContent className="pt-6">
               {adminStatsLoading ? (
-                <div className="flex justify-center py-8">
-                  <ClassicLoader />
+                <div className="space-y-4">
+                  <Skeleton className="h-5 w-full" />
+                  <Skeleton className="h-5 w-full" />
+                  <Skeleton className="h-5 w-full" />
+                  <Skeleton className="h-8 w-24 mt-4" />
                 </div>
               ) : (
                 <div className="space-y-4">
@@ -265,8 +291,19 @@ export default function AdminDashboard() {
             </CardHeader>
             <CardContent className="pt-6">
               {companiesLoading ? (
-                <div className="flex justify-center py-8">
-                  <ClassicLoader />
+                <div className="space-y-3">
+                  {Array.from({ length: 3 }).map((_, i) => (
+                    <div key={i} className="flex items-center justify-between p-4 border-2 rounded-xl">
+                      <div className="flex-1 space-y-2">
+                        <Skeleton className="h-4 w-32" />
+                        <Skeleton className="h-3 w-48" />
+                      </div>
+                      <div className="text-right space-y-2">
+                        <Skeleton className="h-5 w-16 rounded-full" />
+                        <Skeleton className="h-3 w-12 ml-auto" />
+                      </div>
+                    </div>
+                  ))}
                 </div>
               ) : companies && companies.length > 0 ? (
                 <div className="space-y-3">
@@ -322,8 +359,19 @@ export default function AdminDashboard() {
             </CardHeader>
             <CardContent className="pt-6">
               {candidatesLoading ? (
-                <div className="flex justify-center py-8">
-                  <ClassicLoader />
+                <div className="space-y-3">
+                  {Array.from({ length: 3 }).map((_, i) => (
+                    <div key={i} className="flex items-center justify-between p-4 border-2 rounded-xl">
+                      <div className="flex-1 space-y-2">
+                        <Skeleton className="h-4 w-32" />
+                        <Skeleton className="h-3 w-48" />
+                      </div>
+                      <div className="text-right space-y-2">
+                        <Skeleton className="h-5 w-16 rounded-full" />
+                        <Skeleton className="h-3 w-12 ml-auto" />
+                      </div>
+                    </div>
+                  ))}
                 </div>
               ) : candidates && candidates.length > 0 ? (
                 <div className="space-y-3">
@@ -371,6 +419,7 @@ export default function AdminDashboard() {
           </Card>
         </div>
       </div>
+      </ContentTransition>
     </DashboardLayout>
   );
 }

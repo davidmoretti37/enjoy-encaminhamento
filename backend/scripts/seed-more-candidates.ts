@@ -1,0 +1,583 @@
+/**
+ * Seed 30 more mock candidates (mock21-mock50)
+ * Usage: npx tsx scripts/seed-more-candidates.ts
+ */
+
+import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { createClient } from '@supabase/supabase-js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+dotenv.config({ path: path.resolve(__dirname, '../../.env') });
+
+const supabaseAdmin = createClient(
+  process.env.SUPABASE_URL || '',
+  process.env.SUPABASE_SERVICE_ROLE_KEY || '',
+  { auth: { autoRefreshToken: false, persistSession: false } }
+);
+
+const candidates = [
+  {
+    full_name: 'Adriana Lima Souza',
+    email: 'mock21@test.local',
+    cpf: '111.111.111-21',
+    phone: '(11) 91111-0021',
+    city: 'São Paulo', state: 'SP',
+    education_level: 'superior',
+    institution: 'PUC-SP',
+    course: 'Psicologia',
+    skills: ['Comunicação', 'Atendimento', 'Excel', 'Organização'],
+    has_work_experience: true,
+    experience: [{ company: 'RH Solutions', role: 'Assistente RH', months: 18 }],
+    disc_dominante: 15, disc_influente: 40, disc_estavel: 30, disc_conforme: 15,
+    available_for_internship: false, available_for_clt: true, available_for_apprentice: false,
+    preferred_work_type: 'presencial',
+  },
+  {
+    full_name: 'Carlos Eduardo Martins',
+    email: 'mock22@test.local',
+    cpf: '111.111.111-22',
+    phone: '(31) 91111-0022',
+    city: 'São Paulo', state: 'SP',
+    education_level: 'superior',
+    institution: 'UFMG',
+    course: 'Engenharia Elétrica',
+    skills: ['AutoCAD', 'Excel', 'Matemática', 'Inglês'],
+    has_work_experience: true,
+    experience: [{ company: 'Energisa', role: 'Estagiário Engenharia', months: 12 }],
+    disc_dominante: 30, disc_influente: 15, disc_estavel: 20, disc_conforme: 35,
+    available_for_internship: true, available_for_clt: true, available_for_apprentice: false,
+    preferred_work_type: 'hibrido',
+  },
+  {
+    full_name: 'Daniela Ferreira Costa',
+    email: 'mock23@test.local',
+    cpf: '111.111.111-23',
+    phone: '(21) 91111-0023',
+    city: 'São Paulo', state: 'SP',
+    education_level: 'medio',
+    skills: ['Vendas', 'Atendimento', 'Comunicação', 'Redes Sociais'],
+    has_work_experience: true,
+    experience: [{ company: 'Magazine Luiza', role: 'Vendedora', months: 30 }],
+    disc_dominante: 20, disc_influente: 45, disc_estavel: 20, disc_conforme: 15,
+    available_for_internship: false, available_for_clt: true, available_for_apprentice: false,
+    preferred_work_type: 'presencial',
+  },
+  {
+    full_name: 'Eduardo Henrique Neves',
+    email: 'mock24@test.local',
+    cpf: '111.111.111-24',
+    phone: '(11) 91111-0024',
+    city: 'São Paulo', state: 'SP',
+    education_level: 'superior',
+    institution: 'UNINOVE',
+    course: 'Administração',
+    skills: ['Excel', 'SQL', 'Contabilidade', 'SAP'],
+    has_work_experience: true,
+    experience: [{ company: 'Deloitte', role: 'Trainee', months: 12 }],
+    disc_dominante: 25, disc_influente: 20, disc_estavel: 25, disc_conforme: 30,
+    available_for_internship: false, available_for_clt: true, available_for_apprentice: false,
+    preferred_work_type: 'hibrido',
+  },
+  {
+    full_name: 'Fernanda Oliveira Santos',
+    email: 'mock25@test.local',
+    cpf: '111.111.111-25',
+    phone: '(41) 91111-0025',
+    city: 'São Paulo', state: 'SP',
+    education_level: 'superior',
+    institution: 'UTFPR',
+    course: 'Ciência da Computação',
+    skills: ['Python', 'React', 'TypeScript', 'Docker', 'Git'],
+    has_work_experience: true,
+    experience: [{ company: 'Boticário Tech', role: 'Dev Frontend', months: 24 }],
+    disc_dominante: 20, disc_influente: 25, disc_estavel: 20, disc_conforme: 35,
+    available_for_internship: false, available_for_clt: true, available_for_apprentice: false,
+    preferred_work_type: 'remoto',
+  },
+  {
+    full_name: 'Gustavo Ribeiro Alves',
+    email: 'mock26@test.local',
+    cpf: '111.111.111-26',
+    phone: '(62) 91111-0026',
+    city: 'São Paulo', state: 'SP',
+    education_level: 'medio',
+    skills: ['Logística', 'Organização', 'Excel', 'Comunicação'],
+    has_work_experience: true,
+    experience: [{ company: 'Transportadora Alfa', role: 'Auxiliar Logístico', months: 15 }],
+    disc_dominante: 15, disc_influente: 20, disc_estavel: 40, disc_conforme: 25,
+    available_for_internship: false, available_for_clt: true, available_for_apprentice: false,
+    preferred_work_type: 'presencial',
+  },
+  {
+    full_name: 'Helena Moreira Pinto',
+    email: 'mock27@test.local',
+    cpf: '111.111.111-27',
+    phone: '(11) 91111-0027',
+    city: 'São Paulo', state: 'SP',
+    education_level: 'pos-graduacao',
+    institution: 'Insper',
+    course: 'MBA Finanças',
+    skills: ['Finanças', 'Excel', 'SQL', 'Power BI', 'Inglês', 'Liderança'],
+    has_work_experience: true,
+    experience: [{ company: 'Itaú', role: 'Analista Financeira', months: 36 }],
+    disc_dominante: 35, disc_influente: 25, disc_estavel: 15, disc_conforme: 25,
+    available_for_internship: false, available_for_clt: true, available_for_apprentice: false,
+    preferred_work_type: 'hibrido',
+  },
+  {
+    full_name: 'Igor Santos Pereira',
+    email: 'mock28@test.local',
+    cpf: '111.111.111-28',
+    phone: '(48) 91111-0028',
+    city: 'São Paulo', state: 'SP',
+    education_level: 'superior',
+    institution: 'UFSC',
+    course: 'Design',
+    skills: ['Figma', 'Photoshop', 'UI/UX', 'HTML', 'CSS'],
+    has_work_experience: true,
+    experience: [{ company: 'Resultados Digitais', role: 'Designer Jr', months: 18 }],
+    disc_dominante: 15, disc_influente: 40, disc_estavel: 25, disc_conforme: 20,
+    available_for_internship: false, available_for_clt: true, available_for_apprentice: false,
+    preferred_work_type: 'remoto',
+  },
+  {
+    full_name: 'Juliana Campos Lima',
+    email: 'mock29@test.local',
+    cpf: '111.111.111-29',
+    phone: '(85) 91111-0029',
+    city: 'São Paulo', state: 'SP',
+    education_level: 'superior',
+    institution: 'UFC',
+    course: 'Direito',
+    skills: ['Redação', 'Comunicação', 'Organização', 'Pesquisa'],
+    has_work_experience: true,
+    experience: [{ company: 'Escritório Advocacia', role: 'Estagiária', months: 24 }],
+    disc_dominante: 25, disc_influente: 30, disc_estavel: 20, disc_conforme: 25,
+    available_for_internship: true, available_for_clt: true, available_for_apprentice: false,
+    preferred_work_type: 'presencial',
+  },
+  {
+    full_name: 'Kevin Almeida Rodrigues',
+    email: 'mock30@test.local',
+    cpf: '111.111.111-30',
+    phone: '(11) 91111-0030',
+    city: 'São Paulo', state: 'SP',
+    education_level: 'medio',
+    skills: ['Atendimento', 'Vendas', 'Comunicação'],
+    has_work_experience: false,
+    disc_dominante: 20, disc_influente: 35, disc_estavel: 30, disc_conforme: 15,
+    available_for_internship: true, available_for_clt: false, available_for_apprentice: true,
+    preferred_work_type: 'presencial',
+  },
+  {
+    full_name: 'Letícia Barbosa Moura',
+    email: 'mock31@test.local',
+    cpf: '111.111.111-31',
+    phone: '(71) 91111-0031',
+    city: 'São Paulo', state: 'SP',
+    education_level: 'superior',
+    institution: 'UFBA',
+    course: 'Enfermagem',
+    skills: ['Atendimento', 'Organização', 'Comunicação', 'Trabalho em Equipe'],
+    has_work_experience: true,
+    experience: [{ company: 'Hospital São Rafael', role: 'Técnica Enfermagem', months: 24 }],
+    disc_dominante: 10, disc_influente: 25, disc_estavel: 45, disc_conforme: 20,
+    available_for_internship: false, available_for_clt: true, available_for_apprentice: false,
+    preferred_work_type: 'presencial',
+  },
+  {
+    full_name: 'Marcos Vinícius Gomes',
+    email: 'mock32@test.local',
+    cpf: '111.111.111-32',
+    phone: '(11) 91111-0032',
+    city: 'São Paulo', state: 'SP',
+    education_level: 'superior',
+    institution: 'FEI',
+    course: 'Engenharia Mecânica',
+    skills: ['AutoCAD', 'SolidWorks', 'Excel', 'Matemática', 'Inglês'],
+    has_work_experience: true,
+    experience: [{ company: 'Volkswagen', role: 'Estagiário Engenharia', months: 12 }],
+    disc_dominante: 30, disc_influente: 15, disc_estavel: 25, disc_conforme: 30,
+    available_for_internship: true, available_for_clt: true, available_for_apprentice: false,
+    preferred_work_type: 'presencial',
+  },
+  {
+    full_name: 'Nathalia Rezende Dias',
+    email: 'mock33@test.local',
+    cpf: '111.111.111-33',
+    phone: '(19) 91111-0033',
+    city: 'São Paulo', state: 'SP',
+    education_level: 'mestrado',
+    institution: 'Unicamp',
+    course: 'Inteligência Artificial',
+    skills: ['Python', 'Machine Learning', 'SQL', 'TensorFlow', 'Inglês', 'Estatística'],
+    has_work_experience: true,
+    experience: [{ company: 'CPQD', role: 'Pesquisadora', months: 30 }],
+    disc_dominante: 25, disc_influente: 15, disc_estavel: 20, disc_conforme: 40,
+    available_for_internship: false, available_for_clt: true, available_for_apprentice: false,
+    preferred_work_type: 'remoto',
+  },
+  {
+    full_name: 'Otávio Luiz Fonseca',
+    email: 'mock34@test.local',
+    cpf: '111.111.111-34',
+    phone: '(27) 91111-0034',
+    city: 'São Paulo', state: 'SP',
+    education_level: 'superior',
+    institution: 'UFES',
+    course: 'Contabilidade',
+    skills: ['Contabilidade', 'Excel', 'SAP', 'Organização'],
+    has_work_experience: true,
+    experience: [{ company: 'Ernst & Young', role: 'Trainee Auditoria', months: 12 }],
+    disc_dominante: 20, disc_influente: 15, disc_estavel: 30, disc_conforme: 35,
+    available_for_internship: false, available_for_clt: true, available_for_apprentice: false,
+    preferred_work_type: 'presencial',
+  },
+  {
+    full_name: 'Priscila Nogueira Castro',
+    email: 'mock35@test.local',
+    cpf: '111.111.111-35',
+    phone: '(51) 91111-0035',
+    city: 'São Paulo', state: 'SP',
+    education_level: 'superior',
+    institution: 'UFRGS',
+    course: 'Jornalismo',
+    skills: ['Redação', 'Comunicação', 'Redes Sociais', 'Photoshop', 'Inglês'],
+    has_work_experience: true,
+    experience: [{ company: 'RBS', role: 'Repórter Jr', months: 18 }],
+    disc_dominante: 25, disc_influente: 35, disc_estavel: 15, disc_conforme: 25,
+    available_for_internship: false, available_for_clt: true, available_for_apprentice: false,
+    preferred_work_type: 'hibrido',
+  },
+  {
+    full_name: 'Renato Silva Borges',
+    email: 'mock36@test.local',
+    cpf: '111.111.111-36',
+    phone: '(11) 91111-0036',
+    city: 'São Paulo', state: 'SP',
+    education_level: 'medio',
+    skills: ['Manutenção', 'Organização', 'Trabalho em Equipe'],
+    has_work_experience: true,
+    experience: [{ company: 'Indústria ABC', role: 'Auxiliar Produção', months: 24 }],
+    disc_dominante: 15, disc_influente: 15, disc_estavel: 45, disc_conforme: 25,
+    available_for_internship: false, available_for_clt: true, available_for_apprentice: false,
+    preferred_work_type: 'presencial',
+  },
+  {
+    full_name: 'Sabrina Teixeira Luz',
+    email: 'mock37@test.local',
+    cpf: '111.111.111-37',
+    phone: '(11) 91111-0037',
+    city: 'São Paulo', state: 'SP',
+    education_level: 'superior',
+    institution: 'ESPM',
+    course: 'Publicidade e Propaganda',
+    skills: ['Marketing Digital', 'Comunicação', 'Design', 'Redes Sociais', 'Inglês'],
+    has_work_experience: true,
+    experience: [{ company: 'WMcCann', role: 'Assistente de Marketing', months: 18 }],
+    disc_dominante: 20, disc_influente: 45, disc_estavel: 15, disc_conforme: 20,
+    available_for_internship: false, available_for_clt: true, available_for_apprentice: false,
+    preferred_work_type: 'hibrido',
+  },
+  {
+    full_name: 'Tiago Monteiro Braga',
+    email: 'mock38@test.local',
+    cpf: '111.111.111-38',
+    phone: '(34) 91111-0038',
+    city: 'São Paulo', state: 'SP',
+    education_level: 'superior',
+    institution: 'UFU',
+    course: 'Sistemas de Informação',
+    skills: ['Java', 'Spring Boot', 'SQL', 'Docker', 'Git'],
+    has_work_experience: true,
+    experience: [{ company: 'Algar Tech', role: 'Dev Java Jr', months: 24 }],
+    disc_dominante: 25, disc_influente: 20, disc_estavel: 20, disc_conforme: 35,
+    available_for_internship: false, available_for_clt: true, available_for_apprentice: false,
+    preferred_work_type: 'remoto',
+  },
+  {
+    full_name: 'Úrsula Freitas Mendes',
+    email: 'mock39@test.local',
+    cpf: '111.111.111-39',
+    phone: '(92) 91111-0039',
+    city: 'São Paulo', state: 'SP',
+    education_level: 'superior',
+    institution: 'UFAM',
+    course: 'Farmácia',
+    skills: ['Atendimento', 'Organização', 'Comunicação', 'Excel'],
+    has_work_experience: true,
+    experience: [{ company: 'Farmácia Pague Menos', role: 'Farmacêutica', months: 30 }],
+    disc_dominante: 15, disc_influente: 20, disc_estavel: 40, disc_conforme: 25,
+    available_for_internship: false, available_for_clt: true, available_for_apprentice: false,
+    preferred_work_type: 'presencial',
+  },
+  {
+    full_name: 'Vinícius Cardoso Ramos',
+    email: 'mock40@test.local',
+    cpf: '111.111.111-40',
+    phone: '(11) 91111-0040',
+    city: 'São Paulo', state: 'SP',
+    education_level: 'superior',
+    institution: 'USP',
+    course: 'Engenharia de Software',
+    skills: ['JavaScript', 'TypeScript', 'React', 'Node.js', 'AWS', 'Git'],
+    has_work_experience: true,
+    experience: [{ company: 'Nubank', role: 'Dev Fullstack', months: 36 }],
+    disc_dominante: 30, disc_influente: 25, disc_estavel: 15, disc_conforme: 30,
+    available_for_internship: false, available_for_clt: true, available_for_apprentice: false,
+    preferred_work_type: 'remoto',
+  },
+  {
+    full_name: 'Wanessa Duarte Alves',
+    email: 'mock41@test.local',
+    cpf: '111.111.111-41',
+    phone: '(81) 91111-0041',
+    city: 'São Paulo', state: 'SP',
+    education_level: 'superior',
+    institution: 'UFPE',
+    course: 'Pedagogia',
+    skills: ['Comunicação', 'Organização', 'Trabalho em Equipe', 'Liderança'],
+    has_work_experience: true,
+    experience: [{ company: 'Escola Municipal', role: 'Professora', months: 36 }],
+    disc_dominante: 15, disc_influente: 35, disc_estavel: 35, disc_conforme: 15,
+    available_for_internship: false, available_for_clt: true, available_for_apprentice: false,
+    preferred_work_type: 'presencial',
+  },
+  {
+    full_name: 'Xavier Pinheiro Luz',
+    email: 'mock42@test.local',
+    cpf: '111.111.111-42',
+    phone: '(11) 91111-0042',
+    city: 'São Paulo', state: 'SP',
+    education_level: 'fundamental',
+    skills: ['Atendimento', 'Organização'],
+    has_work_experience: false,
+    disc_dominante: 20, disc_influente: 25, disc_estavel: 35, disc_conforme: 20,
+    available_for_internship: false, available_for_clt: false, available_for_apprentice: true,
+    preferred_work_type: 'presencial',
+  },
+  {
+    full_name: 'Yasmin Rocha Carvalho',
+    email: 'mock43@test.local',
+    cpf: '111.111.111-43',
+    phone: '(47) 91111-0043',
+    city: 'São Paulo', state: 'SP',
+    education_level: 'superior',
+    institution: 'UDESC',
+    course: 'Engenharia de Produção',
+    skills: ['Logística', 'Excel', 'Lean Manufacturing', 'SAP', 'Inglês'],
+    has_work_experience: true,
+    experience: [{ company: 'WEG', role: 'Estagiária Produção', months: 12 }],
+    disc_dominante: 25, disc_influente: 20, disc_estavel: 25, disc_conforme: 30,
+    available_for_internship: true, available_for_clt: true, available_for_apprentice: false,
+    preferred_work_type: 'presencial',
+  },
+  {
+    full_name: 'Zeca Monteiro Filho',
+    email: 'mock44@test.local',
+    cpf: '111.111.111-44',
+    phone: '(65) 91111-0044',
+    city: 'São Paulo', state: 'SP',
+    education_level: 'medio',
+    skills: ['Agropecuária', 'Organização', 'Excel', 'Logística'],
+    has_work_experience: true,
+    experience: [{ company: 'Fazenda São José', role: 'Auxiliar Administrativo', months: 24 }],
+    disc_dominante: 20, disc_influente: 15, disc_estavel: 40, disc_conforme: 25,
+    available_for_internship: false, available_for_clt: true, available_for_apprentice: false,
+    preferred_work_type: 'presencial',
+  },
+  {
+    full_name: 'Amanda Cristina Lopes',
+    email: 'mock45@test.local',
+    cpf: '111.111.111-45',
+    phone: '(11) 91111-0045',
+    city: 'São Paulo', state: 'SP',
+    education_level: 'superior',
+    institution: 'Mackenzie',
+    course: 'Arquitetura',
+    skills: ['AutoCAD', 'SketchUp', 'Photoshop', 'Design', 'Comunicação'],
+    has_work_experience: true,
+    experience: [{ company: 'Studio Arq', role: 'Arquiteta Jr', months: 18 }],
+    disc_dominante: 20, disc_influente: 30, disc_estavel: 20, disc_conforme: 30,
+    available_for_internship: false, available_for_clt: true, available_for_apprentice: false,
+    preferred_work_type: 'hibrido',
+  },
+  {
+    full_name: 'Bernardo Leal Nascimento',
+    email: 'mock46@test.local',
+    cpf: '111.111.111-46',
+    phone: '(84) 91111-0046',
+    city: 'São Paulo', state: 'SP',
+    education_level: 'superior',
+    institution: 'UFRN',
+    course: 'Turismo',
+    skills: ['Atendimento', 'Inglês', 'Espanhol', 'Comunicação', 'Vendas'],
+    has_work_experience: true,
+    experience: [{ company: 'Hotel Pestana', role: 'Recepcionista', months: 24 }],
+    disc_dominante: 15, disc_influente: 45, disc_estavel: 25, disc_conforme: 15,
+    available_for_internship: false, available_for_clt: true, available_for_apprentice: false,
+    preferred_work_type: 'presencial',
+  },
+  {
+    full_name: 'Cecília Araújo Braga',
+    email: 'mock47@test.local',
+    cpf: '111.111.111-47',
+    phone: '(11) 91111-0047',
+    city: 'São Paulo', state: 'SP',
+    education_level: 'superior',
+    institution: 'FGV',
+    course: 'Administração',
+    skills: ['Excel', 'Power BI', 'SQL', 'Inglês', 'Gestão de Projetos'],
+    has_work_experience: true,
+    experience: [{ company: 'Accenture', role: 'Consultora Jr', months: 24 }],
+    disc_dominante: 30, disc_influente: 25, disc_estavel: 15, disc_conforme: 30,
+    available_for_internship: false, available_for_clt: true, available_for_apprentice: false,
+    preferred_work_type: 'hibrido',
+  },
+  {
+    full_name: 'Douglas Ferreira Prado',
+    email: 'mock48@test.local',
+    cpf: '111.111.111-48',
+    phone: '(43) 91111-0048',
+    city: 'São Paulo', state: 'SP',
+    education_level: 'superior',
+    institution: 'UEL',
+    course: 'Medicina Veterinária',
+    skills: ['Atendimento', 'Comunicação', 'Organização', 'Trabalho em Equipe'],
+    has_work_experience: true,
+    experience: [{ company: 'PetLove', role: 'Veterinário', months: 30 }],
+    disc_dominante: 15, disc_influente: 25, disc_estavel: 40, disc_conforme: 20,
+    available_for_internship: false, available_for_clt: true, available_for_apprentice: false,
+    preferred_work_type: 'presencial',
+  },
+  {
+    full_name: 'Elisa Monteiro Silveira',
+    email: 'mock49@test.local',
+    cpf: '111.111.111-49',
+    phone: '(11) 91111-0049',
+    city: 'São Paulo', state: 'SP',
+    education_level: 'pos-graduacao',
+    institution: 'USP',
+    course: 'Data Science',
+    skills: ['Python', 'R', 'SQL', 'Machine Learning', 'Power BI', 'Inglês', 'Estatística'],
+    has_work_experience: true,
+    experience: [{ company: 'iFood', role: 'Analista de Dados', months: 24 }],
+    disc_dominante: 25, disc_influente: 15, disc_estavel: 20, disc_conforme: 40,
+    available_for_internship: false, available_for_clt: true, available_for_apprentice: false,
+    preferred_work_type: 'remoto',
+  },
+  {
+    full_name: 'Fábio Correia Duarte',
+    email: 'mock50@test.local',
+    cpf: '111.111.111-50',
+    phone: '(11) 91111-0050',
+    city: 'São Paulo', state: 'SP',
+    education_level: 'medio',
+    skills: ['Vendas', 'Atendimento', 'Excel', 'Comunicação', 'Redes Sociais'],
+    has_work_experience: true,
+    experience: [{ company: 'Via Varejo', role: 'Supervisor de Vendas', months: 36 }],
+    disc_dominante: 35, disc_influente: 30, disc_estavel: 15, disc_conforme: 20,
+    available_for_internship: false, available_for_clt: true, available_for_apprentice: false,
+    preferred_work_type: 'presencial',
+  },
+];
+
+async function main() {
+  console.log('Seeding 30 more mock candidates (mock21-mock50)...\n');
+
+  const { data: agencies } = await supabaseAdmin
+    .from('agencies')
+    .select('id, agency_name')
+    .eq('status', 'active')
+    .limit(1);
+
+  const agencyId = agencies?.[0]?.id;
+  if (agencyId) {
+    console.log(`Using agency: ${agencies[0].agency_name} (${agencyId})\n`);
+  }
+
+  let created = 0;
+  let skipped = 0;
+
+  for (const c of candidates) {
+    const { data: existing } = await supabaseAdmin
+      .from('users')
+      .select('id')
+      .eq('email', c.email);
+
+    if (existing && existing.length > 0) {
+      console.log(`  SKIP ${c.full_name} (${c.email}) — already exists`);
+      skipped++;
+      continue;
+    }
+
+    const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
+      email: c.email,
+      password: 'Test123!',
+      email_confirm: true,
+      user_metadata: { name: c.full_name, role: 'candidate' },
+    });
+
+    if (authError) {
+      console.error(`  ERROR ${c.full_name}: auth — ${authError.message}`);
+      continue;
+    }
+
+    const userId = authData.user.id;
+
+    const { error: userError } = await supabaseAdmin.from('users').insert({
+      id: userId,
+      email: c.email,
+      name: c.full_name,
+      role: 'candidate',
+      agency_id: agencyId || null,
+    });
+
+    if (userError) {
+      console.error(`  ERROR ${c.full_name}: user — ${userError.message}`);
+      await supabaseAdmin.auth.admin.deleteUser(userId);
+      continue;
+    }
+
+    const { error: candError } = await supabaseAdmin.from('candidates').insert({
+      user_id: userId,
+      full_name: c.full_name,
+      email: c.email,
+      cpf: c.cpf,
+      phone: c.phone,
+      city: c.city,
+      state: c.state,
+      education_level: c.education_level,
+      institution: c.institution || null,
+      course: c.course || null,
+      skills: c.skills,
+      has_work_experience: c.has_work_experience || false,
+      experience: c.experience || null,
+      disc_dominante: c.disc_dominante,
+      disc_influente: c.disc_influente,
+      disc_estavel: c.disc_estavel,
+      disc_conforme: c.disc_conforme,
+      available_for_internship: c.available_for_internship,
+      available_for_clt: c.available_for_clt,
+      available_for_apprentice: c.available_for_apprentice,
+      preferred_work_type: c.preferred_work_type,
+      status: 'active',
+      agency_id: agencyId || null,
+    });
+
+    if (candError) {
+      console.error(`  ERROR ${c.full_name}: candidate — ${candError.message}`);
+      continue;
+    }
+
+    console.log(`  OK ${c.full_name} — ${c.city}/${c.state}, ${c.education_level}, [${c.skills.join(', ')}]`);
+    created++;
+  }
+
+  console.log(`\nDone! Created: ${created}, Skipped: ${skipped}, Errors: ${candidates.length - created - skipped}`);
+}
+
+main().catch(console.error);

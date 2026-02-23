@@ -1,5 +1,6 @@
 import { useAuth } from "@/_core/hooks/useAuth";
-import ClassicLoader from "@/components/ui/ClassicLoader";
+import ContentTransition from "@/components/ui/ContentTransition";
+import { PageHeaderSkeleton, SearchBarSkeleton, TableSkeleton } from "@/components/ui/skeletons";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -75,9 +76,13 @@ export default function RegionalManagement() {
 
   if (authLoading || agenciesLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <ClassicLoader />
-      </div>
+      <DashboardLayout>
+        <div className="space-y-6">
+          <PageHeaderSkeleton />
+          <SearchBarSkeleton />
+          <TableSkeleton />
+        </div>
+      </DashboardLayout>
     );
   }
 

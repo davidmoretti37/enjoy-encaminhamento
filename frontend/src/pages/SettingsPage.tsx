@@ -1,5 +1,6 @@
 import { useAuth } from "@/_core/hooks/useAuth";
-import ClassicLoader from "@/components/ui/ClassicLoader";
+import ContentTransition from "@/components/ui/ContentTransition";
+import { FormSkeleton } from "@/components/ui/skeletons";
 import DashboardLayout from "@/components/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -132,14 +133,6 @@ export default function SettingsPage() {
       payment_instructions: paymentInstructions || undefined,
     });
   };
-
-  if (authLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <ClassicLoader />
-      </div>
-    );
-  }
 
   if (!user || !user.role || !["super_admin", "admin", "agency"].includes(user.role)) {
     return (

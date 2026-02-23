@@ -1,7 +1,9 @@
 import { useState } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import DashboardLayout from "@/components/DashboardLayout";
-import ClassicLoader from "@/components/ui/ClassicLoader";
+import ContentTransition from "@/components/ui/ContentTransition";
+import { CalendarSkeleton } from "@/components/ui/skeletons";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -84,14 +86,6 @@ export default function CompanyScheduling() {
     },
   });
 
-  if (authLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <ClassicLoader />
-      </div>
-    );
-  }
-
   if (!user || user.role !== 'company') {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -172,7 +166,7 @@ export default function CompanyScheduling() {
           {/* Visits Tab */}
           <TabsContent value="visits" className="space-y-6">
             {visitsLoading ? (
-              <div className="text-center py-8"><ClassicLoader /></div>
+              <CalendarSkeleton />
             ) : (
               <>
                 {/* Scheduled Visits */}
@@ -286,7 +280,7 @@ export default function CompanyScheduling() {
           {/* Interviews Tab */}
           <TabsContent value="interviews" className="space-y-6">
             {interviewsLoading || feedbackLoading ? (
-              <div className="text-center py-8"><ClassicLoader /></div>
+              <CalendarSkeleton />
             ) : (
               <>
                 {/* Scheduled Interviews */}

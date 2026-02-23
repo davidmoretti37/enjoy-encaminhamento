@@ -64,14 +64,17 @@ export const candidateRouter = router({
       available_for_internship: z.boolean().optional(),
       available_for_apprentice: z.boolean().optional(),
       preferred_work_type: z.string().optional(),
-      experience: z.array(z.object({
-        company: z.string(),
-        role: z.string(),
-        start_date: z.string().optional(),
-        end_date: z.string().optional(),
-        current: z.boolean().optional(),
-        description: z.string().optional(),
-      })).optional(),
+      experience: z.array(z.union([
+        z.string(),
+        z.object({
+          company: z.string(),
+          role: z.string(),
+          start_date: z.string().optional(),
+          end_date: z.string().optional(),
+          current: z.boolean().optional(),
+          description: z.string().optional(),
+        }),
+      ])).optional(),
       // DISC personality assessment results
       disc_influente: z.number().min(0).max(100).optional(),
       disc_estavel: z.number().min(0).max(100).optional(),
@@ -94,6 +97,9 @@ export const candidateRouter = router({
       // Get user's agency_id for candidate linking
       const user = await db.getUserById(ctx.user.id);
       const agencyId = user?.agency_id;
+
+      // Sanitize empty strings for timestamp fields
+      if (input.date_of_birth === '') (input as any).date_of_birth = undefined;
 
       // Map frontend education level values to database enum
       const educationLevelMap: Record<string, string> = {
@@ -307,21 +313,26 @@ export const candidateRouter = router({
       available_for_apprentice: z.boolean().optional(),
       preferred_work_type: z.string().optional(),
       photo_url: z.string().optional(),
-      experience: z.array(z.object({
-        company: z.string(),
-        role: z.string(),
-        start_date: z.string().optional(),
-        end_date: z.string().optional(),
-        current: z.boolean().optional(),
-        description: z.string().optional(),
-      })).optional(),
+      experience: z.array(z.union([
+        z.string(),
+        z.object({
+          company: z.string(),
+          role: z.string(),
+          start_date: z.string().optional(),
+          end_date: z.string().optional(),
+          current: z.boolean().optional(),
+          description: z.string().optional(),
+        }),
+      ])).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       const candidate = await db.getCandidateByUserId(ctx.user.id);
       if (!candidate) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Candidate not found' });
       }
-      await db.updateCandidate(candidate.id, input);
+      const updateData = { ...input };
+      if (updateData.date_of_birth === '') delete updateData.date_of_birth;
+      await db.updateCandidate(candidate.id, updateData);
       return { success: true };
     }),
 

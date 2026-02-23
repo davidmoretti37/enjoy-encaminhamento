@@ -1,6 +1,8 @@
 // @ts-nocheck
 import { useAuth } from "@/_core/hooks/useAuth";
 import DashboardLayout from "@/components/DashboardLayout";
+import ContentTransition from "@/components/ui/ContentTransition";
+import { PageHeaderSkeleton, StatsCardsSkeleton, ListSkeleton } from "@/components/ui/skeletons";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -31,7 +33,7 @@ export default function CandidateHome() {
     enabled: !!user,
   });
 
-  const isLoading = authLoading || profileQuery.isLoading;
+  const isLoading = profileQuery.isLoading;
   const profile = profileQuery.data;
   const applications = applicationsQuery.data || [];
 
@@ -84,6 +86,10 @@ export default function CandidateHome() {
 
   return (
     <DashboardLayout>
+      <ContentTransition
+        isLoading={isLoading}
+        skeleton={<><PageHeaderSkeleton centered /><StatsCardsSkeleton count={3} /><ListSkeleton count={3} /></>}
+      >
       <div className="space-y-6">
         {/* Welcome Header - Centered */}
         <div className="text-center py-4">
@@ -282,6 +288,7 @@ export default function CandidateHome() {
           </Card>
         )}
       </div>
+      </ContentTransition>
     </DashboardLayout>
   );
 }

@@ -4,7 +4,9 @@ import {
   AgencyFunnelProvider,
   useAgencyFunnel,
 } from "@/contexts/AgencyFunnelContext";
-import ClassicLoader from "@/components/ui/ClassicLoader";
+import ContentTransition from "@/components/ui/ContentTransition";
+import { ListSkeleton, SearchBarSkeleton } from "@/components/ui/skeletons";
+import { Skeleton } from "@/components/ui/skeleton";
 import DashboardContent from "@/components/agency-steps/DashboardContent";
 import JobDescriptionTab from "@/components/agency-steps/JobDescriptionTab";
 import ManagementTab from "@/components/agency-steps/ManagementTab";
@@ -21,8 +23,9 @@ function AgencyPortalContent() {
   if (isLoading) {
     return (
       <DashboardLayout>
-        <div className="flex items-center justify-center py-16">
-          <ClassicLoader />
+        <div className="py-4">
+          <SearchBarSkeleton />
+          <ListSkeleton count={5} />
         </div>
       </DashboardLayout>
     );
@@ -44,15 +47,6 @@ function AgencyPortalContent() {
 export default function AgencyPortal() {
   const { user, loading: authLoading } = useAuth();
   const [, setLocation] = useLocation();
-
-  // Auth loading
-  if (authLoading) {
-    return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <ClassicLoader />
-      </div>
-    );
-  }
 
   // Not logged in
   if (!user) {

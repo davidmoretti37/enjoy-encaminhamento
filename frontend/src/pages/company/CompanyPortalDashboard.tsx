@@ -1,6 +1,8 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import DashboardLayout from "@/components/DashboardLayout";
-import ClassicLoader from "@/components/ui/ClassicLoader";
+import ContentTransition from "@/components/ui/ContentTransition";
+import { StatsCardsSkeleton, ListSkeleton, PageHeaderSkeleton } from "@/components/ui/skeletons";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -72,14 +74,6 @@ export default function CompanyPortalDashboard() {
       setSelectedJobId(jobs[0].id);
     }
   }, [jobs, selectedJobId]);
-
-  if (authLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <ClassicLoader />
-      </div>
-    );
-  }
 
   if (!user || user.role !== 'company') {
     return (
@@ -182,8 +176,24 @@ export default function CompanyPortalDashboard() {
           // Show loader while loading
           if (jobsLoading) {
             return (
-              <div className="flex justify-center py-12">
-                <ClassicLoader />
+              <div className="space-y-4">
+                <div className="flex items-center justify-between mb-4">
+                  <Skeleton className="h-4 w-36" />
+                  <Skeleton className="h-3 w-20" />
+                </div>
+                <div className="flex items-center justify-between">
+                  {[1, 2, 3, 4].map((i) => (
+                    <div key={i} className="flex items-center flex-1 last:flex-none">
+                      <Skeleton className="w-6 h-6 rounded-full" />
+                      {i < 4 && <Skeleton className="flex-1 h-1.5 mx-1 rounded" />}
+                    </div>
+                  ))}
+                </div>
+                <div className="flex justify-between mt-4">
+                  {[1, 2, 3, 4].map((i) => (
+                    <Skeleton key={i} className="h-3 w-20" />
+                  ))}
+                </div>
               </div>
             );
           }

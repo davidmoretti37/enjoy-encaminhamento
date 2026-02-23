@@ -23,7 +23,6 @@ import { signIn, signUp, signInWithOAuth } from '@/lib/auth-helpers';
 import { useAuth } from '@/_core/hooks/useAuth';
 import { trpc } from '@/lib/trpc';
 import { Briefcase, Loader2, MapPin } from 'lucide-react';
-import ClassicLoader from "@/components/ui/ClassicLoader";
 import { toast } from 'sonner';
 
 export default function Login() {
@@ -195,7 +194,7 @@ export default function Login() {
                   <Button type="submit" className="w-full" disabled={loading}>
                     {loading ? (
                       <>
-                        <ClassicLoader />
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                         Entrando...
                       </>
                     ) : (
@@ -325,7 +324,7 @@ export default function Login() {
                   <Button type="submit" className="w-full" disabled={loading}>
                     {loading ? (
                       <>
-                        <ClassicLoader />
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                         Criando conta...
                       </>
                     ) : (

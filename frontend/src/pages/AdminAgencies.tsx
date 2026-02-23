@@ -1,5 +1,7 @@
 import { useAuth } from "@/_core/hooks/useAuth";
-import ClassicLoader from "@/components/ui/ClassicLoader";
+import ContentTransition from "@/components/ui/ContentTransition";
+import { PageHeaderSkeleton, SearchBarSkeleton, CardGridSkeleton } from "@/components/ui/skeletons";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -73,15 +75,9 @@ export default function AdminAgencies() {
     }
   });
 
-  if (authLoading || affiliateLoading || isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <ClassicLoader />
-      </div>
-    );
-  }
+  const dataLoading = affiliateLoading || isLoading;
 
-  if (!user || (user.role !== 'admin' && user.role !== 'super_admin') || !affiliate) {
+  if (!dataLoading && (!user || (user.role !== 'admin' && user.role !== 'super_admin') || !affiliate)) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Card className="max-w-md">
@@ -162,6 +158,13 @@ export default function AdminAgencies() {
 
   return (
     <DashboardLayout>
+      <ContentTransition isLoading={dataLoading} skeleton={
+        <>
+          <PageHeaderSkeleton centered />
+          <SearchBarSkeleton />
+          <CardGridSkeleton count={8} columns={4} />
+        </>
+      }>
       <div className="space-y-6">
         {/* Centered Header */}
         <div className="text-center mb-6">
@@ -324,7 +327,7 @@ export default function AdminAgencies() {
                   onClick={handleReject}
                   disabled={updateStatusMutation.isPending || !rejectionReason.trim()}
                 >
-                  {updateStatusMutation.isPending ? <ClassicLoader /> : 'Confirmar Rejeição'}
+                  {updateStatusMutation.isPending ? <Skeleton className="h-4 w-20" /> : 'Confirmar Rejeição'}
                 </Button>
               </div>
             </div>
@@ -377,12 +380,13 @@ export default function AdminAgencies() {
                 onClick={handleCreateInvitation}
                 disabled={createInvitationMutation.isPending || !inviteEmail.trim()}
               >
-                {createInvitationMutation.isPending ? <ClassicLoader /> : 'Enviar Convite'}
+                {createInvitationMutation.isPending ? <Skeleton className="h-4 w-20" /> : 'Enviar Convite'}
               </Button>
             </div>
           </DialogContent>
         </Dialog>
       </div>
+      </ContentTransition>
     </DashboardLayout>
   );
 }

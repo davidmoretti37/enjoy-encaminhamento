@@ -1,7 +1,9 @@
 // @ts-nocheck
 import { useState } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
-import ClassicLoader from "@/components/ui/ClassicLoader";
+import ContentTransition from "@/components/ui/ContentTransition";
+import { SearchBarSkeleton } from "@/components/ui/skeletons";
+import { Skeleton } from "@/components/ui/skeleton";
 import DashboardLayout from "@/components/DashboardLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -19,7 +21,8 @@ import {
   Briefcase,
   GraduationCap,
   Building2,
-  CheckCircle
+  CheckCircle,
+  Loader2
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -74,7 +77,7 @@ export default function CandidateJobs() {
     },
   });
 
-  const isLoading = authLoading || jobsQuery.isLoading;
+  const isLoading = jobsQuery.isLoading;
   const jobs = jobsQuery.data || [];
   const appliedJobIds = new Set((applicationsQuery.data || []).map((a: any) => a.job_id));
 
@@ -139,17 +142,7 @@ export default function CandidateJobs() {
     return types[type] || type;
   };
 
-  if (isLoading) {
-    return (
-      <DashboardLayout>
-        <div className="flex justify-center py-20">
-          <ClassicLoader />
-        </div>
-      </DashboardLayout>
-    );
-  }
-
-  if (!user || user.role !== 'candidate') {
+  if (!authLoading && (!user || user.role !== 'candidate')) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Card className="max-w-md">
@@ -164,6 +157,7 @@ export default function CandidateJobs() {
 
   return (
     <DashboardLayout>
+      <ContentTransition isLoading={isLoading} skeleton={<><SearchBarSkeleton /><div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">{Array.from({length:6}).map((_,i)=>(<div key={i} className="bg-card rounded-xl border p-5 space-y-3"><Skeleton className="h-5 w-32" /><Skeleton className="h-3 w-24" /><Skeleton className="h-3 w-full" /><Skeleton className="h-3 w-3/4" /><div className="flex gap-2"><Skeleton className="h-6 w-16 rounded-full" /><Skeleton className="h-6 w-20 rounded-full" /></div><Skeleton className="h-9 w-full rounded-lg" /></div>))}</div></>}>
       <div className="space-y-6">
         {/* Header - Centered */}
         <div className="text-center py-4">
@@ -450,7 +444,7 @@ export default function CandidateJobs() {
                   <Button onClick={submitApplication} disabled={applying}>
                     {applying ? (
                       <>
-                        <ClassicLoader size="sm" className="mr-2" />
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
                         Enviando...
                       </>
                     ) : (
@@ -463,6 +457,7 @@ export default function CandidateJobs() {
           </DialogContent>
         </Dialog>
       </div>
+      </ContentTransition>
     </DashboardLayout>
   );
 }

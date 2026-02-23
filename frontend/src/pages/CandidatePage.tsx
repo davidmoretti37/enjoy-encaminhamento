@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { useAuth } from "@/_core/hooks/useAuth";
-import ClassicLoader from "@/components/ui/ClassicLoader";
+import ContentTransition from "@/components/ui/ContentTransition";
+import { PageHeaderSkeleton, SearchBarSkeleton, TableSkeleton } from "@/components/ui/skeletons";
 import { useAgencyContext } from "@/contexts/AgencyContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -371,17 +372,9 @@ export default function CandidatePage() {
     },
   });
 
-  const isLoading = authLoading || candidatesLoading;
+  const isLoading = candidatesLoading;
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <ClassicLoader />
-      </div>
-    );
-  }
-
-  if (!user || !['admin', 'agency'].includes(user.role)) {
+  if (!isLoading && (!user || !['admin', 'agency'].includes(user.role))) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Card className="max-w-md">
@@ -519,6 +512,13 @@ export default function CandidatePage() {
 
   return (
     <DashboardLayout>
+      <ContentTransition isLoading={isLoading} skeleton={
+        <>
+          <PageHeaderSkeleton />
+          <SearchBarSkeleton />
+          <TableSkeleton columns={6} rows={8} />
+        </>
+      }>
       <div className="space-y-6">
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -991,6 +991,7 @@ export default function CandidatePage() {
           }}
         />
       )}
+      </ContentTransition>
     </DashboardLayout>
   );
 }

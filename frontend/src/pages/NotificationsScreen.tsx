@@ -1,6 +1,7 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import DashboardLayout from "@/components/DashboardLayout";
-import ClassicLoader from "@/components/ui/ClassicLoader";
+import ContentTransition from "@/components/ui/ContentTransition";
+import { PageHeaderSkeleton, ListSkeleton } from "@/components/ui/skeletons";
 import { trpc } from "@/lib/trpc";
 import {
   Bell,
@@ -72,18 +73,9 @@ export default function NotificationsScreen() {
     return null;
   };
 
-  if (authLoading || notificationsQuery.isLoading) {
-    return (
-      <DashboardLayout>
-        <div className="flex items-center justify-center py-16">
-          <ClassicLoader />
-        </div>
-      </DashboardLayout>
-    );
-  }
-
   return (
     <DashboardLayout>
+      <ContentTransition isLoading={notificationsQuery.isLoading} skeleton={<><PageHeaderSkeleton /><ListSkeleton count={6} /></>}>
       <div className="space-y-6">
         {/* Centered Header */}
         <div className="text-center mb-6">
@@ -197,6 +189,7 @@ export default function NotificationsScreen() {
           )}
         </div>
       </div>
+      </ContentTransition>
     </DashboardLayout>
   );
 }

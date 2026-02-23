@@ -8,7 +8,8 @@ import {
   useCompanyFunnel,
   COMPANY_STEPS,
 } from "@/contexts/CompanyFunnelContext";
-import ClassicLoader from "@/components/ui/ClassicLoader";
+import { Skeleton } from "@/components/ui/skeleton";
+import { FunnelContentSkeleton } from "@/components/ui/skeletons";
 import { WorkSchedulePicker } from "@/components/ui/WorkSchedulePicker";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -279,7 +280,7 @@ function EmpresaPortalContent() {
   if (isLoading) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <ClassicLoader />
+        <FunnelContentSkeleton />
       </div>
     );
   }
@@ -428,7 +429,7 @@ export default function EmpresaPortal() {
   if (authLoading) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <ClassicLoader />
+        <FunnelContentSkeleton />
       </div>
     );
   }

@@ -291,6 +291,17 @@ export async function createCompanyWithUser(input: {
   address?: string;
   city?: string;
   state?: string;
+  agencyId?: string;
+  affiliateId?: string;
+  contactPerson?: string;
+  businessName?: string;
+  website?: string;
+  employeeCount?: string;
+  cep?: string;
+  complement?: string;
+  neighborhood?: string;
+  pendingContractSigning?: boolean;
+  contractSignedAt?: string;
 }): Promise<{ email: string; userId: string; companyId: string }> {
   const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
     email: input.email,
@@ -332,6 +343,17 @@ export async function createCompanyWithUser(input: {
   if (input.address) companyData.address = input.address;
   if (input.city) companyData.city = input.city;
   if (input.state) companyData.state = input.state;
+  if (input.agencyId) companyData.agency_id = input.agencyId;
+  if (input.affiliateId) companyData.affiliate_id = input.affiliateId;
+  if (input.contactPerson) companyData.contact_name = input.contactPerson;
+  if (input.businessName) companyData.business_name = input.businessName;
+  if (input.website) companyData.website = input.website;
+  if (input.employeeCount) companyData.employee_count = input.employeeCount;
+  if (input.cep) companyData.cep = input.cep;
+  if (input.complement) companyData.complement = input.complement;
+  if (input.neighborhood) companyData.neighborhood = input.neighborhood;
+  if (input.pendingContractSigning !== undefined) companyData.pending_contract_signing = input.pendingContractSigning;
+  if (input.contractSignedAt) companyData.contract_signed_at = input.contractSignedAt;
 
   const { data: companyResult, error: companyError } = await supabaseAdmin
     .from("companies")

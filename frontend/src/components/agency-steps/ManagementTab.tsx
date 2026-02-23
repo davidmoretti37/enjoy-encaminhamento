@@ -1,20 +1,22 @@
 import { useAgencyFunnel } from "@/contexts/AgencyFunnelContext";
 import { useAgencyContext } from "@/contexts/AgencyContext";
-import ClassicLoader from "@/components/ui/ClassicLoader";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Building2, Users, FileText, DollarSign, FileCheck, User } from "lucide-react";
+import { Building2, Users, FileText, DollarSign, FileCheck, User, Plus } from "lucide-react";
 import { useState } from "react";
 import CompanyDocumentsModal from "@/components/CompanyDocumentsModal";
+import AddCompanyModal from "@/components/AddCompanyModal";
 import { Input } from "@/components/ui/input";
 import { Search, X } from "lucide-react";
 
 export default function ManagementTab() {
-  const { managementFilter, setManagementFilter, companies, candidates, isLoading } = useAgencyFunnel();
+  const { managementFilter, setManagementFilter, companies, candidates, isLoading, refreshData } = useAgencyFunnel();
   const { isAllAgenciesMode, availableAgencies } = useAgencyContext();
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedEntity, setSelectedEntity] = useState<any>(null);
   const [documentsModalOpen, setDocumentsModalOpen] = useState(false);
+  const [showAddCompanyModal, setShowAddCompanyModal] = useState(false);
 
   // Filter entities based on search
   const filteredCompanies = companies.filter((company: any) => {
@@ -44,82 +46,114 @@ export default function ManagementTab() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-16">
-        <ClassicLoader />
+      <div className="space-y-3">
+        {Array.from({ length: 3 }).map((_, i) => (
+          <div key={i} className="flex items-center gap-3 p-3">
+            <Skeleton className="h-10 w-10 rounded-lg" />
+            <div className="flex-1 space-y-2">
+              <Skeleton className="h-4 w-32" />
+              <Skeleton className="h-3 w-24" />
+            </div>
+            <Skeleton className="h-6 w-16 rounded-full" />
+          </div>
+        ))}
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {/* Header */}
-      <div className="text-center mb-6">
+      <div className="text-center">
         <h2 className="text-2xl font-bold text-[#0A2342]">Gerenciamento</h2>
         <p className="text-slate-600 mt-1">
-          Gerencie documentos, contratos e pagamentos
+          Gerencie empresas, candidatos, documentos e pagamentos
         </p>
       </div>
 
-      {/* Filter Toggle */}
-      <div className="flex items-center justify-center gap-3 mb-6">
+      {/* Filter Toggle - centered */}
+      <div className="flex items-center justify-center gap-2">
         <button
-          onClick={() => setManagementFilter('companies')}
-          className={`px-6 py-3 rounded-full font-medium transition-all ${
+          onClick={() => { setManagementFilter('companies'); setSearchTerm(''); }}
+          className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${
             managementFilter === 'companies'
-              ? 'bg-[#0A2342] text-white shadow-lg'
-              : 'bg-white text-gray-700 border-2 border-gray-200 hover:border-orange-300'
+              ? 'bg-[#0A2342] text-white shadow-md'
+              : 'bg-white text-gray-600 border border-gray-200 hover:border-gray-300'
           }`}
         >
-          <div className="flex items-center gap-2">
-            <Building2 className="h-4 w-4" />
+          <span className="flex items-center gap-1.5">
+            <Building2 className="h-3.5 w-3.5" />
             Empresas
-            <Badge variant="secondary" className={managementFilter === 'companies' ? 'bg-white/20 text-white' : 'bg-gray-100'}>
+            <Badge variant="secondary" className={`text-xs px-1.5 py-0 ${managementFilter === 'companies' ? 'bg-white/20 text-white' : 'bg-gray-100'}`}>
               {companies.length}
             </Badge>
-          </div>
+          </span>
         </button>
         <button
-          onClick={() => setManagementFilter('candidates')}
-          className={`px-6 py-3 rounded-full font-medium transition-all ${
+          onClick={() => { setManagementFilter('candidates'); setSearchTerm(''); }}
+          className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${
             managementFilter === 'candidates'
-              ? 'bg-[#0A2342] text-white shadow-lg'
-              : 'bg-white text-gray-700 border-2 border-gray-200 hover:border-orange-300'
+              ? 'bg-[#0A2342] text-white shadow-md'
+              : 'bg-white text-gray-600 border border-gray-200 hover:border-gray-300'
           }`}
         >
-          <div className="flex items-center gap-2">
-            <Users className="h-4 w-4" />
+          <span className="flex items-center gap-1.5">
+            <Users className="h-3.5 w-3.5" />
             Candidatos
-            <Badge variant="secondary" className={managementFilter === 'candidates' ? 'bg-white/20 text-white' : 'bg-gray-100'}>
+            <Badge variant="secondary" className={`text-xs px-1.5 py-0 ${managementFilter === 'candidates' ? 'bg-white/20 text-white' : 'bg-gray-100'}`}>
               {candidates.length}
             </Badge>
-          </div>
+          </span>
         </button>
       </div>
 
-      {/* Search Bar */}
-      <div className="relative max-w-md mx-auto">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-        <Input
-          placeholder={`Buscar ${managementFilter === 'companies' ? 'empresas' : 'candidatos'}...`}
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="pl-9 pr-10"
-        />
-        {searchTerm && (
-          <button
-            onClick={() => setSearchTerm('')}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+      {/* Search + Action - centered */}
+      <div className="flex items-center justify-center gap-2 max-w-lg mx-auto">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+          <Input
+            placeholder={`Buscar ${managementFilter === 'companies' ? 'empresas' : 'candidatos'}...`}
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="pl-9 pr-9 h-9"
+          />
+          {searchTerm && (
+            <button
+              onClick={() => setSearchTerm('')}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
+        </div>
+        {managementFilter === 'companies' && (
+          <Button
+            onClick={() => setShowAddCompanyModal(true)}
+            className="shrink-0 bg-[#0A2342] hover:bg-[#0A2342]/90"
           >
-            <X className="h-4 w-4" />
-          </button>
+            <Plus className="h-4 w-4 mr-1.5" />
+            Adicionar Empresa
+          </Button>
         )}
       </div>
 
-      {/* Content based on filter */}
+      {/* Content */}
       {managementFilter === 'companies' ? (
-        <CompanyList companies={filteredCompanies} onDocumentsClick={handleDocumentsClick} searchTerm={searchTerm} isAllAgenciesMode={isAllAgenciesMode} availableAgencies={availableAgencies} />
+        <CompanyList
+          companies={filteredCompanies}
+          onDocumentsClick={handleDocumentsClick}
+          searchTerm={searchTerm}
+          isAllAgenciesMode={isAllAgenciesMode}
+          availableAgencies={availableAgencies}
+        />
       ) : (
-        <CandidateList candidates={filteredCandidates} onDocumentsClick={handleDocumentsClick} searchTerm={searchTerm} isAllAgenciesMode={isAllAgenciesMode} availableAgencies={availableAgencies} />
+        <CandidateList
+          candidates={filteredCandidates}
+          onDocumentsClick={handleDocumentsClick}
+          searchTerm={searchTerm}
+          isAllAgenciesMode={isAllAgenciesMode}
+          availableAgencies={availableAgencies}
+        />
       )}
 
       {/* Documents Modal */}
@@ -129,6 +163,16 @@ export default function ManagementTab() {
         onClose={() => {
           setDocumentsModalOpen(false);
           setSelectedEntity(null);
+        }}
+      />
+
+      {/* Add Company Modal */}
+      <AddCompanyModal
+        open={showAddCompanyModal}
+        onClose={() => setShowAddCompanyModal(false)}
+        onSuccess={() => {
+          setShowAddCompanyModal(false);
+          refreshData();
         }}
       />
     </div>

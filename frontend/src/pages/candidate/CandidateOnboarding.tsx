@@ -29,7 +29,9 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import ClassicLoader from "@/components/ui/ClassicLoader";
+import ContentTransition from "@/components/ui/ContentTransition";
+import { FormSkeleton } from "@/components/ui/skeletons";
+import { Skeleton } from "@/components/ui/skeleton";
 import DISCAssessment from "@/components/disc/DISCAssessment";
 import DISCResults from "@/components/disc/DISCResults";
 import { DISCProfile, calculateDISCResults } from "@/data/discQuestions";
@@ -292,6 +294,7 @@ export default function CandidateOnboarding() {
     submitOnboarding.mutate({
       ...formData,
       cpf: formData.cpf.replace(/\D/g, ""),
+      date_of_birth: formData.date_of_birth || undefined,
       experience: formData.experiences,
       // DISC results
       disc_influente: discResults.influente,
@@ -316,7 +319,7 @@ export default function CandidateOnboarding() {
   if (authLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <ClassicLoader />
+        <FormSkeleton fields={8} />
       </div>
     );
   }
@@ -325,7 +328,7 @@ export default function CandidateOnboarding() {
     window.location.href = '/login?tab=signup&role=candidate';
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <ClassicLoader />
+        <FormSkeleton fields={8} />
       </div>
     );
   }

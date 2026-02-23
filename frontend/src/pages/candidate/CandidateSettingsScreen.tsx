@@ -2,7 +2,9 @@
 import { useState, useEffect, useMemo } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { FunnelLayout, CardEntrance } from "@/components/funnel";
-import ClassicLoader from "@/components/ui/ClassicLoader";
+import ContentTransition from "@/components/ui/ContentTransition";
+import { FormSkeleton } from "@/components/ui/skeletons";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -184,7 +186,7 @@ export default function CandidateSettingsScreen() {
   if (authLoading || profileQuery.isLoading) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <ClassicLoader />
+        <FormSkeleton fields={5} />
       </div>
     );
   }
@@ -937,8 +939,8 @@ function CandidateDocumentsTab() {
   if (isLoading) {
     return (
       <CardEntrance>
-        <div className="flex items-center justify-center py-12">
-          <ClassicLoader />
+        <div className="py-4">
+          <FormSkeleton fields={5} />
         </div>
       </CardEntrance>
     );

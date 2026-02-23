@@ -1,6 +1,6 @@
 import { useAgencyFunnel } from "@/contexts/AgencyFunnelContext";
 import { useAgencyContext } from "@/contexts/AgencyContext";
-import ClassicLoader from "@/components/ui/ClassicLoader";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Building2, Briefcase, TrendingUp } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import CompanyJobFlow from "./CompanyJobFlow";
@@ -19,8 +19,17 @@ export default function JobDescriptionTab() {
   // Otherwise, show the company cards grid
   if (isCompaniesLoading) {
     return (
-      <div className="flex items-center justify-center py-16">
-        <ClassicLoader />
+      <div className="space-y-3">
+        {Array.from({ length: 3 }).map((_, i) => (
+          <div key={i} className="flex items-center gap-3 p-3">
+            <Skeleton className="h-10 w-10 rounded-lg" />
+            <div className="flex-1 space-y-2">
+              <Skeleton className="h-4 w-32" />
+              <Skeleton className="h-3 w-24" />
+            </div>
+            <Skeleton className="h-6 w-16 rounded-full" />
+          </div>
+        ))}
       </div>
     );
   }

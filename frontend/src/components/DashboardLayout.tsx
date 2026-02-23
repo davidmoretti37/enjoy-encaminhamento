@@ -2,7 +2,7 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { getLoginUrl } from "@/const";
 import { Users, Building, Briefcase, FileCheck, DollarSign, Calendar, MapPin, UserCheck, Bell, Home, Settings } from "lucide-react";
 import { useLocation } from "wouter";
-import ClassicLoader from "./ui/ClassicLoader";
+import { DashboardLayoutSkeleton } from "./DashboardLayoutSkeleton";
 import { Button } from "./ui/button";
 import LumaBar from "./ui/LumaBar";
 import AgencyFilterHeader from "./AgencyFilterHeader";
@@ -134,28 +134,16 @@ export default function DashboardLayout({
   }, [user, location, companyOnboardingQuery.data, candidateOnboardingQuery.data]);
 
   if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <ClassicLoader />
-      </div>
-    );
+    return <DashboardLayoutSkeleton />;
   }
 
   // Show loading while checking onboarding
   if (user?.role === 'company' && companyOnboardingQuery.isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <ClassicLoader />
-      </div>
-    );
+    return <DashboardLayoutSkeleton />;
   }
 
   if (user?.role === 'candidate' && candidateOnboardingQuery.isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <ClassicLoader />
-      </div>
-    );
+    return <DashboardLayoutSkeleton />;
   }
 
   if (!user) {

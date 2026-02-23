@@ -1,7 +1,9 @@
 // @ts-nocheck
 // Type checking disabled: tRPC type inference issues with useQuery options
 import { useAuth } from "@/_core/hooks/useAuth";
-import ClassicLoader from "@/components/ui/ClassicLoader";
+import ContentTransition from "@/components/ui/ContentTransition";
+import { CalendarSkeleton } from "@/components/ui/skeletons";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useAgencyContext } from "@/contexts/AgencyContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -308,16 +310,6 @@ export default function CalendarPage() {
     updateMeetingStatusMutation.mutate({ id, status: 'completed', sendEmail: false });
   };
 
-  const isLoading = authLoading || loadingMeetings;
-
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <ClassicLoader />
-      </div>
-    );
-  }
-
   if (!user || (user.role !== 'super_admin' && user.role !== 'admin' && user.role !== 'agency')) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -571,6 +563,7 @@ export default function CalendarPage() {
 
   return (
     <DashboardLayout>
+      <ContentTransition isLoading={loadingMeetings} skeleton={<CalendarSkeleton />}>
       <div className="space-y-8">
         {/* Header */}
         <div className="flex items-center justify-between">
@@ -1226,6 +1219,7 @@ export default function CalendarPage() {
           />
         )}
       </div>
+      </ContentTransition>
     </DashboardLayout>
   );
 }

@@ -1,5 +1,7 @@
 import { useAuth } from "@/_core/hooks/useAuth";
-import ClassicLoader from "@/components/ui/ClassicLoader";
+import ContentTransition from "@/components/ui/ContentTransition";
+import { StatsCardsSkeleton, ListSkeleton, PageHeaderSkeleton } from "@/components/ui/skeletons";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -33,14 +35,6 @@ export default function AffiliateDashboard() {
 
   const isLoading = authLoading || affiliateLoading || statsLoading;
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <ClassicLoader />
-      </div>
-    );
-  }
-
   if (!user || (user.role !== 'admin' && user.role !== 'super_admin')) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -71,6 +65,17 @@ export default function AffiliateDashboard() {
 
   return (
     <DashboardLayout>
+      <ContentTransition
+        isLoading={isLoading}
+        skeleton={
+          <div className="space-y-8">
+            <PageHeaderSkeleton centered />
+            <StatsCardsSkeleton count={4} />
+            <ListSkeleton count={3} />
+            <ListSkeleton count={5} />
+          </div>
+        }
+      >
       <div className="space-y-8">
         {/* Header - Centered */}
         <div className="text-center py-4">
@@ -293,8 +298,19 @@ export default function AffiliateDashboard() {
           </CardHeader>
           <CardContent>
             {agenciesLoading ? (
-              <div className="flex justify-center py-8">
-                <ClassicLoader />
+              <div className="space-y-3">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <div key={i} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-200">
+                    <div className="flex items-center gap-3">
+                      <Skeleton className="h-8 w-8 rounded-lg" />
+                      <div className="space-y-2">
+                        <Skeleton className="h-4 w-32" />
+                        <Skeleton className="h-3 w-24" />
+                      </div>
+                    </div>
+                    <Skeleton className="h-5 w-16 rounded-full" />
+                  </div>
+                ))}
               </div>
             ) : agencies && agencies.length > 0 ? (
               <div className="space-y-3">
@@ -346,6 +362,7 @@ export default function AffiliateDashboard() {
           </CardContent>
         </Card>
       </div>
+      </ContentTransition>
     </DashboardLayout>
   );
 }

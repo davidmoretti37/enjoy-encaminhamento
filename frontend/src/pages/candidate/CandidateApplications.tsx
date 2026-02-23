@@ -1,7 +1,8 @@
 // @ts-nocheck
 import { useState, useEffect } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
-import ClassicLoader from "@/components/ui/ClassicLoader";
+import ContentTransition from "@/components/ui/ContentTransition";
+import { PageHeaderSkeleton, ListSkeleton } from "@/components/ui/skeletons";
 import DashboardLayout from "@/components/DashboardLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -110,7 +111,7 @@ export default function CandidateApplications() {
     },
   });
 
-  const isLoading = authLoading || applicationsQuery.isLoading;
+  const isLoading = applicationsQuery.isLoading;
   const applications = applicationsQuery.data || [];
   const interviews = interviewsQuery.data || [];
 
@@ -143,15 +144,7 @@ export default function CandidateApplications() {
     }
   };
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <ClassicLoader />
-      </div>
-    );
-  }
-
-  if (!user || user.role !== 'candidate') {
+  if (!authLoading && (!user || user.role !== 'candidate')) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Card className="max-w-md">
@@ -166,6 +159,7 @@ export default function CandidateApplications() {
 
   return (
     <DashboardLayout>
+      <ContentTransition isLoading={isLoading} skeleton={<><PageHeaderSkeleton /><ListSkeleton count={5} /></>}>
       <div className="space-y-6">
         {/* Header - Centered */}
         <div className="text-center py-4">
@@ -736,6 +730,7 @@ export default function CandidateApplications() {
           </DialogContent>
         </Dialog>
       </div>
+      </ContentTransition>
     </DashboardLayout>
   );
 }

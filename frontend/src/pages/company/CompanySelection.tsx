@@ -1,7 +1,9 @@
 import { useState } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import DashboardLayout from "@/components/DashboardLayout";
-import ClassicLoader from "@/components/ui/ClassicLoader";
+import ContentTransition from "@/components/ui/ContentTransition";
+import { PageHeaderSkeleton, SearchBarSkeleton, ListSkeleton } from "@/components/ui/skeletons";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -78,14 +80,6 @@ export default function CompanySelection() {
       toast.error(error.message || 'Erro ao selecionar candidatos');
     },
   });
-
-  if (authLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <ClassicLoader />
-      </div>
-    );
-  }
 
   if (!user || user.role !== 'company') {
     return (
@@ -218,9 +212,10 @@ export default function CompanySelection() {
           <p className="text-gray-500 mt-1">Selecione os candidatos que deseja entrevistar</p>
         </div>
 
-        {isLoading || batchesLoading ? (
-          <div className="text-center py-8"><ClassicLoader /></div>
-        ) : (
+        <ContentTransition
+          isLoading={isLoading || batchesLoading}
+          skeleton={<><PageHeaderSkeleton /><SearchBarSkeleton /><ListSkeleton count={4} /></>}
+        >
           <>
             {/* BATCHES - Candidates sent by agency */}
             {companyBatches && companyBatches.length > 0 && (
@@ -331,8 +326,10 @@ export default function CompanySelection() {
                 </DialogHeader>
                 <ScrollArea className="max-h-[60vh] pr-4">
                   {contractsLoading ? (
-                    <div className="flex justify-center py-8">
-                      <ClassicLoader />
+                    <div className="space-y-4 py-4">
+                      <Skeleton className="h-6 w-32" />
+                      <Skeleton className="h-4 w-48" />
+                      <Skeleton className="h-24 w-full rounded-lg" />
                     </div>
                   ) : batchContracts?.contracts && batchContracts.contracts.length > 0 ? (
                     <div className="space-y-4">
@@ -489,7 +486,7 @@ export default function CompanySelection() {
               </Card>
             )}
           </>
-        )}
+        </ContentTransition>
 
         {/* Profile Modal */}
         <Dialog open={profileModalOpen} onOpenChange={setProfileModalOpen}>
@@ -502,7 +499,17 @@ export default function CompanySelection() {
             </DialogHeader>
             <ScrollArea className="max-h-[60vh]">
               {profileLoading ? (
-                <div className="py-8 text-center"><ClassicLoader /></div>
+                <div className="py-8 space-y-4 px-4">
+                  <Skeleton className="h-5 w-32" />
+                  <Skeleton className="h-4 w-full" />
+                  <Skeleton className="h-5 w-28" />
+                  <div className="flex gap-2">
+                    <Skeleton className="h-6 w-16 rounded-full" />
+                    <Skeleton className="h-6 w-20 rounded-full" />
+                  </div>
+                  <Skeleton className="h-5 w-24" />
+                  <Skeleton className="h-4 w-full" />
+                </div>
               ) : candidateProfile ? (
                 <div className="space-y-4 py-4">
                   {candidateProfile.education && (

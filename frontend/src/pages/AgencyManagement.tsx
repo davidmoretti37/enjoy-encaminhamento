@@ -1,7 +1,9 @@
 // @ts-nocheck
 // Type checking disabled: tRPC type inference issues with franchises endpoint
 import { useAuth } from "@/_core/hooks/useAuth";
-import ClassicLoader from "@/components/ui/ClassicLoader";
+import ContentTransition from "@/components/ui/ContentTransition";
+import { PageHeaderSkeleton, SearchBarSkeleton, TableSkeleton } from "@/components/ui/skeletons";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -89,15 +91,7 @@ export default function AgencyManagement() {
     }
   });
 
-  if (authLoading || isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <ClassicLoader />
-      </div>
-    );
-  }
-
-  if (!user || (user.role !== 'admin' && user.role !== 'super_admin')) {
+  if (!isLoading && (!user || (user.role !== 'admin' && user.role !== 'super_admin'))) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Card className="max-w-md">
@@ -182,6 +176,13 @@ export default function AgencyManagement() {
 
   return (
     <DashboardLayout>
+      <ContentTransition isLoading={isLoading} skeleton={
+        <>
+          <PageHeaderSkeleton />
+          <SearchBarSkeleton />
+          <TableSkeleton columns={5} rows={6} />
+        </>
+      }>
       <div className="space-y-8">
         {/* Header */}
         <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-6 border flex items-center justify-between">
@@ -442,7 +443,7 @@ export default function AgencyManagement() {
                   >
                     {createInvitationMutation.isPending ? (
                       <>
-                        <ClassicLoader />
+                        <Skeleton className="h-4 w-4 rounded-full" />
                         Criando...
                       </>
                     ) : (
@@ -603,6 +604,7 @@ export default function AgencyManagement() {
           </DialogContent>
         </Dialog>
       </div>
+      </ContentTransition>
     </DashboardLayout>
   );
 }
