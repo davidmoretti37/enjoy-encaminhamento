@@ -31,7 +31,7 @@ export async function createAgencyInvitation(
 export async function getAgencyInvitationByToken(token: string): Promise<any | null> {
   const { data, error } = await supabaseAdmin
     .from("agency_invitations")
-    .select("*, affiliates(id, name)")
+    .select("*")
     .eq("token", token)
     .single();
 
@@ -40,7 +40,20 @@ export async function getAgencyInvitationByToken(token: string): Promise<any | n
     return null;
   }
 
-  return data;
+  if (!data) return null;
+
+  // Fetch affiliate data separately to avoid PostgREST relationship inference issues
+  let affiliateData = null;
+  if (data.affiliate_id) {
+    const { data: affiliate } = await supabaseAdmin
+      .from("affiliates")
+      .select("id, name")
+      .eq("id", data.affiliate_id)
+      .single();
+    affiliateData = affiliate;
+  }
+
+  return { ...data, affiliates: affiliateData };
 }
 
 export async function acceptAgencyInvitation(

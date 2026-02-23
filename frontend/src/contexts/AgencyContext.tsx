@@ -81,6 +81,18 @@ export function AgencyProvider({ children }: { children: ReactNode }) {
     }
   }, [selectedAgencyId, availableAgencies]);
 
+  // Sync localStorage selection to the backend on load so server-side context stays in sync
+  useEffect(() => {
+    if (
+      selectedAgencyId &&
+      availableAgencies.length > 0 &&
+      availableAgencies.find(a => a.id === selectedAgencyId)
+    ) {
+      setCurrentMutation.mutate({ agencyId: selectedAgencyId });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [availableAgencies]);
+
   const value: AgencyContextType = {
     currentAgency,
     availableAgencies,

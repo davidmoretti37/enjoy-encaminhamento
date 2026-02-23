@@ -5,7 +5,7 @@ import { supabaseAdmin } from "../supabase";
 export async function getAllAgencies() {
   const { data, error } = await supabaseAdmin
     .from("agencies")
-    .select("*, affiliates(name, contact_email)")
+    .select("*")
     .order("created_at", { ascending: false });
 
   if (error) {
@@ -13,7 +13,25 @@ export async function getAllAgencies() {
     return [];
   }
 
-  return data || [];
+  const agencies = data || [];
+
+  // Batch-fetch affiliate data for agencies that have an affiliate_id
+  const affiliateIds = [...new Set(agencies.map(a => a.affiliate_id).filter(Boolean))];
+  let affiliateMap: Record<string, { name: string; contact_email: string }> = {};
+  if (affiliateIds.length > 0) {
+    const { data: affiliates } = await supabaseAdmin
+      .from("affiliates")
+      .select("id, name, contact_email")
+      .in("id", affiliateIds);
+    for (const af of affiliates || []) {
+      affiliateMap[af.id] = { name: af.name, contact_email: af.contact_email };
+    }
+  }
+
+  return agencies.map(a => ({
+    ...a,
+    affiliates: a.affiliate_id ? affiliateMap[a.affiliate_id] || null : null,
+  }));
 }
 
 export async function getActiveAgenciesPublic() {
@@ -34,7 +52,7 @@ export async function getActiveAgenciesPublic() {
 export async function getAgencyById(id: string) {
   const { data, error } = await supabaseAdmin
     .from("agencies")
-    .select("*, affiliates(name, contact_email, city)")
+    .select("*")
     .eq("id", id)
     .single();
 
@@ -43,7 +61,20 @@ export async function getAgencyById(id: string) {
     return null;
   }
 
-  return data;
+  if (!data) return null;
+
+  // Fetch affiliate data separately to avoid PostgREST relationship inference issues
+  let affiliateData = null;
+  if (data.affiliate_id) {
+    const { data: affiliate } = await supabaseAdmin
+      .from("affiliates")
+      .select("name, contact_email, city")
+      .eq("id", data.affiliate_id)
+      .single();
+    affiliateData = affiliate;
+  }
+
+  return { ...data, affiliates: affiliateData };
 }
 
 export async function updateAgencyStatus(id: string, status: "pending" | "active" | "suspended") {
