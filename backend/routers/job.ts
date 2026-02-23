@@ -8,7 +8,7 @@ import { TRPCError } from "@trpc/server";
 import { publicProcedure, protectedProcedure } from "../_core/trpc";
 import { adminProcedure, companyProcedure, candidateProcedure, agencyProcedure } from "./procedures";
 import * as db from "../db";
-import { supabaseAdmin } from "../supabase";
+import { supabaseAdmin, withRetry } from "../supabase";
 import { generateJobSummary } from "../services/ai/summarizer";
 import { generateJobEmbedding, findMatchingCandidates } from "../services/matching";
 
@@ -272,42 +272,52 @@ export const jobRouter = router({
         });
       }
 
-      const { data, error } = await supabaseAdmin
-        .from('job_matches')
-        .select(`
-          id,
-          candidate_id,
-          composite_score,
-          semantic_score,
-          skills_score,
-          experience_score,
-          location_score,
-          education_score,
-          contract_score,
-          personality_score,
-          history_score,
-          bidirectional_score,
-          llm_refined_score,
-          llm_confidence,
-          llm_reasoning,
-          llm_recommendation,
-          explanation_summary,
-          strengths,
-          concerns,
-          weight_profile,
-          applied_to_job,
-          candidates(id, full_name, email, phone, city, state, education_level, skills, experience, summary, available_for_clt, available_for_internship, available_for_apprentice)
-        `)
-        .eq('job_id', input.jobId)
-        .gte('composite_score', input.minScore)
-        .order('composite_score', { ascending: false })
-        .limit(input.limit);
-
-      if (error) {
-        console.error('[Job.getMatchesForJob] Error:', error);
+      let data;
+      try {
+        const result = await withRetry(async () => {
+          const res = await supabaseAdmin
+            .from('job_matches')
+            .select(`
+              id,
+              candidate_id,
+              composite_score,
+              semantic_score,
+              skills_score,
+              experience_score,
+              location_score,
+              education_score,
+              contract_score,
+              personality_score,
+              history_score,
+              bidirectional_score,
+              llm_refined_score,
+              llm_confidence,
+              llm_reasoning,
+              llm_recommendation,
+              explanation_summary,
+              strengths,
+              concerns,
+              weight_profile,
+              candidates(id, full_name, email, phone, city, state, education_level, skills, experience, summary, available_for_clt, available_for_internship, available_for_apprentice)
+            `)
+            .eq('job_id', input.jobId)
+            .gte('composite_score', input.minScore)
+            .order('composite_score', { ascending: false })
+            .limit(input.limit);
+          if (res.error) throw res.error;
+          return res.data;
+        });
+        data = result;
+      } catch (error: any) {
+        console.error('[Job.getMatchesForJob] Error:', {
+          message: error.message || error,
+          details: error.stack || '',
+          hint: error.hint || '',
+          code: error.code || '',
+        });
         throw new TRPCError({
           code: 'INTERNAL_SERVER_ERROR',
-          message: error.message,
+          message: error.message || 'Failed to fetch matches',
         });
       }
 
@@ -350,7 +360,6 @@ export const jobRouter = router({
           explanationSummary: m.explanation_summary,
           strengths: m.strengths || [],
           concerns: m.concerns || [],
-          applied: m.applied_to_job || false,
         })),
         pagination: {
           totalMatches: data?.length || 0,
@@ -664,110 +673,5 @@ export const jobRouter = router({
     .mutation(async ({ input }) => {
       const success = await generateJobEmbedding(input.jobId);
       return { success };
-    }),
-
-  /**
-   * Set interview preference for a job (company sets their preferred format)
-   * Saves whether company prefers online or in-person interviews and location details
-   */
-  setInterviewPreference: companyProcedure
-    .input(z.object({
-      jobId: z.string().uuid(),
-      preferredInterviewType: z.enum(["online", "in_person"]),
-      locationCep: z.string().optional(),
-      locationAddress: z.string().optional(),
-      locationNumber: z.string().optional(),
-      locationComplement: z.string().optional(),
-      locationNeighborhood: z.string().optional(),
-      locationCity: z.string().optional(),
-      locationState: z.string().optional(),
-      preferredDays: z.array(z.string()).optional(),
-      preferredTimeStart: z.string().optional(),
-      preferredTimeEnd: z.string().optional(),
-      schedulingNotes: z.string().optional(),
-    }))
-    .mutation(async ({ ctx, input }) => {
-      const company = await db.getCompanyByUserId(ctx.user.id);
-      if (!company) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Company not found" });
-      }
-
-      // Verify job belongs to this company
-      const { data: job, error: jobError } = await supabaseAdmin
-        .from("jobs")
-        .select("id, company_id")
-        .eq("id", input.jobId)
-        .single();
-
-      if (jobError || !job || job.company_id !== company.id) {
-        throw new TRPCError({ code: "FORBIDDEN", message: "Job not found or access denied" });
-      }
-
-      const isInPerson = input.preferredInterviewType === "in_person";
-
-      // Update job with interview preference
-      const { error } = await (supabaseAdmin
-        .from("jobs") as any)
-        .update({
-          preferred_interview_type: input.preferredInterviewType,
-          interview_location_cep: isInPerson ? input.locationCep : null,
-          interview_location_address: isInPerson ? input.locationAddress : null,
-          interview_location_number: isInPerson ? input.locationNumber : null,
-          interview_location_complement: isInPerson ? input.locationComplement : null,
-          interview_location_neighborhood: isInPerson ? input.locationNeighborhood : null,
-          interview_location_city: isInPerson ? input.locationCity : null,
-          interview_location_state: isInPerson ? input.locationState : null,
-          preferred_days: input.preferredDays || null,
-          preferred_time_start: input.preferredTimeStart || null,
-          preferred_time_end: input.preferredTimeEnd || null,
-          scheduling_notes: input.schedulingNotes || null,
-        })
-        .eq("id", input.jobId);
-
-      if (error) {
-        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: error.message });
-      }
-
-      return { success: true };
-    }),
-
-  /**
-   * Get interview preference for a job
-   */
-  getInterviewPreference: companyProcedure
-    .input(z.object({
-      jobId: z.string().uuid(),
-    }))
-    .query(async ({ ctx, input }) => {
-      const company = await db.getCompanyByUserId(ctx.user.id);
-      if (!company) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Company not found" });
-      }
-
-      const { data: job, error } = await (supabaseAdmin
-        .from("jobs") as any)
-        .select("preferred_interview_type, interview_location_cep, interview_location_address, interview_location_number, interview_location_complement, interview_location_neighborhood, interview_location_city, interview_location_state, preferred_days, preferred_time_start, preferred_time_end, scheduling_notes")
-        .eq("id", input.jobId)
-        .eq("company_id", company.id)
-        .single();
-
-      if (error || !job) {
-        return null;
-      }
-
-      return {
-        preferredInterviewType: job.preferred_interview_type,
-        locationCep: job.interview_location_cep,
-        locationAddress: job.interview_location_address,
-        locationNumber: job.interview_location_number,
-        locationComplement: job.interview_location_complement,
-        locationNeighborhood: job.interview_location_neighborhood,
-        locationCity: job.interview_location_city,
-        locationState: job.interview_location_state,
-        preferredDays: job.preferred_days,
-        preferredTimeStart: job.preferred_time_start,
-        preferredTimeEnd: job.preferred_time_end,
-        schedulingNotes: job.scheduling_notes,
-      };
     }),
 });

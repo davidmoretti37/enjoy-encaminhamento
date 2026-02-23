@@ -15,22 +15,6 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { trpc } from "@/lib/trpc";
 import {
   Users,
@@ -49,55 +33,98 @@ import {
   Briefcase,
   ChevronDown,
   ChevronUp,
+  ChevronRight,
   MapPin,
   GraduationCap,
+  Send,
   Trash2,
-  Phone,
-  Mail,
-  Copy,
+  Plus,
+  Check,
+  Clock,
 } from "lucide-react";
 import DashboardLayout from "@/components/DashboardLayout";
 import ImportCandidatesModal from "@/components/ImportCandidatesModal";
 import { useState } from "react";
 import { toast } from "sonner";
 
-// Sub-component to display candidate list inside a batch
+// Mini progress indicator for batch workflow
+function BatchProgressIndicator({ status }: { status: string }) {
+  const steps = [
+    { id: 'draft', label: 'Rascunho' },
+    { id: 'sent', label: 'Enviado' },
+    { id: 'unlocked', label: 'Em Andamento' },
+    { id: 'completed', label: 'Concluído' },
+  ];
+
+  const statusOrder = ['draft', 'sent', 'unlocked', 'meeting_scheduled', 'completed'];
+  const currentIndex = statusOrder.indexOf(status);
+  // Map meeting_scheduled to unlocked step for display
+  const displayIndex = status === 'meeting_scheduled' ? 2 : currentIndex;
+
+  return (
+    <div className="flex items-center gap-1 py-2">
+      {steps.map((step, index) => {
+        const isCompleted = index < displayIndex;
+        const isCurrent = index === displayIndex;
+
+        return (
+          <div key={step.id} className="flex items-center">
+            {/* Dot */}
+            <div className={`
+              h-2 w-2 rounded-full transition-colors
+              ${isCompleted ? 'bg-green-500' : isCurrent ? 'bg-blue-500' : 'bg-gray-200'}
+            `} />
+            {/* Connector line */}
+            {index < steps.length - 1 && (
+              <div className={`
+                h-0.5 w-6 transition-colors
+                ${isCompleted ? 'bg-green-500' : 'bg-gray-200'}
+              `} />
+            )}
+          </div>
+        );
+      })}
+      <span className="ml-2 text-xs text-gray-500">
+        {steps[displayIndex]?.label || status}
+      </span>
+    </div>
+  );
+}
+
+// Sub-component to display candidate list inside a batch with approve/reject buttons
 function BatchCandidateList({
   candidateIds,
-  selectable = false,
-  selectedIds = [],
-  onSelectionChange,
+  candidateStatuses,
+  batchId,
+  showActions = false,
+  onStatusChange,
 }: {
   candidateIds: string[];
-  selectable?: boolean;
-  selectedIds?: string[];
-  onSelectionChange?: (ids: string[]) => void;
+  candidateStatuses?: Record<string, string>;
+  batchId: string;
+  showActions?: boolean;
+  onStatusChange?: () => void;
 }) {
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
+
   // Fetch candidates for this batch
   const allCandidatesQuery = trpc.candidate.getByIds.useQuery(
     { ids: candidateIds },
     { enabled: candidateIds.length > 0 }
   );
 
+  const updateStatusMutation = trpc.batch.updateCandidateStatus.useMutation({
+    onSuccess: () => {
+      setUpdatingId(null);
+      onStatusChange?.();
+    },
+    onError: (error) => {
+      setUpdatingId(null);
+      toast.error(`Erro: ${error.message}`);
+    },
+  });
+
   const batchCandidates = allCandidatesQuery.data || [];
-
-  const toggleCandidate = (candidateId: string) => {
-    if (!onSelectionChange) return;
-    if (selectedIds.includes(candidateId)) {
-      onSelectionChange(selectedIds.filter(id => id !== candidateId));
-    } else {
-      onSelectionChange([...selectedIds, candidateId]);
-    }
-  };
-
-  const toggleAll = () => {
-    if (!onSelectionChange) return;
-    if (selectedIds.length === batchCandidates.length) {
-      onSelectionChange([]);
-    } else {
-      onSelectionChange(batchCandidates.map((c: any) => c.id));
-    }
-  };
 
   if (allCandidatesQuery.isLoading) {
     return (
@@ -119,152 +146,145 @@ function BatchCandidateList({
     return <p className="text-xs text-gray-400 py-2">Nenhum candidato encontrado</p>;
   }
 
-  return (
-    <div className="space-y-1">
-      {selectable && batchCandidates.length > 1 && (
-        <button
-          onClick={toggleAll}
-          className="text-xs text-blue-600 hover:text-blue-700 font-medium mb-2"
-        >
-          {selectedIds.length === batchCandidates.length ? 'Desmarcar todos' : 'Selecionar todos'}
-        </button>
-      )}
-      {batchCandidates.map((candidate: any) => (
-        <div
-          key={candidate.id}
-          className={`flex items-center gap-3 p-2 rounded-lg transition-colors ${
-            selectable ? 'cursor-pointer hover:bg-white' : 'hover:bg-white'
-          } ${selectable && selectedIds.includes(candidate.id) ? 'bg-blue-50 ring-1 ring-blue-200' : ''}`}
-          onClick={() => selectable && toggleCandidate(candidate.id)}
-        >
-          {selectable && (
-            <input
-              type="checkbox"
-              checked={selectedIds.includes(candidate.id)}
-              onChange={() => toggleCandidate(candidate.id)}
-              onClick={(e) => e.stopPropagation()}
-              className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-            />
-          )}
-          <div className="h-8 w-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-xs font-medium shrink-0">
-            {candidate.full_name?.charAt(0)?.toUpperCase() || '?'}
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-gray-900 truncate">{candidate.full_name}</p>
-            <div className="flex items-center gap-2 text-xs text-gray-500">
-              {candidate.city && (
-                <span className="flex items-center gap-0.5">
-                  <MapPin className="h-3 w-3" />
-                  {candidate.city}
-                </span>
-              )}
-              {candidate.education_level && (
-                <span className="flex items-center gap-0.5">
-                  <GraduationCap className="h-3 w-3" />
-                  {candidate.education_level}
-                </span>
-              )}
-            </div>
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
+  const handleApprove = (candidateId: string) => {
+    setUpdatingId(candidateId);
+    updateStatusMutation.mutate({
+      batchId,
+      candidateId,
+      status: "approved",
+    });
+  };
 
-// Modal to show contact info for selected candidates
-function ContactInfoModal({
-  open,
-  onClose,
-  candidateIds,
-}: {
-  open: boolean;
-  onClose: () => void;
-  candidateIds: string[];
-}) {
-  const candidatesQuery = trpc.candidate.getByIds.useQuery(
-    { ids: candidateIds },
-    { enabled: open && candidateIds.length > 0 }
-  );
-
-  const candidates = candidatesQuery.data || [];
-
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
-    toast.success("Copiado!");
+  const handleReject = (candidateId: string) => {
+    setUpdatingId(candidateId);
+    updateStatusMutation.mutate({
+      batchId,
+      candidateId,
+      status: "rejected",
+    });
   };
 
   return (
-    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Calendar className="h-5 w-5" />
-            Contatos dos Candidatos
-          </DialogTitle>
-        </DialogHeader>
-        <div className="space-y-3 max-h-96 overflow-y-auto">
-          {candidatesQuery.isLoading ? (
-            <div className="space-y-3">
-              {[1, 2, 3].map((i) => (
-                <div key={i} className="p-3 bg-gray-50 rounded-lg animate-pulse">
-                  <div className="h-4 w-32 bg-gray-200 rounded mb-2" />
-                  <div className="h-3 w-48 bg-gray-200 rounded mb-1" />
-                  <div className="h-3 w-36 bg-gray-200 rounded" />
-                </div>
-              ))}
+    <div className="space-y-1">
+      {batchCandidates.map((candidate: any) => {
+        const status = candidateStatuses?.[candidate.id];
+        const isApproved = status === "approved";
+        const isRejected = status === "rejected";
+
+        return (
+          <div
+            key={candidate.id}
+            className={`
+              flex items-center gap-3 p-2 rounded-lg transition-all
+              ${isApproved ? 'bg-green-50 border border-green-200' : ''}
+              ${isRejected ? 'bg-red-50/50 border border-red-100 opacity-60' : ''}
+              ${!isApproved && !isRejected ? 'hover:bg-white' : ''}
+            `}
+          >
+            {/* Avatar */}
+            <div className={`
+              h-8 w-8 rounded-full flex items-center justify-center text-white text-xs font-medium shrink-0
+              ${isApproved ? 'bg-green-500' : isRejected ? 'bg-gray-400' : 'bg-gradient-to-br from-blue-500 to-purple-600'}
+            `}>
+              {isApproved ? (
+                <CheckCircle className="h-4 w-4" />
+              ) : isRejected ? (
+                <XCircle className="h-4 w-4" />
+              ) : (
+                candidate.full_name?.charAt(0)?.toUpperCase() || '?'
+              )}
             </div>
-          ) : candidates.length === 0 ? (
-            <p className="text-sm text-gray-500 text-center py-4">
-              Nenhum candidato selecionado
-            </p>
-          ) : (
-            candidates.map((candidate: any) => (
-              <div key={candidate.id} className="p-3 bg-gray-50 rounded-lg">
-                <p className="font-medium text-gray-900 mb-2">{candidate.full_name}</p>
-                {candidate.email && (
-                  <div className="flex items-center justify-between text-sm mb-1">
-                    <span className="flex items-center gap-2 text-gray-600">
-                      <Mail className="h-3.5 w-3.5" />
-                      {candidate.email}
-                    </span>
-                    <button
-                      onClick={() => copyToClipboard(candidate.email)}
-                      className="text-blue-600 hover:text-blue-700"
-                    >
-                      <Copy className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
+
+            {/* Info */}
+            <div className="flex-1 min-w-0">
+              <p className={`text-sm font-medium truncate ${isRejected ? 'text-gray-400 line-through' : 'text-gray-900'}`}>
+                {candidate.full_name}
+              </p>
+              <div className="flex items-center gap-2 text-xs text-gray-500">
+                {candidate.city && (
+                  <span className="flex items-center gap-0.5">
+                    <MapPin className="h-3 w-3" />
+                    {candidate.city}
+                  </span>
                 )}
-                {candidate.phone && (
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="flex items-center gap-2 text-gray-600">
-                      <Phone className="h-3.5 w-3.5" />
-                      {candidate.phone}
-                    </span>
-                    <button
-                      onClick={() => copyToClipboard(candidate.phone)}
-                      className="text-blue-600 hover:text-blue-700"
-                    >
-                      <Copy className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                )}
-                {!candidate.email && !candidate.phone && (
-                  <p className="text-xs text-gray-400">Sem informações de contato</p>
+                {candidate.education_level && (
+                  <span className="flex items-center gap-0.5">
+                    <GraduationCap className="h-3 w-3" />
+                    {candidate.education_level}
+                  </span>
                 )}
               </div>
-            ))
-          )}
-        </div>
-      </DialogContent>
-    </Dialog>
+            </div>
+
+            {/* Approve/Reject buttons */}
+            {showActions && (
+              <div className="flex items-center gap-1 shrink-0">
+                {updatingId === candidate.id ? (
+                  <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
+                ) : (
+                  <>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleApprove(candidate.id);
+                      }}
+                      disabled={updateStatusMutation.isPending}
+                      className={`
+                        p-1.5 rounded-full transition-colors
+                        ${isApproved
+                          ? 'bg-green-500 text-white'
+                          : 'hover:bg-green-100 text-gray-400 hover:text-green-600'
+                        }
+                      `}
+                      title="Aprovar"
+                    >
+                      <CheckCircle className="h-4 w-4" />
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleReject(candidate.id);
+                      }}
+                      disabled={updateStatusMutation.isPending}
+                      className={`
+                        p-1.5 rounded-full transition-colors
+                        ${isRejected
+                          ? 'bg-red-500 text-white'
+                          : 'hover:bg-red-100 text-gray-400 hover:text-red-600'
+                        }
+                      `}
+                      title="Rejeitar"
+                    >
+                      <XCircle className="h-4 w-4" />
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* Status badge when not showing actions */}
+            {!showActions && status && (
+              <Badge
+                variant="outline"
+                className={`
+                  shrink-0 text-xs
+                  ${isApproved ? 'border-green-300 text-green-700 bg-green-50' : ''}
+                  ${isRejected ? 'border-red-200 text-red-500 bg-red-50' : ''}
+                `}
+              >
+                {isApproved ? 'Aprovado' : 'Rejeitado'}
+              </Badge>
+            )}
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
 export default function CandidatePage() {
   const { user, loading: authLoading } = useAuth();
-  const { currentAgency, availableAgencies, isAllAgenciesMode } = useAgencyContext();
+  const { currentAgency, isAllAgenciesMode } = useAgencyContext();
   const [searchTerm, setSearchTerm] = useState("");
   const [applicationSearchTerm, setApplicationSearchTerm] = useState("");
   const [selectedCandidate, setSelectedCandidate] = useState<string | null>(null);
@@ -273,9 +293,7 @@ export default function CandidatePage() {
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
   const [appStatusFilter, setAppStatusFilter] = useState<string | null>(null);
   const [expandedBatchId, setExpandedBatchId] = useState<string | null>(null);
-  const [batchToDelete, setBatchToDelete] = useState<string | null>(null);
-  const [batchSelections, setBatchSelections] = useState<Record<string, string[]>>({});
-  const [contactModalBatchId, setContactModalBatchId] = useState<string | null>(null);
+  const [showProgressBatchId, setShowProgressBatchId] = useState<string | null>(null);
 
   const smartSearchMutation = trpc.candidate.smartSearch.useMutation({
     onSuccess: (results) => {
@@ -304,7 +322,7 @@ export default function CandidatePage() {
   };
 
   // Determine role capabilities
-  const isAffiliate = user?.role === 'admin' || user?.role === 'super_admin';
+  const isAffiliate = user?.role === 'admin';
   const isAgency = user?.role === 'agency';
   const isAdmin = isAffiliate;
 
@@ -321,9 +339,8 @@ export default function CandidatePage() {
   const agencyCandidatesQuery = trpc.agency.getCandidates.useQuery(undefined, { enabled: isAgency });
 
   // Batch queries for Processos Seletivos
-  // Admins always see ALL batches regardless of agency filter
   const affiliateBatchesQuery = trpc.batch.getAffiliateBatches.useQuery(
-    { agencyId: null },
+    { agencyId: currentAgency?.id ?? null },
     { enabled: isAffiliate }
   );
   const agencyBatchesQuery = trpc.batch.getAgencyBatches.useQuery(
@@ -334,6 +351,7 @@ export default function CandidatePage() {
   const candidates = isAffiliate ? affiliateCandidatesQuery.data : agencyCandidatesQuery.data;
   const batches = isAffiliate ? affiliateBatchesQuery.data : agencyBatchesQuery.data;
   const refetchCandidates = isAffiliate ? affiliateCandidatesQuery.refetch : agencyCandidatesQuery.refetch;
+  const refetchBatches = isAffiliate ? affiliateBatchesQuery.refetch : agencyBatchesQuery.refetch;
 
   const candidatesLoading = affiliateCandidatesQuery.isLoading || agencyCandidatesQuery.isLoading;
   const batchesLoading = affiliateBatchesQuery.isLoading || agencyBatchesQuery.isLoading;
@@ -343,56 +361,15 @@ export default function CandidatePage() {
     onSuccess: () => refetchCandidates()
   });
 
-  const cancelBatchMutation = trpc.batch.cancelBatch.useMutation({
-    onSuccess: () => {
-      toast.success("Grupo cancelado com sucesso");
-      setBatchToDelete(null);
-      affiliateBatchesQuery.refetch();
-      agencyBatchesQuery.refetch();
-    },
-    onError: (error) => {
-      toast.error(error.message || "Erro ao cancelar grupo");
-    }
-  });
-
   const sendBatchMutation = trpc.batch.sendBatchToCompany.useMutation({
     onSuccess: () => {
-      toast.success("Grupo enviado para a empresa!");
-      // Clear selection state for this batch
-      setExpandedBatchId(null);
-      affiliateBatchesQuery.refetch();
-      agencyBatchesQuery.refetch();
+      toast.success('Candidatos enviados para a empresa!');
+      refetchBatches();
     },
     onError: (error) => {
-      toast.error(error.message || "Erro ao enviar grupo");
-    }
+      toast.error(`Erro: ${error.message}`);
+    },
   });
-
-  const handleDeleteBatch = (batchId: string) => {
-    setBatchToDelete(batchId);
-  };
-
-  const confirmDeleteBatch = () => {
-    if (batchToDelete) {
-      cancelBatchMutation.mutate({ batchId: batchToDelete });
-    }
-  };
-
-  const handleSendBatchToCompany = (batchId: string, jobId: string) => {
-    const selectedCandidates = batchSelections[batchId] || [];
-
-    if (selectedCandidates.length === 0) {
-      toast.error("Selecione pelo menos um candidato");
-      return;
-    }
-
-    sendBatchMutation.mutate({
-      batchId,
-      jobId,
-      candidateIds: selectedCandidates,
-      unlockFee: 0,
-    });
-  };
 
   const isLoading = authLoading || candidatesLoading;
 
@@ -445,9 +422,9 @@ export default function CandidatePage() {
 
   const getBatchStatusBadge = (status: string) => {
     const configs: Record<string, { className: string; label: string }> = {
-      draft: { className: 'bg-gray-100 text-gray-600 border-gray-200', label: 'Ativo' },
+      draft: { className: 'bg-gray-100 text-gray-600 border-gray-200', label: 'Rascunho' },
       sent: { className: 'bg-blue-100 text-blue-700 border-blue-200', label: 'Enviado' },
-      unlocked: { className: 'bg-green-100 text-green-700 border-green-200', label: 'Enviado' },
+      unlocked: { className: 'bg-green-100 text-green-700 border-green-200', label: 'Desbloqueado' },
       meeting_scheduled: { className: 'bg-amber-100 text-amber-700 border-amber-200', label: 'Reunião Agendada' },
       completed: { className: 'bg-emerald-100 text-emerald-700 border-emerald-200', label: 'Concluído' },
       cancelled: { className: 'bg-red-100 text-red-700 border-red-200', label: 'Cancelado' },
@@ -476,11 +453,10 @@ export default function CandidatePage() {
   // Batch counts
   const batchCounts = {
     total: batches?.length || 0,
-    ativo: batches?.filter((b: any) => b.status === 'draft').length || 0,
-    enviado: batches?.filter((b: any) => b.status === 'unlocked').length || 0,
-    active: batches?.filter((b: any) => b.status === 'meeting_scheduled').length || 0,
+    draft: batches?.filter((b: any) => b.status === 'draft').length || 0,
+    sent: batches?.filter((b: any) => b.status === 'sent').length || 0,
+    active: batches?.filter((b: any) => ['unlocked', 'meeting_scheduled'].includes(b.status)).length || 0,
     completed: batches?.filter((b: any) => b.status === 'completed').length || 0,
-    cancelled: batches?.filter((b: any) => b.status === 'cancelled').length || 0,
   };
 
   // Filter candidates
@@ -506,10 +482,8 @@ export default function CandidatePage() {
   const filteredBatches = batches?.filter((batch: any) => {
     // Status filter
     if (appStatusFilter) {
-      if (appStatusFilter === 'enviado') {
-        if (batch.status !== 'unlocked') return false;
-      } else if (appStatusFilter === 'active') {
-        if (batch.status !== 'meeting_scheduled') return false;
+      if (appStatusFilter === 'active') {
+        if (!['unlocked', 'meeting_scheduled'].includes(batch.status)) return false;
       } else if (batch.status !== appStatusFilter) {
         return false;
       }
@@ -654,153 +628,73 @@ export default function CandidatePage() {
             </div>
 
             {/* Candidates Table */}
-            {filteredCandidates && filteredCandidates.length > 0 ? (
-              isAllAgenciesMode ? (
-                // Grouped by agency view — use availableAgencies to show all sections
-                <div className="space-y-4">
-                  {availableAgencies.map(agency => {
-                    const agencyCandidates = filteredCandidates.filter((c: any) => c.agency_id === agency.id);
-                    return (
-                      <div key={agency.id}>
-                        <div className="flex items-center gap-2 py-3 px-3 border-b border-gray-200 bg-gray-50/80 rounded-t-lg">
-                          <Building className="h-4 w-4 text-gray-500" />
-                          <span className="font-semibold text-gray-700">{agency.name}</span>
-                          <span className="text-xs text-gray-400">({agencyCandidates.length})</span>
-                        </div>
-                        {agencyCandidates.length > 0 ? (
-                          <Card className="rounded-t-none">
-                            <CardContent className="p-0">
-                              <Table>
-                                <TableHeader>
-                                  <TableRow className="bg-gray-50/50">
-                                    <TableHead className="font-medium">Nome</TableHead>
-                                    <TableHead className="font-medium">Email</TableHead>
-                                    <TableHead className="font-medium">Escolaridade</TableHead>
-                                    <TableHead className="font-medium">Cidade</TableHead>
-                                    <TableHead className="font-medium">Status</TableHead>
-                                    <TableHead className="font-medium">Cadastro</TableHead>
-                                    {isAdmin && <TableHead className="text-right font-medium">Ações</TableHead>}
-                                  </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                  {agencyCandidates.map((candidate: any) => (
-                                    <TableRow key={candidate.id} className="hover:bg-gray-50/50">
-                                      <TableCell className="font-medium">{candidate.full_name || 'N/A'}</TableCell>
-                                      <TableCell className="text-gray-500 text-sm">{(isAdmin ? candidate.users?.email : candidate.email) || 'N/A'}</TableCell>
-                                      <TableCell className="text-sm">{candidate.education_level ? getEducationLevelLabel(candidate.education_level) : 'N/A'}</TableCell>
-                                      <TableCell className="text-sm">{candidate.city || 'N/A'}</TableCell>
-                                      <TableCell>{getCandidateStatusBadge(candidate.status)}</TableCell>
-                                      <TableCell className="text-sm text-gray-500">{new Date(candidate.created_at).toLocaleDateString('pt-BR')}</TableCell>
-                                      {isAdmin && (
-                                        <TableCell className="text-right">
-                                          <div className="flex justify-end gap-1">
-                                            {candidate.status === 'inactive' && (
-                                              <Button size="sm" variant="ghost" className="h-8 px-2 text-green-600 hover:text-green-700 hover:bg-green-50" onClick={() => handleActivate(candidate.id)} disabled={updateCandidateStatusMutation.isPending} title="Ativar">
-                                                <CheckCircle className="h-4 w-4" />
-                                              </Button>
-                                            )}
-                                            {candidate.status === 'active' && (
-                                              <>
-                                                <Button size="sm" variant="ghost" className="h-8 px-2 text-blue-600 hover:text-blue-700 hover:bg-blue-50" onClick={() => handleMarkEmployed(candidate.id)} disabled={updateCandidateStatusMutation.isPending} title="Marcar como empregado">
-                                                  <UserCheck className="h-4 w-4" />
-                                                </Button>
-                                                <Button size="sm" variant="ghost" className="h-8 px-2 text-gray-400 hover:text-red-600 hover:bg-red-50" onClick={() => handleDeactivate(candidate.id)} disabled={updateCandidateStatusMutation.isPending} title="Desativar">
-                                                  <UserX className="h-4 w-4" />
-                                                </Button>
-                                              </>
-                                            )}
-                                            {candidate.status === 'employed' && (
-                                              <Button size="sm" variant="ghost" className="h-8 px-2 text-green-600 hover:text-green-700 hover:bg-green-50" onClick={() => handleActivate(candidate.id)} disabled={updateCandidateStatusMutation.isPending} title="Reativar">
-                                                <CheckCircle className="h-4 w-4" />
-                                              </Button>
-                                            )}
-                                            <Button size="sm" variant="ghost" className="h-8 px-2 text-gray-400 hover:text-gray-600" onClick={() => setSelectedCandidate(candidate.id)} title="Ver detalhes">
-                                              <Eye className="h-4 w-4" />
-                                            </Button>
-                                          </div>
-                                        </TableCell>
-                                      )}
-                                    </TableRow>
-                                  ))}
-                                </TableBody>
-                              </Table>
-                            </CardContent>
-                          </Card>
-                        ) : (
-                          <Card className="rounded-t-none">
-                            <CardContent className="py-6 text-center text-sm text-gray-400">
-                              Nenhum candidato nesta agência
-                            </CardContent>
-                          </Card>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                // Single agency flat table
-                <Card>
-                  <CardContent className="p-0">
-                    <Table>
-                      <TableHeader>
-                        <TableRow className="bg-gray-50/50">
-                          <TableHead className="font-medium">Nome</TableHead>
-                          <TableHead className="font-medium">Email</TableHead>
-                          <TableHead className="font-medium">Escolaridade</TableHead>
-                          <TableHead className="font-medium">Cidade</TableHead>
-                          <TableHead className="font-medium">Status</TableHead>
-                          <TableHead className="font-medium">Cadastro</TableHead>
-                          {isAdmin && <TableHead className="text-right font-medium">Ações</TableHead>}
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {filteredCandidates.map((candidate: any) => (
-                          <TableRow key={candidate.id} className="hover:bg-gray-50/50">
-                            <TableCell className="font-medium">{candidate.full_name || 'N/A'}</TableCell>
-                            <TableCell className="text-gray-500 text-sm">{(isAdmin ? candidate.users?.email : candidate.email) || 'N/A'}</TableCell>
-                            <TableCell className="text-sm">{candidate.education_level ? getEducationLevelLabel(candidate.education_level) : 'N/A'}</TableCell>
-                            <TableCell className="text-sm">{candidate.city || 'N/A'}</TableCell>
-                            <TableCell>{getCandidateStatusBadge(candidate.status)}</TableCell>
-                            <TableCell className="text-sm text-gray-500">{new Date(candidate.created_at).toLocaleDateString('pt-BR')}</TableCell>
-                            {isAdmin && (
-                              <TableCell className="text-right">
-                                <div className="flex justify-end gap-1">
-                                  {candidate.status === 'inactive' && (
-                                    <Button size="sm" variant="ghost" className="h-8 px-2 text-green-600 hover:text-green-700 hover:bg-green-50" onClick={() => handleActivate(candidate.id)} disabled={updateCandidateStatusMutation.isPending} title="Ativar">
-                                      <CheckCircle className="h-4 w-4" />
-                                    </Button>
-                                  )}
-                                  {candidate.status === 'active' && (
-                                    <>
-                                      <Button size="sm" variant="ghost" className="h-8 px-2 text-blue-600 hover:text-blue-700 hover:bg-blue-50" onClick={() => handleMarkEmployed(candidate.id)} disabled={updateCandidateStatusMutation.isPending} title="Marcar como empregado">
-                                        <UserCheck className="h-4 w-4" />
-                                      </Button>
-                                      <Button size="sm" variant="ghost" className="h-8 px-2 text-gray-400 hover:text-red-600 hover:bg-red-50" onClick={() => handleDeactivate(candidate.id)} disabled={updateCandidateStatusMutation.isPending} title="Desativar">
-                                        <UserX className="h-4 w-4" />
-                                      </Button>
-                                    </>
-                                  )}
-                                  {candidate.status === 'employed' && (
-                                    <Button size="sm" variant="ghost" className="h-8 px-2 text-green-600 hover:text-green-700 hover:bg-green-50" onClick={() => handleActivate(candidate.id)} disabled={updateCandidateStatusMutation.isPending} title="Reativar">
-                                      <CheckCircle className="h-4 w-4" />
-                                    </Button>
-                                  )}
-                                  <Button size="sm" variant="ghost" className="h-8 px-2 text-gray-400 hover:text-gray-600" onClick={() => setSelectedCandidate(candidate.id)} title="Ver detalhes">
-                                    <Eye className="h-4 w-4" />
+            <Card>
+              <CardContent className="p-0">
+                {filteredCandidates && filteredCandidates.length > 0 ? (
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-gray-50/50">
+                        <TableHead className="font-medium">Nome</TableHead>
+                        <TableHead className="font-medium">Email</TableHead>
+                        {isAllAgenciesMode && <TableHead className="font-medium">Escola</TableHead>}
+                        <TableHead className="font-medium">Escolaridade</TableHead>
+                        <TableHead className="font-medium">Cidade</TableHead>
+                        <TableHead className="font-medium">Status</TableHead>
+                        <TableHead className="font-medium">Cadastro</TableHead>
+                        {isAdmin && <TableHead className="text-right font-medium">Ações</TableHead>}
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredCandidates.map((candidate: any) => (
+                        <TableRow key={candidate.id} className="hover:bg-gray-50/50">
+                          <TableCell className="font-medium">{candidate.full_name || 'N/A'}</TableCell>
+                          <TableCell className="text-gray-500 text-sm">{(isAdmin ? candidate.users?.email : candidate.email) || 'N/A'}</TableCell>
+                          {isAllAgenciesMode && (
+                            <TableCell>
+                              <div className="flex items-center gap-1.5">
+                                <Building className="h-3.5 w-3.5 text-gray-400" />
+                                <span className="text-sm">{candidate.agency?.name || 'N/A'}</span>
+                              </div>
+                            </TableCell>
+                          )}
+                          <TableCell className="text-sm">{candidate.education_level ? getEducationLevelLabel(candidate.education_level) : 'N/A'}</TableCell>
+                          <TableCell className="text-sm">{candidate.city || 'N/A'}</TableCell>
+                          <TableCell>{getCandidateStatusBadge(candidate.status)}</TableCell>
+                          <TableCell className="text-sm text-gray-500">{new Date(candidate.created_at).toLocaleDateString('pt-BR')}</TableCell>
+                          {isAdmin && (
+                            <TableCell className="text-right">
+                              <div className="flex justify-end gap-1">
+                                {candidate.status === 'inactive' && (
+                                  <Button size="sm" variant="ghost" className="h-8 px-2 text-green-600 hover:text-green-700 hover:bg-green-50" onClick={() => handleActivate(candidate.id)} disabled={updateCandidateStatusMutation.isPending} title="Ativar">
+                                    <CheckCircle className="h-4 w-4" />
                                   </Button>
-                                </div>
-                              </TableCell>
-                            )}
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </CardContent>
-                </Card>
-              )
-            ) : (
-              <Card>
-                <CardContent className="p-0">
+                                )}
+                                {candidate.status === 'active' && (
+                                  <>
+                                    <Button size="sm" variant="ghost" className="h-8 px-2 text-blue-600 hover:text-blue-700 hover:bg-blue-50" onClick={() => handleMarkEmployed(candidate.id)} disabled={updateCandidateStatusMutation.isPending} title="Marcar como empregado">
+                                      <UserCheck className="h-4 w-4" />
+                                    </Button>
+                                    <Button size="sm" variant="ghost" className="h-8 px-2 text-gray-400 hover:text-red-600 hover:bg-red-50" onClick={() => handleDeactivate(candidate.id)} disabled={updateCandidateStatusMutation.isPending} title="Desativar">
+                                      <UserX className="h-4 w-4" />
+                                    </Button>
+                                  </>
+                                )}
+                                {candidate.status === 'employed' && (
+                                  <Button size="sm" variant="ghost" className="h-8 px-2 text-green-600 hover:text-green-700 hover:bg-green-50" onClick={() => handleActivate(candidate.id)} disabled={updateCandidateStatusMutation.isPending} title="Reativar">
+                                    <CheckCircle className="h-4 w-4" />
+                                  </Button>
+                                )}
+                                <Button size="sm" variant="ghost" className="h-8 px-2 text-gray-400 hover:text-gray-600" onClick={() => setSelectedCandidate(candidate.id)} title="Ver detalhes">
+                                  <Eye className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          )}
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                ) : (
                   <div className="flex flex-col items-center justify-center py-16">
                     <Users className="h-10 w-10 text-gray-300 mb-3" />
                     <h3 className="text-sm font-medium text-gray-500 mb-1">
@@ -810,9 +704,9 @@ export default function CandidatePage() {
                       {searchTerm ? 'Tente ajustar os termos de busca' : statusFilter ? 'Nenhum candidato com esse status' : 'Candidatos aparecerão aqui quando se cadastrarem'}
                     </p>
                   </div>
-                </CardContent>
-              </Card>
-            )}
+                )}
+              </CardContent>
+            </Card>
 
             {filteredCandidates && filteredCandidates.length > 0 && (
               <p className="text-xs text-gray-400 text-center">
@@ -845,11 +739,10 @@ export default function CandidatePage() {
 
               <div className="flex items-center gap-2 flex-wrap">
                 <FilterBadge label="Todos" count={batchCounts.total} value={null} active={appStatusFilter === null} onClick={() => setAppStatusFilter(null)} />
-                <FilterBadge label="Ativo" count={batchCounts.ativo} value="draft" active={appStatusFilter === 'draft'} onClick={() => setAppStatusFilter(appStatusFilter === 'draft' ? null : 'draft')} />
-                <FilterBadge label="Enviado" count={batchCounts.enviado} value="enviado" active={appStatusFilter === 'enviado'} onClick={() => setAppStatusFilter(appStatusFilter === 'enviado' ? null : 'enviado')} />
+                <FilterBadge label="Rascunho" count={batchCounts.draft} value="draft" active={appStatusFilter === 'draft'} onClick={() => setAppStatusFilter(appStatusFilter === 'draft' ? null : 'draft')} />
+                <FilterBadge label="Enviado" count={batchCounts.sent} value="sent" active={appStatusFilter === 'sent'} onClick={() => setAppStatusFilter(appStatusFilter === 'sent' ? null : 'sent')} />
                 <FilterBadge label="Em andamento" count={batchCounts.active} value="active" active={appStatusFilter === 'active'} onClick={() => setAppStatusFilter(appStatusFilter === 'active' ? null : 'active')} />
                 <FilterBadge label="Concluído" count={batchCounts.completed} value="completed" active={appStatusFilter === 'completed'} onClick={() => setAppStatusFilter(appStatusFilter === 'completed' ? null : 'completed')} />
-                <FilterBadge label="Cancelados" count={batchCounts.cancelled} value="cancelled" active={appStatusFilter === 'cancelled'} onClick={() => setAppStatusFilter(appStatusFilter === 'cancelled' ? null : 'cancelled')} />
               </div>
             </div>
 
@@ -873,6 +766,7 @@ export default function CandidatePage() {
               <div className="space-y-3">
                 {filteredBatches.map((batch: any) => {
                   const isExpanded = expandedBatchId === batch.id;
+                  const showProgress = showProgressBatchId === batch.id;
                   const candidateIds = batch.candidate_ids || [];
 
                   return (
@@ -881,17 +775,31 @@ export default function CandidatePage() {
                       className={`overflow-hidden transition-shadow ${isExpanded ? 'shadow-md ring-1 ring-blue-200' : 'hover:shadow-sm'}`}
                     >
                       {/* Main row */}
-                      <button
-                        className="w-full p-4 text-left flex items-center gap-3"
-                        onClick={() => setExpandedBatchId(isExpanded ? null : batch.id)}
-                      >
+                      <div className="p-4 flex items-center gap-3">
+                        {/* Progress toggle arrow */}
+                        <button
+                          className="shrink-0 p-1 -ml-1 rounded hover:bg-gray-100 transition-colors"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setShowProgressBatchId(showProgress ? null : batch.id);
+                          }}
+                        >
+                          {showProgress
+                            ? <ChevronDown className="h-4 w-4 text-gray-400" />
+                            : <ChevronRight className="h-4 w-4 text-gray-400" />
+                          }
+                        </button>
+
                         {/* Company icon */}
                         <div className="h-10 w-10 rounded-lg bg-gray-100 flex items-center justify-center shrink-0">
                           <Building className="h-5 w-5 text-gray-500" />
                         </div>
 
-                        {/* Info */}
-                        <div className="flex-1 min-w-0">
+                        {/* Info - clickable to expand candidates */}
+                        <button
+                          className="flex-1 min-w-0 text-left"
+                          onClick={() => setExpandedBatchId(isExpanded ? null : batch.id)}
+                        >
                           <div className="flex items-center gap-2 flex-wrap">
                             <p className="font-medium text-gray-900 text-sm">
                               {batch.company?.company_name || 'Empresa'}
@@ -913,94 +821,139 @@ export default function CandidatePage() {
                               {new Date(batch.created_at).toLocaleDateString('pt-BR')}
                             </span>
                           </div>
-                        </div>
+                        </button>
 
-                        {/* Expand icon */}
-                        <div className="shrink-0">
+                        {/* Expand candidates icon */}
+                        <button
+                          className="shrink-0 p-1 rounded hover:bg-gray-100 transition-colors"
+                          onClick={() => setExpandedBatchId(isExpanded ? null : batch.id)}
+                        >
                           {isExpanded
                             ? <ChevronUp className="h-4 w-4 text-gray-400" />
                             : <ChevronDown className="h-4 w-4 text-gray-400" />
                           }
-                        </div>
-                      </button>
+                        </button>
+                      </div>
 
-                      {/* Expanded - candidate list */}
+                      {/* Progress bar - shown when arrow clicked */}
+                      {showProgress && (
+                        <div className="px-4 pb-3 border-b bg-gray-50/50">
+                          <BatchProgressIndicator status={batch.status} />
+                        </div>
+                      )}
+
+                      {/* Expanded - candidate list and actions */}
                       {isExpanded && (
-                        <div className="border-t bg-gray-50/50 px-4 py-3">
-                          <div className="flex items-center justify-between mb-2">
-                            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">
-                              Candidatos no Grupo
-                              {batch.status === 'draft' && batchSelections[batch.id]?.length > 0 && (
-                                <span className="ml-2 text-blue-600">
-                                  ({batchSelections[batch.id].length} selecionado{batchSelections[batch.id].length !== 1 ? 's' : ''})
+                        <div className="border-t">
+                          {/* Candidate list */}
+                          <div className="bg-gray-50/50 px-4 py-3">
+                            <div className="flex items-center justify-between mb-2">
+                              <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+                                Candidatos no Grupo
+                              </p>
+                              {batch.status === 'draft' && (
+                                <span className="text-xs text-gray-500">
+                                  {(() => {
+                                    const statuses = batch.candidate_statuses || {};
+                                    const approved = candidateIds.filter((id: string) => statuses[id] === 'approved').length;
+                                    const rejected = candidateIds.filter((id: string) => statuses[id] === 'rejected').length;
+                                    if (approved === 0 && rejected === 0) return 'Aprovar ou rejeitar candidatos';
+                                    return `${approved} aprovado${approved !== 1 ? 's' : ''}, ${rejected} rejeitado${rejected !== 1 ? 's' : ''}`;
+                                  })()}
                                 </span>
                               )}
-                            </p>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleDeleteBatch(batch.id);
-                              }}
-                              disabled={cancelBatchMutation.isPending}
-                            >
-                              <Trash2 className="h-4 w-4 mr-1" />
-                              Excluir Grupo
-                            </Button>
-                          </div>
-                          <BatchCandidateList
-                            candidateIds={candidateIds}
-                            selectable={batch.status === 'draft'}
-                            selectedIds={batchSelections[batch.id] || []}
-                            onSelectionChange={(ids) => setBatchSelections(prev => ({ ...prev, [batch.id]: ids }))}
-                          />
-
-                          {/* Send to company UI - only for draft batches */}
-                          {batch.status === 'draft' && (
-                            <div className="border-t mt-3 pt-3">
-                              <div className="flex items-center justify-between">
-                                <div>
-                                  {(!batchSelections[batch.id]?.length) && (
-                                    <p className="text-xs text-amber-600">
-                                      Selecione os candidatos que deseja enviar para a empresa
-                                    </p>
-                                  )}
-                                </div>
-                                <div className="flex gap-2">
-                                  <Button
-                                    variant="outline"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setContactModalBatchId(batch.id);
-                                    }}
-                                    disabled={!batchSelections[batch.id]?.length}
-                                    className="h-9"
-                                  >
-                                    <Calendar className="h-4 w-4 mr-1" />
-                                    Fazer Reunião
-                                  </Button>
-                                  <Button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleSendBatchToCompany(batch.id, batch.job?.id);
-                                    }}
-                                    disabled={
-                                      sendBatchMutation.isPending ||
-                                      !batchSelections[batch.id]?.length
-                                    }
-                                    className="h-9"
-                                  >
-                                    {sendBatchMutation.isPending ? (
-                                      <Loader2 className="h-4 w-4 animate-spin mr-1" />
-                                    ) : null}
-                                    Enviar para Empresa
-                                  </Button>
-                                </div>
-                              </div>
                             </div>
-                          )}
+                            <BatchCandidateList
+                              candidateIds={candidateIds}
+                              candidateStatuses={batch.candidate_statuses}
+                              batchId={batch.id}
+                              showActions={batch.status === 'draft'}
+                              onStatusChange={() => refetchBatches()}
+                            />
+                          </div>
+
+                          {/* Action buttons - aligned right */}
+                          <div className="px-4 py-3 bg-white border-t flex items-center justify-end gap-2">
+                            {batch.status === 'draft' && (
+                              (() => {
+                                const statuses = batch.candidate_statuses || {};
+                                const approvedCount = candidateIds.filter((id: string) => statuses[id] === 'approved').length;
+                                const hasApproved = approvedCount > 0;
+
+                                return (
+                                  <>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        toast.info('Funcionalidade em desenvolvimento');
+                                      }}
+                                    >
+                                      <Plus className="h-3.5 w-3.5 mr-1.5" />
+                                      Adicionar Mais
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      className={hasApproved ? "bg-blue-600 hover:bg-blue-700" : "bg-gray-300 cursor-not-allowed"}
+                                      disabled={!hasApproved || sendBatchMutation.isPending}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (hasApproved) {
+                                          sendBatchMutation.mutate({ batchId: batch.id });
+                                        }
+                                      }}
+                                    >
+                                      {sendBatchMutation.isPending ? (
+                                        <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                                      ) : (
+                                        <Send className="h-3.5 w-3.5 mr-1.5" />
+                                      )}
+                                      Enviar para Empresa {hasApproved && `(${approvedCount})`}
+                                    </Button>
+                                  </>
+                                );
+                              })()
+                            )}
+                            {batch.status === 'sent' && (
+                              <div className="flex items-center gap-2 text-sm text-blue-600">
+                                <Clock className="h-4 w-4" />
+                                Aguardando resposta da empresa
+                              </div>
+                            )}
+                            {batch.status === 'unlocked' && (
+                              <Button
+                                size="sm"
+                                className="bg-green-600 hover:bg-green-700"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  toast.info('Funcionalidade em desenvolvimento');
+                                }}
+                              >
+                                <Calendar className="h-3.5 w-3.5 mr-1.5" />
+                                Agendar Reunião
+                              </Button>
+                            )}
+                            {batch.status === 'meeting_scheduled' && (
+                              <Button
+                                size="sm"
+                                className="bg-emerald-600 hover:bg-emerald-700"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  toast.info('Funcionalidade em desenvolvimento');
+                                }}
+                              >
+                                <CheckCircle className="h-3.5 w-3.5 mr-1.5" />
+                                Marcar como Concluído
+                              </Button>
+                            )}
+                            {batch.status === 'completed' && (
+                              <div className="flex items-center gap-2 text-sm text-emerald-600">
+                                <CheckCircle className="h-4 w-4" />
+                                Processo concluído
+                              </div>
+                            )}
+                          </div>
                         </div>
                       )}
                     </Card>
@@ -1038,34 +991,6 @@ export default function CandidatePage() {
           }}
         />
       )}
-
-      {/* Delete Batch Confirmation Dialog */}
-      <AlertDialog open={!!batchToDelete} onOpenChange={(open) => !open && setBatchToDelete(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Excluir Grupo</AlertDialogTitle>
-            <AlertDialogDescription>
-              Tem certeza que deseja excluir este grupo? Esta ação não pode ser desfeita.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={confirmDeleteBatch}
-              className="bg-red-600 hover:bg-red-700 focus:ring-red-600"
-            >
-              {cancelBatchMutation.isPending ? "Excluindo..." : "Excluir"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      {/* Contact Info Modal */}
-      <ContactInfoModal
-        open={!!contactModalBatchId}
-        onClose={() => setContactModalBatchId(null)}
-        candidateIds={contactModalBatchId ? (batchSelections[contactModalBatchId] || []) : []}
-      />
     </DashboardLayout>
   );
 }

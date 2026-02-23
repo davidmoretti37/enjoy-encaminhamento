@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import DashboardLayout from "@/components/DashboardLayout";
 import ClassicLoader from "@/components/ui/ClassicLoader";
@@ -16,66 +16,22 @@ import {
   GraduationCap,
   Clock,
   FileText,
-  Eye,
-  Video,
-  MapPin,
-  CalendarCheck,
-  CheckCircle2,
-  Clock3,
-  ClipboardCheck,
-  UserPlus,
-  XCircle,
-  Loader2
+  Eye
 } from "lucide-react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { InterviewScheduleModal } from "@/components/InterviewScheduleModal";
-import { HiringModal } from "@/components/HiringModal";
 
 export default function CompanySelection() {
   const { user, loading: authLoading } = useAuth();
+  const [, setLocation] = useLocation();
   const [selectedCandidates, setSelectedCandidates] = useState<Record<string, string[]>>({});
   const [profileModalOpen, setProfileModalOpen] = useState(false);
   const [selectedCandidateId, setSelectedCandidateId] = useState<string | null>(null);
   const [selectedBatchCandidates, setSelectedBatchCandidates] = useState<string[]>([]);
   const [contractsModalOpen, setContractsModalOpen] = useState(false);
   const [selectedBatchId, setSelectedBatchId] = useState<string | null>(null);
-  // Interview scheduling modal state
-  const [interviewModalOpen, setInterviewModalOpen] = useState(false);
-  const [interviewBatchId, setInterviewBatchId] = useState<string | null>(null);
-  const [interviewJobId, setInterviewJobId] = useState<string | null>(null);
-  const [interviewCandidateIds, setInterviewCandidateIds] = useState<string[]>([]);
-
-  // Attendance marking state
-  const [attendanceModalOpen, setAttendanceModalOpen] = useState(false);
-  const [attendanceSessionId, setAttendanceSessionId] = useState<string | null>(null);
-  const [attendanceParticipants, setAttendanceParticipants] = useState<any[]>([]);
-  const [attendanceMarks, setAttendanceMarks] = useState<Record<string, boolean>>({});
-
-  // Hiring modal state
-  const [hiringModalOpen, setHiringModalOpen] = useState(false);
-  const [hiringApplicationId, setHiringApplicationId] = useState<string | null>(null);
-  const [hiringBatchId, setHiringBatchId] = useState<string | null>(null);
-
-  // Track sessions where meeting was started (persisted in localStorage)
-  const [startedSessions, setStartedSessions] = useState<Set<string>>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('startedInterviewSessions');
-      return saved ? new Set(JSON.parse(saved)) : new Set();
-    }
-    return new Set();
-  });
-
-  // Save started sessions to localStorage
-  useEffect(() => {
-    localStorage.setItem('startedInterviewSessions', JSON.stringify(Array.from(startedSessions)));
-  }, [startedSessions]);
-
-  const markSessionStarted = (sessionId: string) => {
-    setStartedSessions(prev => new Set([...Array.from(prev), sessionId]));
-  };
 
   const utils = trpc.useUtils();
 
@@ -85,8 +41,8 @@ export default function CompanySelection() {
     { enabled: !!user && user.role === 'company' }
   );
 
-  // Batch query - get unlocked batches with candidates
-  const { data: unlockedBatches, isLoading: unlockedLoading } = trpc.batch.getUnlockedBatches.useQuery(
+  // Batch query - get all batches with full candidate details
+  const { data: companyBatches, isLoading: batchesLoading } = trpc.batch.getCompanyBatches.useQuery(
     undefined,
     { enabled: !!user && user.role === 'company' }
   );
@@ -101,11 +57,6 @@ export default function CompanySelection() {
     { enabled: !!selectedCandidateId && profileModalOpen }
   );
 
-  // Company profile for address
-  const { data: companyProfile } = trpc.company.getProfile.useQuery(undefined, {
-    enabled: !!user && user.role === 'company'
-  });
-
   const selectCandidatesMutation = trpc.company.selectCandidatesForInterview.useMutation({
     onSuccess: () => {
       toast.success('Seleção confirmada! Entraremos em contato para agendar as entrevistas.');
@@ -119,27 +70,12 @@ export default function CompanySelection() {
 
   const selectBatchCandidatesMutation = trpc.batch.selectCandidatesForInterview.useMutation({
     onSuccess: () => {
-      toast.success('Candidatos selecionados com sucesso!');
-      utils.batch.getUnlockedBatches.invalidate();
+      toast.success('Candidatos selecionados com sucesso! Entraremos em contato para agendar.');
+      utils.batch.getCompanyBatches.invalidate();
       setSelectedBatchCandidates([]);
     },
     onError: (error) => {
       toast.error(error.message || 'Erro ao selecionar candidatos');
-    },
-  });
-
-  // Mark attendance mutation
-  const markAttendanceMutation = trpc.interview.markAttendance.useMutation({
-    onSuccess: (data) => {
-      toast.success(`Presença marcada! ${data.attendedCount} candidato(s) compareceu(ram).`);
-      utils.batch.getUnlockedBatches.invalidate();
-      setAttendanceModalOpen(false);
-      setAttendanceSessionId(null);
-      setAttendanceParticipants([]);
-      setAttendanceMarks({});
-    },
-    onError: (error) => {
-      toast.error(error.message || 'Erro ao marcar presença');
     },
   });
 
@@ -215,12 +151,11 @@ export default function CompanySelection() {
   // Get current step from first job if exists (for progress display)
   const currentStep = 1; // Default to first step when no candidates
 
-  // Check if there are any candidates to show
-  const hasNoCandidates = (!presentations || presentations.length === 0) &&
-                          (!unlockedBatches || unlockedBatches.length === 0);
+  // Empty state when no presentations and no batches
+  const hasBatches = companyBatches && companyBatches.length > 0;
+  const hasPresentations = presentations && presentations.length > 0;
 
-  // Empty state when no candidates from any source
-  if (!isLoading && !unlockedLoading && hasNoCandidates) {
+  if (!isLoading && !batchesLoading && !hasBatches && !hasPresentations) {
     return (
       <DashboardLayout>
         <div className="space-y-8">
@@ -283,283 +218,105 @@ export default function CompanySelection() {
           <p className="text-gray-500 mt-1">Selecione os candidatos que deseja entrevistar</p>
         </div>
 
-        {isLoading ? (
+        {isLoading || batchesLoading ? (
           <div className="text-center py-8"><ClassicLoader /></div>
         ) : (
           <>
             {/* BATCHES - Candidates sent by agency */}
-            {unlockedBatches && unlockedBatches.length > 0 && (
+            {companyBatches && companyBatches.length > 0 && (
               <div className="space-y-6">
-                {unlockedBatches.map((batch: any) => {
-                  const hasScheduledInterview = batch.status === "meeting_scheduled" && batch.interviewSession;
-                  const session = batch.interviewSession;
-
-                  return (
-                    <Card key={batch.id} className={hasScheduledInterview ? "border-green-200" : ""}>
-                      <CardHeader>
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <Users className="h-5 w-5 text-blue-600" />
-                            <CardTitle>{batch.job?.title}</CardTitle>
-                          </div>
-                          <div className="flex gap-2">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => {
-                                setSelectedBatchId(batch.id);
-                                setContractsModalOpen(true);
-                              }}
-                            >
-                              <FileText className="h-4 w-4 mr-2" />
-                              Ver Contratos
-                            </Button>
-                            {hasScheduledInterview ? (
-                              <Badge className="bg-green-100 text-green-700">
-                                <CalendarCheck className="h-3 w-3 mr-1" />
-                                Entrevistas Agendadas
-                              </Badge>
-                            ) : (
-                              <Badge className="bg-blue-100 text-blue-700">Pré-selecionados</Badge>
-                            )}
-                          </div>
+                {companyBatches.map((batch: any) => (
+                  <Card key={batch.id}>
+                    <CardHeader>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Users className="h-5 w-5 text-blue-600" />
+                          <CardTitle>{batch.job?.title}</CardTitle>
                         </div>
-                        <CardDescription>
-                          {hasScheduledInterview
-                            ? `${format(new Date(session.scheduled_at), "dd/MM 'às' HH:mm", { locale: ptBR })} · ${session.duration_minutes}min · ${session.interview_type === 'online' ? 'Online' : 'Presencial'}`
-                            : `${batch.candidates?.length || 0} candidatos disponíveis para seleção`
-                          }
-                        </CardDescription>
-                      </CardHeader>
-                      <CardContent className="space-y-4">
-                        {/* Interview Scheduled View */}
-                        {hasScheduledInterview ? (
-                          (() => {
-                            const interviewDate = new Date(session.scheduled_at);
-                            const now = new Date();
-                            const isPast = interviewDate < now;
-                            const isCompleted = session.status === 'completed';
-                            const meetingStarted = startedSessions.has(session.id);
-                            const showPostMeeting = isPast || meetingStarted;
-                            const attendedParticipants = session.participants?.filter((p: any) => p.status === 'attended') || [];
-                            const hasAttended = attendedParticipants.length > 0;
-
-                            return (
-                              <div className="space-y-4">
-                                {/* Post-meeting prompt */}
-                                {showPostMeeting && !isCompleted && (
-                                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-center gap-3">
-                                    <ClipboardCheck className="h-5 w-5 text-amber-600 flex-shrink-0" />
-                                    <div className="flex-1">
-                                      <p className="text-sm font-medium text-amber-800">Reunião concluída?</p>
-                                      <p className="text-xs text-amber-600">Marque a presença dos candidatos para continuar o processo</p>
-                                    </div>
-                                  </div>
-                                )}
-
-                                {/* Candidates list */}
-                                <div className="flex items-center justify-between">
-                                  <div className="flex items-center gap-3 flex-wrap">
-                                    {session.participants?.map((participant: any) => {
-                                      const candidate = batch.candidates?.find((c: any) => c.id === participant.candidate_id);
-                                      if (!candidate) return null;
-
-                                      const statusIconMap: Record<string, React.ReactNode> = {
-                                        'confirmed': <CheckCircle2 className="h-4 w-4 text-green-500" />,
-                                        'attended': <CheckCircle2 className="h-4 w-4 text-blue-500" />,
-                                        'no_show': <XCircle className="h-4 w-4 text-red-500" />,
-                                        'reschedule_requested': <Clock3 className="h-4 w-4 text-amber-500" />,
-                                        'pending': <Clock3 className="h-4 w-4 text-gray-400" />,
-                                      };
-                                      const statusIcon = statusIconMap[participant.status] || <Clock3 className="h-4 w-4 text-gray-400" />;
-
-                                      return (
-                                        <div key={participant.id} className={`flex items-center gap-2 rounded-full py-1.5 px-3 ${
-                                          participant.status === 'attended' ? 'bg-blue-50' :
-                                          participant.status === 'no_show' ? 'bg-red-50' : 'bg-gray-50'
-                                        }`}>
-                                          <div className="w-7 h-7 rounded-full bg-gray-200 flex items-center justify-center text-xs font-medium text-gray-600">
-                                            {candidate.full_name?.charAt(0)?.toUpperCase()}
-                                          </div>
-                                          <span className="text-sm font-medium">{candidate.full_name?.split(' ')[0]}</span>
-                                          {statusIcon}
-                                        </div>
-                                      );
-                                    })}
-                                  </div>
-
-                                  {/* Action buttons */}
-                                  <div className="flex gap-2">
-                                    {/* Meeting Link - show when online interview */}
-                                    {!isCompleted && session.interview_type === 'online' && session.meeting_link && (
-                                      <Button
-                                        variant={showPostMeeting ? "outline" : "default"}
-                                        size="sm"
-                                        onClick={() => {
-                                          markSessionStarted(session.id);
-                                          window.open(session.meeting_link, '_blank');
-                                        }}
-                                      >
-                                        <Video className="h-4 w-4 mr-2" />
-                                        {showPostMeeting ? "Voltar à Reunião" : "Entrar na Reunião"}
-                                      </Button>
-                                    )}
-
-                                    {/* Mark Attendance - show once meeting started or time passed */}
-                                    {showPostMeeting && !isCompleted && (
-                                      <Button
-                                        size="sm"
-                                        variant="default"
-                                        className="bg-green-600 hover:bg-green-700"
-                                        onClick={() => {
-                                          setAttendanceSessionId(session.id);
-                                          setAttendanceParticipants(session.participants || []);
-                                          // Initialize all confirmed participants as attended by default
-                                          const initialMarks: Record<string, boolean> = {};
-                                          session.participants?.forEach((p: any) => {
-                                            initialMarks[p.id] = p.status === 'confirmed';
-                                          });
-                                          setAttendanceMarks(initialMarks);
-                                          setAttendanceModalOpen(true);
-                                        }}
-                                      >
-                                        <ClipboardCheck className="h-4 w-4 mr-2" />
-                                        Marcar Presença
-                                      </Button>
-                                    )}
-
-                                    {/* In-person location */}
-                                    {!isCompleted && session.interview_type === 'in_person' && (
-                                      <span className="text-sm text-gray-500">
-                                        <MapPin className="h-4 w-4 inline mr-1" />
-                                        {session.location_city}
-                                      </span>
-                                    )}
-                                  </div>
-                                </div>
-
-                                {/* Post-interview: Show hire buttons for attended candidates */}
-                                {isCompleted && hasAttended && (
-                                  <div className="border-t pt-4">
-                                    <p className="text-sm text-gray-600 mb-3">
-                                      Candidatos que compareceram - selecione para contratar:
-                                    </p>
-                                    <div className="space-y-2">
-                                      {attendedParticipants.map((participant: any) => {
-                                        const candidate = batch.candidates?.find((c: any) => c.id === participant.candidate_id);
-                                        if (!candidate) return null;
-
-                                        return (
-                                          <div key={participant.id} className="flex items-center justify-between bg-blue-50 rounded-lg p-3">
-                                            <div className="flex items-center gap-3">
-                                              <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-sm font-medium text-blue-700">
-                                                {candidate.full_name?.charAt(0)?.toUpperCase()}
-                                              </div>
-                                              <div>
-                                                <p className="font-medium">{candidate.full_name}</p>
-                                                <p className="text-sm text-gray-500">{candidate.email}</p>
-                                              </div>
-                                            </div>
-                                            <Button
-                                              size="sm"
-                                              onClick={() => {
-                                                // Find application for this candidate and job
-                                                setHiringApplicationId(participant.application_id);
-                                                setHiringBatchId(batch.id);
-                                                setHiringModalOpen(true);
-                                              }}
-                                            >
-                                              <UserPlus className="h-4 w-4 mr-2" />
-                                              Contratar
-                                            </Button>
-                                          </div>
-                                        );
-                                      })}
-                                    </div>
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })()
-                        ) : (
-                          /* Selection View */
-                          <>
-                            {batch.candidates?.map((candidate: any) => (
-                              <Card key={candidate.id} className="hover:border-gray-400">
-                                <CardContent className="pt-6">
-                                  <div className="flex items-start gap-4">
-                                    <Checkbox
-                                      checked={selectedBatchCandidates.includes(candidate.id)}
-                                      onCheckedChange={() => {
-                                        setSelectedBatchCandidates(prev =>
-                                          prev.includes(candidate.id)
-                                            ? prev.filter(id => id !== candidate.id)
-                                            : [...prev, candidate.id]
-                                        );
-                                      }}
-                                    />
-                                    <div className="flex-1">
-                                      <div className="flex items-center justify-between mb-2">
-                                        <div>
-                                          <h4 className="font-semibold">{candidate.full_name}</h4>
-                                          <p className="text-sm text-gray-500">{candidate.email}</p>
-                                        </div>
-                                        <Button
-                                          variant="ghost"
-                                          size="sm"
-                                          onClick={() => {
-                                            setSelectedCandidateId(candidate.id);
-                                            setProfileModalOpen(true);
-                                          }}
-                                        >
-                                          <Eye className="h-4 w-4 mr-2" />
-                                          Ver Perfil
-                                        </Button>
-                                      </div>
-                                      <div className="flex gap-2 mt-3">
-                                        {candidate.available_for_internship && (
-                                          <Badge variant="secondary">Estágio</Badge>
-                                        )}
-                                        {candidate.available_for_clt && (
-                                          <Badge variant="secondary">CLT</Badge>
-                                        )}
-                                        {candidate.available_for_apprentice && (
-                                          <Badge variant="secondary">Jovem Aprendiz</Badge>
-                                        )}
-                                      </div>
-                                    </div>
-                                  </div>
-                                </CardContent>
-                              </Card>
-                            ))}
-                            <div className="flex justify-between items-center pt-4 border-t">
-                              <div className="text-sm text-gray-600">
-                                {selectedBatchCandidates.length} candidatos selecionados
-                              </div>
-                              <Button
-                                onClick={() => {
-                                  if (selectedBatchCandidates.length === 0) {
-                                    toast.error('Selecione pelo menos um candidato');
-                                    return;
-                                  }
-                                  // Open interview scheduling modal
-                                  setInterviewBatchId(batch.id);
-                                  setInterviewJobId(batch.job?.id);
-                                  setInterviewCandidateIds(selectedBatchCandidates);
-                                  setInterviewModalOpen(true);
+                        <div className="flex gap-2">
+                          <Badge variant="secondary">{batch.job?.contract_type}</Badge>
+                          <Badge variant="outline" className="text-blue-600 border-blue-300">
+                            {batch.agency?.name}
+                          </Badge>
+                        </div>
+                      </div>
+                      <CardDescription>
+                        {batch.candidates?.length || 0} candidatos selecionados pela agência
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      {batch.candidates?.map((candidate: any) => (
+                        <Card key={candidate.id} className="hover:border-gray-400 transition-colors">
+                          <CardContent className="pt-6">
+                            <div className="flex items-start gap-4">
+                              <Checkbox
+                                checked={selectedBatchCandidates.includes(candidate.id)}
+                                onCheckedChange={() => {
+                                  setSelectedBatchCandidates(prev =>
+                                    prev.includes(candidate.id)
+                                      ? prev.filter(id => id !== candidate.id)
+                                      : [...prev, candidate.id]
+                                  );
                                 }}
-                                disabled={selectedBatchCandidates.length === 0}
-                              >
-                                <Calendar className="h-4 w-4 mr-2" />
-                                Agendar Entrevistas
-                              </Button>
+                              />
+                              <div className="flex-1">
+                                <div className="flex items-center justify-between mb-2">
+                                  <div>
+                                    <h4 className="font-semibold">{candidate.full_name}</h4>
+                                    <p className="text-sm text-gray-500">{candidate.email}</p>
+                                  </div>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => {
+                                      setSelectedCandidateId(candidate.id);
+                                      setProfileModalOpen(true);
+                                    }}
+                                  >
+                                    <Eye className="h-4 w-4 mr-2" />
+                                    Ver Perfil
+                                  </Button>
+                                </div>
+                                <div className="flex gap-2 mt-3">
+                                  {candidate.available_for_internship && (
+                                    <Badge variant="secondary">Estágio</Badge>
+                                  )}
+                                  {candidate.available_for_clt && (
+                                    <Badge variant="secondary">CLT</Badge>
+                                  )}
+                                  {candidate.available_for_apprentice && (
+                                    <Badge variant="secondary">Jovem Aprendiz</Badge>
+                                  )}
+                                </div>
+                              </div>
                             </div>
-                          </>
-                        )}
-                      </CardContent>
-                    </Card>
-                  );
-                })}
+                          </CardContent>
+                        </Card>
+                      ))}
+                      <div className="flex justify-between items-center pt-4 border-t">
+                        <div className="text-sm text-gray-600">
+                          {selectedBatchCandidates.length} candidatos selecionados
+                        </div>
+                        <Button
+                          onClick={() => {
+                            if (selectedBatchCandidates.length === 0) {
+                              toast.error('Selecione pelo menos um candidato');
+                              return;
+                            }
+                            selectBatchCandidatesMutation.mutate({
+                              batchId: batch.id,
+                              candidateIds: selectedBatchCandidates
+                            });
+                          }}
+                          disabled={selectedBatchCandidates.length === 0 || selectBatchCandidatesMutation.isPending}
+                        >
+                          <UserCheck className="h-4 w-4 mr-2" />
+                          Selecionar para Entrevista
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
               </div>
             )}
 
@@ -736,263 +493,55 @@ export default function CompanySelection() {
 
         {/* Profile Modal */}
         <Dialog open={profileModalOpen} onOpenChange={setProfileModalOpen}>
-          <DialogContent className="sm:max-w-[650px]">
-            <DialogHeader className="pb-2">
-              <DialogTitle className="text-xl">{candidateProfile?.name || 'Perfil do Candidato'}</DialogTitle>
-              <DialogDescription className="text-base">
-                {candidateProfile?.age && `${candidateProfile.age} anos`} {candidateProfile?.city && `• ${candidateProfile.city}${candidateProfile?.state ? `, ${candidateProfile.state}` : ''}`}
+          <DialogContent className="sm:max-w-[500px]">
+            <DialogHeader>
+              <DialogTitle>{candidateProfile?.name || 'Perfil do Candidato'}</DialogTitle>
+              <DialogDescription>
+                {candidateProfile?.age && `${candidateProfile.age} anos`} {candidateProfile?.city && `• ${candidateProfile.city}`}
               </DialogDescription>
             </DialogHeader>
-            <ScrollArea className="max-h-[70vh] pr-4">
+            <ScrollArea className="max-h-[60vh]">
               {profileLoading ? (
                 <div className="py-8 text-center"><ClassicLoader /></div>
               ) : candidateProfile ? (
-                <div className="space-y-4">
-                  {/* Quick Info Bar - Availability */}
-                  <div className="flex gap-2 flex-wrap pb-3 border-b">
-                    {candidateProfile.available_for_internship && (
-                      <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200">Estágio</Badge>
-                    )}
-                    {candidateProfile.available_for_clt && (
-                      <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200">CLT</Badge>
-                    )}
-                    {candidateProfile.available_for_apprentice && (
-                      <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200">Jovem Aprendiz</Badge>
-                    )}
-                    {candidateProfile.preferred_work_type && (
-                      <Badge variant="outline" className="text-gray-600">
-                        {candidateProfile.preferred_work_type === 'presencial' && '📍 Presencial'}
-                        {candidateProfile.preferred_work_type === 'remoto' && '🏠 Remoto'}
-                        {candidateProfile.preferred_work_type === 'hibrido' && '🔄 Híbrido'}
-                      </Badge>
-                    )}
-                  </div>
-
-                  {/* Two Column Layout for Education & Skills */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {/* Education */}
-                    {candidateProfile.education && (
-                      <div className="bg-gray-50 p-3 rounded-lg">
-                        <h4 className="font-medium text-gray-700 mb-1 flex items-center gap-2 text-sm">
-                          <GraduationCap className="h-4 w-4" />
-                          Formação
-                        </h4>
-                        <p className="text-gray-800 font-medium">
-                          {candidateProfile.education === 'fundamental' && 'Ensino Fundamental'}
-                          {candidateProfile.education === 'medio' && 'Ensino Médio'}
-                          {candidateProfile.education === 'superior' && 'Ensino Superior'}
-                          {candidateProfile.education === 'pos-graduacao' && 'Pós-Graduação'}
-                          {candidateProfile.education === 'mestrado' && 'Mestrado'}
-                          {candidateProfile.education === 'doutorado' && 'Doutorado'}
-                          {candidateProfile.currently_studying && ' (Cursando)'}
-                        </p>
-                        {candidateProfile.institution && (
-                          <p className="text-gray-500 text-xs mt-1">
-                            {candidateProfile.institution}
-                            {candidateProfile.course && ` • ${candidateProfile.course}`}
-                          </p>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Languages */}
-                    {candidateProfile.languages && candidateProfile.languages.length > 0 && (
-                      <div className="bg-gray-50 p-3 rounded-lg">
-                        <h4 className="font-medium text-gray-700 mb-2 text-sm">🌐 Idiomas</h4>
-                        <div className="flex gap-1.5 flex-wrap">
-                          {candidateProfile.languages.map((lang: string, idx: number) => (
-                            <Badge key={idx} variant="secondary" className="text-xs">{lang}</Badge>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Skills */}
+                <div className="space-y-4 py-4">
+                  {candidateProfile.education && (
+                    <div>
+                      <h4 className="font-semibold text-gray-700 mb-2 flex items-center gap-2">
+                        <GraduationCap className="h-4 w-4" />
+                        Formação
+                      </h4>
+                      <p className="text-gray-600">{candidateProfile.education}</p>
+                    </div>
+                  )}
                   {candidateProfile.skills && candidateProfile.skills.length > 0 && (
                     <div>
-                      <h4 className="font-medium text-gray-700 mb-2 text-sm">Habilidades</h4>
-                      <div className="flex gap-1.5 flex-wrap">
+                      <h4 className="font-semibold text-gray-700 mb-2">Habilidades</h4>
+                      <div className="flex gap-2 flex-wrap">
                         {candidateProfile.skills.map((skill: string, idx: number) => (
-                          <Badge key={idx} variant="outline" className="text-xs bg-white">{skill}</Badge>
+                          <Badge key={idx} variant="secondary">{skill}</Badge>
                         ))}
                       </div>
                     </div>
                   )}
-
-                  {/* Experience */}
-                  {candidateProfile.has_work_experience && candidateProfile.experience && candidateProfile.experience.length > 0 && (
+                  {candidateProfile.experience && (
                     <div>
-                      <h4 className="font-medium text-gray-700 mb-2 text-sm">💼 Experiência</h4>
-                      <div className="space-y-2">
-                        {candidateProfile.experience.slice(0, 3).map((exp: any, idx: number) => (
-                          <div key={idx} className="text-sm text-gray-600 bg-gray-50 p-2 rounded border-l-2 border-gray-300">
-                            {typeof exp === 'string' ? exp : (
-                              <>
-                                <p className="font-medium text-gray-800">{exp.cargo || exp.position || exp.title}</p>
-                                {(exp.empresa || exp.company) && <p className="text-gray-500 text-xs">{exp.empresa || exp.company}</p>}
-                              </>
-                            )}
-                          </div>
-                        ))}
-                      </div>
+                      <h4 className="font-semibold text-gray-700 mb-2">Experiência</h4>
+                      <p className="text-gray-600">{candidateProfile.experience}</p>
                     </div>
-                  )}
-
-                  {/* Divider before summary */}
-                  {candidateProfile.summary && <div className="border-t pt-3" />}
-
-                  {/* AI Summary - At Bottom, Collapsible Style */}
-                  {candidateProfile.summary && (
-                    <details className="group">
-                      <summary className="cursor-pointer list-none">
-                        <div className="flex items-center justify-between bg-slate-100 p-3 rounded-lg hover:bg-slate-200 transition-colors">
-                          <span className="font-medium text-slate-700 text-sm">📋 Resumo Completo do Candidato</span>
-                          <span className="text-slate-500 text-xs group-open:hidden">Clique para expandir</span>
-                          <span className="text-slate-500 text-xs hidden group-open:inline">Clique para recolher</span>
-                        </div>
-                      </summary>
-                      <div className="mt-2 p-3 bg-slate-50 rounded-lg border border-slate-200">
-                        <p className="text-slate-600 text-sm whitespace-pre-line leading-relaxed">{candidateProfile.summary}</p>
-                      </div>
-                    </details>
                   )}
                 </div>
               ) : (
                 <p className="py-8 text-center text-gray-500">Perfil não encontrado</p>
               )}
             </ScrollArea>
-            <DialogFooter className="pt-2">
+            <DialogFooter>
               <Button variant="outline" onClick={() => setProfileModalOpen(false)}>
                 Fechar
               </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
-
-        {/* Interview Scheduling Modal */}
-        {interviewBatchId && interviewJobId && (
-          <InterviewScheduleModal
-            open={interviewModalOpen}
-            onClose={() => {
-              setInterviewModalOpen(false);
-              setInterviewBatchId(null);
-              setInterviewJobId(null);
-              setInterviewCandidateIds([]);
-            }}
-            batchId={interviewBatchId}
-            jobId={interviewJobId}
-            candidateIds={interviewCandidateIds}
-            companyAddress={companyProfile ? {
-              address: companyProfile.address,
-              city: companyProfile.city,
-              state: companyProfile.state,
-            } : undefined}
-            onSuccess={() => {
-              utils.batch.getUnlockedBatches.invalidate();
-              setSelectedBatchCandidates([]);
-            }}
-          />
-        )}
-
-        {/* Attendance Marking Modal */}
-        <Dialog open={attendanceModalOpen} onOpenChange={setAttendanceModalOpen}>
-          <DialogContent className="max-w-md">
-            <DialogHeader>
-              <DialogTitle>Marcar Presença</DialogTitle>
-              <DialogDescription>
-                Selecione os candidatos que compareceram à entrevista
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-3 py-4">
-              {attendanceParticipants.map((participant: any) => {
-                // Find candidate from any batch
-                const batch = unlockedBatches?.find((b: any) =>
-                  b.interviewSession?.id === attendanceSessionId
-                );
-                const candidate = batch?.candidates?.find((c: any) => c.id === participant.candidate_id);
-
-                return (
-                  <div
-                    key={participant.id}
-                    className={`flex items-center justify-between p-3 rounded-lg border ${
-                      attendanceMarks[participant.id] ? 'border-green-300 bg-green-50' : 'border-gray-200'
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center text-sm font-medium">
-                        {candidate?.full_name?.charAt(0)?.toUpperCase() || '?'}
-                      </div>
-                      <div>
-                        <p className="font-medium">{candidate?.full_name || 'Candidato'}</p>
-                        <p className="text-sm text-gray-500">
-                          {participant.status === 'confirmed' ? 'Confirmado' : 'Pendente'}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex gap-2">
-                      <Button
-                        size="sm"
-                        variant={attendanceMarks[participant.id] ? "default" : "outline"}
-                        onClick={() => setAttendanceMarks(prev => ({ ...prev, [participant.id]: true }))}
-                      >
-                        <CheckCircle2 className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant={attendanceMarks[participant.id] === false ? "destructive" : "outline"}
-                        onClick={() => setAttendanceMarks(prev => ({ ...prev, [participant.id]: false }))}
-                      >
-                        <XCircle className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setAttendanceModalOpen(false)}>
-                Cancelar
-              </Button>
-              <Button
-                onClick={() => {
-                  if (!attendanceSessionId) return;
-                  const attendees = Object.entries(attendanceMarks).map(([participantId, attended]) => ({
-                    participantId,
-                    attended,
-                  }));
-                  markAttendanceMutation.mutate({
-                    sessionId: attendanceSessionId,
-                    attendees,
-                  });
-                }}
-                disabled={markAttendanceMutation.isPending || Object.keys(attendanceMarks).length === 0}
-              >
-                {markAttendanceMutation.isPending ? (
-                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                ) : null}
-                Confirmar Presença
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
-        {/* Hiring Modal */}
-        {hiringModalOpen && hiringApplicationId && (
-          <HiringModal
-            open={hiringModalOpen}
-            onClose={() => {
-              setHiringModalOpen(false);
-              setHiringApplicationId(null);
-              setHiringBatchId(null);
-            }}
-            applicationId={hiringApplicationId}
-            batchId={hiringBatchId || undefined}
-            onSuccess={() => {
-              utils.batch.getUnlockedBatches.invalidate();
-            }}
-          />
-        )}
       </div>
     </DashboardLayout>
   );

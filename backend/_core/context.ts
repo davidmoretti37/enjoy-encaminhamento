@@ -10,6 +10,35 @@ export type TrpcContext = {
   user: User | null;
 };
 
+// Helper function for retry with exponential backoff
+async function withRetry<T>(
+  fn: () => Promise<T>,
+  maxRetries: number = 5,
+  baseDelayMs: number = 500
+): Promise<T> {
+  let lastError: any;
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (e: any) {
+      lastError = e;
+      const isNetworkError = e?.cause?.code === 'ECONNRESET' ||
+                             e?.code === 'ECONNRESET' ||
+                             e?.message?.includes('fetch failed') ||
+                             e?.message?.includes('ECONNRESET');
+
+      if (!isNetworkError || attempt === maxRetries - 1) {
+        throw e;
+      }
+
+      const delay = baseDelayMs * Math.pow(2, attempt); // 500, 1000, 2000, 4000, 8000
+      console.log(`[Auth] Retry attempt ${attempt + 1}/${maxRetries} after ${delay}ms...`);
+      await new Promise(r => setTimeout(r, delay));
+    }
+  }
+  throw lastError;
+}
+
 export async function createContext(
   opts: CreateExpressContextOptions
 ): Promise<TrpcContext> {
@@ -25,63 +54,45 @@ export async function createContext(
       let authUser = null;
       let authError = null;
 
-      for (let attempt = 0; attempt < 3; attempt++) {
-        try {
-          const result = await supabase.auth.getUser(token);
-          authUser = result.data?.user;
-          authError = result.error;
-          if (!authError) break;
-        } catch (e: any) {
-          authError = e;
-          if (attempt < 2) {
-            await new Promise(r => setTimeout(r, 100 * (attempt + 1)));
-          }
-        }
-      }
-
-      if (authError) {
-        console.error('[Auth] Supabase auth error:', authError.message || authError);
+      try {
+        const result = await withRetry(async () => {
+          const res = await supabase.auth.getUser(token);
+          if (res.error) throw res.error;
+          return res;
+        });
+        authUser = result.data?.user;
+      } catch (e: any) {
+        authError = e;
+        console.error('[Auth] Supabase auth error after retries:', e.message || e);
       }
 
       if (!authError && authUser) {
         // Get user profile from our users table using admin client to bypass RLS
         // Use maybeSingle() to handle case where user profile doesn't exist yet
-        const { data: userProfile, error: profileError } = await supabaseAdmin
-          .from('users')
-          .select('*')
-          .eq('id', authUser.id)
-          .maybeSingle();
+        try {
+          const { data: userProfile, error: profileError } = await withRetry(async () => {
+            return await supabaseAdmin
+              .from('users')
+              .select('*')
+              .eq('id', authUser.id)
+              .maybeSingle();
+          });
 
-        if (profileError) {
-          console.error('[Auth] Profile error:', profileError.message);
-        }
+          if (profileError) {
+            console.error('[Auth] Profile error:', profileError.message);
+          }
 
-        if (userProfile) {
-          user = userProfile;
-        } else {
-          // User authenticated but no profile yet (e.g. Google OAuth)
-          // Auto-create profile as candidate by default
-          console.log('[Auth] No profile found for user, auto-creating:', authUser.id);
-          const role = authUser.user_metadata?.role || 'candidate';
-          const { data: newProfile, error: createError } = await supabaseAdmin
-            .from('users')
-            .insert({
-              id: authUser.id,
-              email: authUser.email || '',
-              name: authUser.user_metadata?.full_name || authUser.user_metadata?.name || null,
-              role,
-              agency_id: authUser.user_metadata?.agency_id || null,
-            })
-            .select('*')
-            .single();
-
-          if (createError) {
-            console.error('[Auth] Failed to auto-create profile:', createError.message);
+          if (userProfile) {
+            user = userProfile;
+          } else {
+            // User authenticated but no profile yet - create minimal user object from auth data
+            // This can happen right after signup before the profile insert completes
+            console.log('[Auth] No profile found for user, using auth data:', authUser.id);
             user = {
               id: authUser.id,
               email: authUser.email || '',
-              name: authUser.user_metadata?.full_name || authUser.user_metadata?.name || null,
-              role: role as any,
+              name: authUser.user_metadata?.name || null,
+              role: authUser.user_metadata?.role || null,
               agency_id: authUser.user_metadata?.agency_id || null,
               created_at: authUser.created_at,
               updated_at: null,
@@ -89,9 +100,9 @@ export async function createContext(
               last_login: null,
               profile_photo_url: null,
             };
-          } else {
-            user = newProfile;
           }
+        } catch (e: any) {
+          console.error('[Auth] Profile fetch error after retries:', e.message || e);
         }
       }
     }

@@ -8,8 +8,12 @@ import {
   Loader2,
 } from "lucide-react";
 import PublicLayout from "@/components/landing/PublicLayout";
+import { trpc } from "@/lib/trpc";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
+
+// Use tRPC in development (localhost), direct API in production
+const isDev = typeof window !== 'undefined' && window.location.hostname === 'localhost';
 
 const itemVariants = {
   hidden: { opacity: 0, y: 20 },
@@ -68,7 +72,25 @@ export default function PublicVagasPage() {
           ? "clt"
           : "menor-aprendiz";
 
+  // Use tRPC query in development
+  const trpcQuery = trpc.job.getPublicJobs.useQuery(
+    filterValue ? { contractType: filterValue } : undefined,
+    { enabled: isDev }
+  );
+
+  // Fetch from direct API in production
   useEffect(() => {
+    if (isDev) {
+      // Use tRPC data in dev
+      if (trpcQuery.data) {
+        setJobs(trpcQuery.data as Job[]);
+      }
+      setIsLoading(trpcQuery.isLoading);
+      setError(trpcQuery.error?.message || null);
+      return;
+    }
+
+    // Production: use direct API
     const fetchJobs = async () => {
       setIsLoading(true);
       setError(null);
@@ -91,7 +113,7 @@ export default function PublicVagasPage() {
     };
 
     fetchJobs();
-  }, [filterValue]);
+  }, [filterValue, isDev, trpcQuery.data, trpcQuery.isLoading, trpcQuery.error]);
 
   return (
     <PublicLayout>

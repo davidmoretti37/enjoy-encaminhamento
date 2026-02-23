@@ -1,10 +1,10 @@
 // @ts-nocheck
 // Notification database operations
-import { supabaseAdmin } from "../supabase";
+import { supabase } from "../supabase";
 import type { Notification } from "./types";
 
 export async function getNotificationsByUserId(userId: string): Promise<Notification[]> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await supabase
     .from("notifications")
     .select("*")
     .eq("user_id", userId)
@@ -16,7 +16,7 @@ export async function getNotificationsByUserId(userId: string): Promise<Notifica
 }
 
 export async function getUnreadNotificationsCount(userId: string): Promise<number> {
-  const { count, error } = await supabaseAdmin
+  const { count, error } = await supabase
     .from("notifications")
     .select("*", { count: "exact", head: true })
     .eq("user_id", userId)
@@ -27,7 +27,7 @@ export async function getUnreadNotificationsCount(userId: string): Promise<numbe
 }
 
 export async function markNotificationAsRead(id: string): Promise<void> {
-  const { error } = await supabaseAdmin
+  const { error } = await supabase
     .from("notifications")
     .update({ is_read: true, read_at: new Date().toISOString() })
     .eq("id", id);
@@ -36,7 +36,7 @@ export async function markNotificationAsRead(id: string): Promise<void> {
 }
 
 export async function markAllNotificationsAsRead(userId: string): Promise<void> {
-  const { error } = await supabaseAdmin
+  const { error } = await supabase
     .from("notifications")
     .update({ is_read: true, read_at: new Date().toISOString() })
     .eq("user_id", userId)
@@ -45,23 +45,23 @@ export async function markAllNotificationsAsRead(userId: string): Promise<void> 
   if (error) throw error;
 }
 
-export async function createNotification(notification: {
+export async function createNotification(params: {
   user_id: string;
   title: string;
   message: string;
-  type?: 'info' | 'success' | 'warning' | 'error';
+  type: string;
   related_to_type?: string;
   related_to_id?: string;
 }): Promise<string> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await supabase
     .from("notifications")
     .insert({
-      user_id: notification.user_id,
-      title: notification.title,
-      message: notification.message,
-      type: notification.type || 'info',
-      related_to_type: notification.related_to_type || null,
-      related_to_id: notification.related_to_id || null,
+      user_id: params.user_id,
+      title: params.title,
+      message: params.message,
+      type: params.type,
+      related_to_type: params.related_to_type,
+      related_to_id: params.related_to_id,
       is_read: false,
     })
     .select("id")

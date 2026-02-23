@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   Building,
   Clock,
+  Check,
   CheckCircle,
   Send,
   GraduationCap,
@@ -19,6 +20,8 @@ import {
   Search,
   X,
   Loader2,
+  ChevronRight,
+  ChevronDown,
 } from "lucide-react";
 import DashboardLayout from "@/components/DashboardLayout";
 import { useState, useMemo } from "react";
@@ -42,13 +45,85 @@ interface Meeting {
   contract_signed_at: string | null;
   contract_signer_name: string | null;
   agency_name?: string | null;
-  agency_id?: string | null;
   _isDirectSignup?: boolean; // Flag for companies that registered directly
+}
+
+// Stepper progress indicator for batch workflow
+function BatchProgressIndicator({ status }: { status: string }) {
+  const steps = [
+    { id: 'draft', label: 'Rascunho' },
+    { id: 'sent', label: 'Enviado' },
+    { id: 'unlocked', label: 'Andamento' },
+    { id: 'completed', label: 'Concluído' },
+  ];
+
+  const statusMap: Record<string, number> = {
+    draft: 0,
+    sent: 1,
+    unlocked: 2,
+    meeting_scheduled: 2,
+    completed: 3,
+  };
+
+  const currentIndex = statusMap[status] ?? 0;
+
+  return (
+    <div className="flex items-center gap-0">
+      {steps.map((step, index) => {
+        const isCompleted = index < currentIndex;
+        const isCurrent = index === currentIndex;
+        const isLast = index === steps.length - 1;
+
+        return (
+          <div key={step.id} className="flex items-center">
+            {/* Step circle */}
+            <div className="flex flex-col items-center">
+              <div
+                className={`
+                  w-6 h-6 rounded-full flex items-center justify-center transition-all
+                  ${isCompleted
+                    ? 'bg-green-500 text-white'
+                    : isCurrent
+                      ? 'bg-blue-500 text-white ring-4 ring-blue-100'
+                      : 'bg-gray-100 text-gray-400 border-2 border-gray-200'
+                  }
+                `}
+              >
+                {isCompleted ? (
+                  <Check className="w-3.5 h-3.5" />
+                ) : (
+                  <span className="w-2 h-2 rounded-full bg-current" />
+                )}
+              </div>
+              <span
+                className={`
+                  text-[10px] mt-1 whitespace-nowrap
+                  ${isCurrent ? 'text-blue-600 font-medium' : 'text-gray-400'}
+                `}
+              >
+                {step.label}
+              </span>
+            </div>
+
+            {/* Connector line */}
+            {!isLast && (
+              <div
+                className={`
+                  w-8 h-0.5 mx-1 -mt-4 transition-colors
+                  ${isCompleted ? 'bg-green-500' : 'bg-gray-200'}
+                `}
+              />
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 export default function CompanyPage() {
   const { user, loading: authLoading } = useAuth();
-  const { currentAgency, availableAgencies, isAllAgenciesMode } = useAgencyContext();
+  const { currentAgency, isAllAgenciesMode } = useAgencyContext();
   const [, setLocation] = useLocation();
   const [selectedMeeting, setSelectedMeeting] = useState<Meeting | null>(null);
   const [documentsMeeting, setDocumentsMeeting] = useState<Meeting | null>(null);
@@ -58,6 +133,7 @@ export default function CompanyPage() {
   const [showImportModal, setShowImportModal] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [smartSearchIds, setSmartSearchIds] = useState<Set<string> | null>(null);
+  const [expandedCompanyId, setExpandedCompanyId] = useState<string | null>(null);
 
   const smartSearchMutation = trpc.company.smartSearch.useMutation({
     onSuccess: (results) => {
@@ -86,7 +162,7 @@ export default function CompanyPage() {
   };
 
   // Detect role
-  const isAffiliate = user?.role === 'admin' || user?.role === 'super_admin';
+  const isAffiliate = user?.role === 'admin';
   const isAgency = user?.role === 'agency';
 
   // Separate queries for each role (both called but only one enabled at a time)
@@ -142,6 +218,25 @@ export default function CompanyPage() {
     { agencyId: currentAgency?.id ?? null },
     { enabled: isAffiliate || isAgency }
   );
+
+  // Query batches for progress indicators
+  const { data: allBatches } = trpc.batch.getAgencyBatches.useQuery(
+    {},
+    { enabled: isAffiliate || isAgency }
+  );
+
+  // Group batches by company_id for quick lookup
+  const batchesByCompany = useMemo(() => {
+    const map = new Map<string, any[]>();
+    allBatches?.forEach((batch: any) => {
+      const companyId = batch.company_id;
+      if (!map.has(companyId)) {
+        map.set(companyId, []);
+      }
+      map.get(companyId)!.push(batch);
+    });
+    return map;
+  }, [allBatches]);
 
   // Create a map of email -> form for quick lookup
   const formsByEmail = useMemo(() => {
@@ -225,7 +320,6 @@ export default function CompanyPage() {
       contract_signed_at: c.created_at, // Mark as completed
       contract_signer_name: c.contact_name || null,
       agency_name: null,
-      agency_id: c.agency_id || null,
       _isDirectSignup: true, // Flag to identify direct signups
     }));
 
@@ -348,85 +442,35 @@ export default function CompanyPage() {
 
           {/* Empresas View - Completed Companies */}
           <TabsContent value="empresas">
-            {isAllAgenciesMode ? (
-              // Grouped by agency — show all agencies from context
-              <div className="space-y-4">
-                {availableAgencies.map(agency => {
-                  const agencyCompanies = completedCompanies.filter((m: Meeting) => m.agency_id === agency.id);
+            {completedCompanies.length > 0 ? (
+              <div className="space-y-2">
+                {completedCompanies.map((meeting: Meeting) => {
+                  const companyBatches = batchesByCompany.get(meeting.id) || [];
+                  const hasBatches = companyBatches.length > 0;
+                  const isExpanded = expandedCompanyId === meeting.id;
+
                   return (
-                    <div key={agency.id}>
-                      <div className="flex items-center gap-2 py-3 px-3 border-b border-gray-200 bg-gray-50/80 rounded-t-lg">
-                        <Building className="h-4 w-4 text-gray-500" />
-                        <span className="font-semibold text-gray-700">{agency.name}</span>
-                        <span className="text-xs text-gray-400">({agencyCompanies.length})</span>
-                      </div>
-                      {agencyCompanies.length > 0 ? (
-                        <div className="space-y-2 mt-2">
-                          {agencyCompanies.map((meeting: Meeting) => (
-                            <div
-                              key={meeting.id}
-                              className="p-4 bg-white rounded-lg border border-gray-300 shadow-sm hover:shadow-md transition-all"
-                            >
-                              <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-3">
-                                  <div className="h-9 w-9 rounded-lg bg-gray-100 flex items-center justify-center">
-                                    <Building className="h-4 w-4 text-gray-600" />
-                                  </div>
-                                  <div>
-                                    <span className="font-medium text-gray-900">
-                                      {meeting.company_name || "Empresa sem nome"}
-                                    </span>
-                                    {meeting.contact_name && (
-                                      <p className="text-sm text-gray-500">{meeting.contact_name}</p>
-                                    )}
-                                  </div>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  {meeting._isDirectSignup && (
-                                    <SendCompanyInviteButton companyId={meeting.id} />
-                                  )}
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className="text-gray-600 border-gray-300 hover:bg-gray-50"
-                                    onClick={() => setDocumentsMeeting(meeting)}
-                                  >
-                                    <FileText className="h-4 w-4 mr-1.5" />
-                                    Documentos
-                                  </Button>
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className="text-gray-600 border-gray-300 hover:bg-gray-50"
-                                    onClick={() => setLocation(`/agency/job-descriptions/${meeting.id}`)}
-                                  >
-                                    <Briefcase className="h-4 w-4 mr-1.5" />
-                                    Descrição da Vaga
-                                  </Button>
-                                </div>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="py-4 px-3 text-sm text-gray-400 bg-white rounded-b-lg border border-t-0 border-gray-200">
-                          Nenhuma empresa nesta agência
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            ) : completedCompanies.length > 0 ? (
-                // Single agency flat list
-                <div className="space-y-2">
-                  {completedCompanies.map((meeting: Meeting) => (
                     <div
                       key={meeting.id}
-                      className="p-4 bg-white rounded-lg border border-gray-300 shadow-sm hover:shadow-md transition-all"
+                      className="bg-white rounded-lg border border-gray-300 shadow-sm hover:shadow-md transition-all"
                     >
-                      <div className="flex items-center justify-between">
+                      <div className="p-4 flex items-center justify-between">
                         <div className="flex items-center gap-3">
+                          {/* Arrow toggle for batch progress */}
+                          {hasBatches ? (
+                            <button
+                              onClick={() => setExpandedCompanyId(isExpanded ? null : meeting.id)}
+                              className="h-6 w-6 flex items-center justify-center text-gray-400 hover:text-gray-600 transition-colors"
+                            >
+                              {isExpanded ? (
+                                <ChevronDown className="h-4 w-4" />
+                              ) : (
+                                <ChevronRight className="h-4 w-4" />
+                              )}
+                            </button>
+                          ) : (
+                            <div className="w-6" /> // Spacer for alignment
+                          )}
                           <div className="h-9 w-9 rounded-lg bg-gray-100 flex items-center justify-center">
                             <Building className="h-4 w-4 text-gray-600" />
                           </div>
@@ -437,9 +481,13 @@ export default function CompanyPage() {
                             {meeting.contact_name && (
                               <p className="text-sm text-gray-500">{meeting.contact_name}</p>
                             )}
+                            {isAllAgenciesMode && meeting.agency_name && (
+                              <p className="text-xs text-gray-400">{meeting.agency_name}</p>
+                            )}
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
+                          {/* Show invite button for imported companies */}
                           {meeting._isDirectSignup && (
                             <SendCompanyInviteButton companyId={meeting.id} />
                           )}
@@ -463,9 +511,37 @@ export default function CompanyPage() {
                           </Button>
                         </div>
                       </div>
+
+                      {/* Expanded batch progress section */}
+                      {isExpanded && hasBatches && (
+                        <div className="px-4 pb-4 border-t border-gray-100 bg-gray-50/50">
+                          <div className="ml-9 mt-3 space-y-3">
+                            {companyBatches.map((batch: any) => (
+                              <div
+                                key={batch.id}
+                                className="bg-white rounded-lg p-3 border border-gray-200 shadow-sm"
+                              >
+                                <div className="flex items-center gap-4">
+                                  <Briefcase className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-medium text-gray-700 truncate mb-2">
+                                      {batch.job?.title || "Vaga sem título"}
+                                    </p>
+                                    <BatchProgressIndicator status={batch.status} />
+                                  </div>
+                                  <span className="text-xs text-gray-400 whitespace-nowrap">
+                                    {batch.batch_size} candidato{batch.batch_size !== 1 ? 's' : ''}
+                                  </span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
-                  ))}
-                </div>
+                  );
+                })}
+              </div>
             ) : (
               <div className="text-center py-16 bg-gray-50 rounded-lg border border-dashed border-gray-200">
                 <Building className="h-10 w-10 text-gray-300 mx-auto mb-3" />
@@ -483,51 +559,32 @@ export default function CompanyPage() {
                   Aguardando envio
                   <span className="text-xs text-gray-400">{waitingOnUs.length}</span>
                 </h3>
-                {isAllAgenciesMode ? (
-                  <div className="space-y-3">
-                    {availableAgencies.map(agency => {
-                      const items = waitingOnUs.filter((m: Meeting) => m.agency_id === agency.id);
-                      if (items.length === 0) return null;
-                      return (
-                        <div key={agency.id}>
-                          <div className="flex items-center gap-2 py-2 px-2 bg-gray-50/80 rounded-lg mb-1">
-                            <Building className="h-3.5 w-3.5 text-gray-500" />
-                            <span className="text-xs font-semibold text-gray-600">{agency.name}</span>
-                            <span className="text-[10px] text-gray-400">({items.length})</span>
-                          </div>
-                          <div className="space-y-2">
-                            {items.map((meeting: Meeting) => (
-                              <div key={meeting.id} className="p-4 bg-white rounded-lg border border-gray-200 cursor-pointer hover:border-gray-300 transition-colors" onClick={() => handleCardClick(meeting)}>
-                                <div className="flex items-center gap-3">
-                                  <div className="h-9 w-9 rounded-lg bg-blue-50 flex items-center justify-center"><Send className="h-4 w-4 text-blue-600" /></div>
-                                  <div>
-                                    <span className="font-medium text-gray-900">{meeting.company_name || "Empresa sem nome"}</span>
-                                    {meeting.contact_name && <p className="text-sm text-gray-500">{meeting.contact_name}</p>}
-                                  </div>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      );
-                    })}
-                    {waitingOnUs.length === 0 && (
-                      <div className="text-center py-8 bg-gray-50 rounded-lg border border-dashed border-gray-200">
-                        <p className="text-sm text-gray-400">Nenhuma pendente</p>
-                      </div>
-                    )}
-                  </div>
-                ) : waitingOnUs.length > 0 ? (
+                {waitingOnUs.length > 0 ? (
                   <div className="space-y-2">
                     {waitingOnUs.map((meeting: Meeting) => (
-                      <div key={meeting.id} className="p-4 bg-white rounded-lg border border-gray-200 cursor-pointer hover:border-gray-300 transition-colors" onClick={() => handleCardClick(meeting)}>
-                        <div className="flex items-center gap-3">
-                          <div className="h-9 w-9 rounded-lg bg-blue-50 flex items-center justify-center"><Send className="h-4 w-4 text-blue-600" /></div>
-                          <div>
-                            <span className="font-medium text-gray-900">{meeting.company_name || "Empresa sem nome"}</span>
-                            {meeting.contact_name && <p className="text-sm text-gray-500">{meeting.contact_name}</p>}
+                      <div
+                        key={meeting.id}
+                        className="p-4 bg-white rounded-lg border border-gray-200 cursor-pointer hover:border-gray-300 transition-colors"
+                        onClick={() => handleCardClick(meeting)}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="h-9 w-9 rounded-lg bg-blue-50 flex items-center justify-center">
+                              <Send className="h-4 w-4 text-blue-600" />
+                            </div>
+                            <div>
+                              <span className="font-medium text-gray-900">
+                                {meeting.company_name || "Empresa sem nome"}
+                              </span>
+                              {meeting.contact_name && (
+                                <p className="text-sm text-gray-500">{meeting.contact_name}</p>
+                              )}
+                            </div>
                           </div>
                         </div>
+                        {isAllAgenciesMode && meeting.agency_name && (
+                          <p className="text-xs text-gray-400 mt-2 ml-12">{meeting.agency_name}</p>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -544,51 +601,32 @@ export default function CompanyPage() {
                   Aguardando resposta
                   <span className="text-xs text-gray-400">{waitingOnThem.length}</span>
                 </h3>
-                {isAllAgenciesMode ? (
-                  <div className="space-y-3">
-                    {availableAgencies.map(agency => {
-                      const items = waitingOnThem.filter((m: Meeting) => m.agency_id === agency.id);
-                      if (items.length === 0) return null;
-                      return (
-                        <div key={agency.id}>
-                          <div className="flex items-center gap-2 py-2 px-2 bg-gray-50/80 rounded-lg mb-1">
-                            <Building className="h-3.5 w-3.5 text-gray-500" />
-                            <span className="text-xs font-semibold text-gray-600">{agency.name}</span>
-                            <span className="text-[10px] text-gray-400">({items.length})</span>
-                          </div>
-                          <div className="space-y-2">
-                            {items.map((meeting: Meeting) => (
-                              <div key={meeting.id} className="p-4 bg-white rounded-lg border border-gray-200 cursor-pointer hover:border-gray-300 transition-colors" onClick={() => handleCardClick(meeting)}>
-                                <div className="flex items-center gap-3">
-                                  <div className="h-9 w-9 rounded-lg bg-amber-50 flex items-center justify-center"><Clock className="h-4 w-4 text-amber-600" /></div>
-                                  <div>
-                                    <span className="font-medium text-gray-900">{meeting.company_name || "Empresa sem nome"}</span>
-                                    {meeting.contact_name && <p className="text-sm text-gray-500">{meeting.contact_name}</p>}
-                                  </div>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      );
-                    })}
-                    {waitingOnThem.length === 0 && (
-                      <div className="text-center py-8 bg-gray-50 rounded-lg border border-dashed border-gray-200">
-                        <p className="text-sm text-gray-400">Nenhuma pendente</p>
-                      </div>
-                    )}
-                  </div>
-                ) : waitingOnThem.length > 0 ? (
+                {waitingOnThem.length > 0 ? (
                   <div className="space-y-2">
                     {waitingOnThem.map((meeting: Meeting) => (
-                      <div key={meeting.id} className="p-4 bg-white rounded-lg border border-gray-200 cursor-pointer hover:border-gray-300 transition-colors" onClick={() => handleCardClick(meeting)}>
-                        <div className="flex items-center gap-3">
-                          <div className="h-9 w-9 rounded-lg bg-amber-50 flex items-center justify-center"><Clock className="h-4 w-4 text-amber-600" /></div>
-                          <div>
-                            <span className="font-medium text-gray-900">{meeting.company_name || "Empresa sem nome"}</span>
-                            {meeting.contact_name && <p className="text-sm text-gray-500">{meeting.contact_name}</p>}
+                      <div
+                        key={meeting.id}
+                        className="p-4 bg-white rounded-lg border border-gray-200 cursor-pointer hover:border-gray-300 transition-colors"
+                        onClick={() => handleCardClick(meeting)}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="h-9 w-9 rounded-lg bg-amber-50 flex items-center justify-center">
+                              <Clock className="h-4 w-4 text-amber-600" />
+                            </div>
+                            <div>
+                              <span className="font-medium text-gray-900">
+                                {meeting.company_name || "Empresa sem nome"}
+                              </span>
+                              {meeting.contact_name && (
+                                <p className="text-sm text-gray-500">{meeting.contact_name}</p>
+                              )}
+                            </div>
                           </div>
                         </div>
+                        {isAllAgenciesMode && meeting.agency_name && (
+                          <p className="text-xs text-gray-400 mt-2 ml-12">{meeting.agency_name}</p>
+                        )}
                       </div>
                     ))}
                   </div>
