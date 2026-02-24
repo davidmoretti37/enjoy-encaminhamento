@@ -143,8 +143,7 @@ export default function AddCompanyModal({ open, onClose, onSuccess }: AddCompany
     notes: "",
     // Documents
     hasDocuments: false,
-    contractFileBase64: "" as string,
-    contractFileName: "" as string,
+    contractFiles: [] as { base64: string; name: string }[],
     // Payment
     hasPayment: false,
     monthlyAmount: "",
@@ -216,7 +215,7 @@ export default function AddCompanyModal({ open, onClose, onSuccess }: AddCompany
     }
   };
 
-  // File upload
+  // File upload (supports multiple)
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -233,11 +232,19 @@ export default function AddCompanyModal({ open, onClose, onSuccess }: AddCompany
       const base64 = (reader.result as string).split(",")[1];
       setFormData(prev => ({
         ...prev,
-        contractFileBase64: base64,
-        contractFileName: file.name,
+        contractFiles: [...prev.contractFiles, { base64, name: file.name }],
       }));
     };
     reader.readAsDataURL(file);
+    // Reset the input so the same file can be selected again
+    e.target.value = "";
+  };
+
+  const removeContractFile = (index: number) => {
+    setFormData(prev => ({
+      ...prev,
+      contractFiles: prev.contractFiles.filter((_, i) => i !== index),
+    }));
   };
 
   // Validation
@@ -340,8 +347,7 @@ export default function AddCompanyModal({ open, onClose, onSuccess }: AddCompany
         genderPreference: formData.genderPreference || undefined,
         notes: formData.notes || undefined,
         contractSigned: formData.hasDocuments,
-        contractFileBase64: formData.contractFileBase64 || undefined,
-        contractFileName: formData.contractFileName || undefined,
+        contractFiles: formData.contractFiles.length > 0 ? formData.contractFiles : undefined,
       });
 
       // Step 2: Create payment schedule if configured
@@ -401,8 +407,7 @@ export default function AddCompanyModal({ open, onClose, onSuccess }: AddCompany
       genderPreference: "",
       notes: "",
       hasDocuments: false,
-      contractFileBase64: "",
-      contractFileName: "",
+      contractFiles: [],
       hasPayment: false,
       monthlyAmount: "",
       paymentStartDate: "",
@@ -487,6 +492,7 @@ export default function AddCompanyModal({ open, onClose, onSuccess }: AddCompany
               formData={formData}
               setFormData={setFormData}
               handleFileUpload={handleFileUpload}
+              removeContractFile={removeContractFile}
             />
           )}
           {step === 4 && (
@@ -915,7 +921,7 @@ function Step2JobDescription({ formData, setFormData, handleBenefitChange }: any
 // ============================================
 // Step 3: Documents
 // ============================================
-function Step3Documents({ formData, setFormData, handleFileUpload }: any) {
+function Step3Documents({ formData, setFormData, handleFileUpload, removeContractFile }: any) {
   return (
     <div className="space-y-6">
       <div className="text-center py-4">
@@ -938,7 +944,7 @@ function Step3Documents({ formData, setFormData, handleFileUpload }: any) {
           Sim, já tem documentos
         </button>
         <button
-          onClick={() => setFormData((p: any) => ({ ...p, hasDocuments: false, contractFileBase64: "", contractFileName: "" }))}
+          onClick={() => setFormData((p: any) => ({ ...p, hasDocuments: false, contractFiles: [] }))}
           className={`px-6 py-3 rounded-lg border-2 transition-all ${
             !formData.hasDocuments
               ? "border-orange-500 bg-orange-50 text-orange-700"
@@ -951,41 +957,49 @@ function Step3Documents({ formData, setFormData, handleFileUpload }: any) {
 
       {formData.hasDocuments && (
         <div className="space-y-4 mt-4">
+          {/* Uploaded files list */}
+          {formData.contractFiles.length > 0 && (
+            <div className="space-y-2">
+              {formData.contractFiles.map((file: { base64: string; name: string }, index: number) => (
+                <div key={index} className="flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded-lg">
+                  <FileText className="h-5 w-5 text-green-600 shrink-0" />
+                  <span className="text-sm font-medium text-gray-700 flex-1 truncate">{file.name}</span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => removeContractFile(index)}
+                  >
+                    <Trash2 className="h-4 w-4 text-red-500" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Upload button (always visible) */}
           <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-orange-300 transition-colors">
-            {formData.contractFileName ? (
-              <div className="flex items-center justify-center gap-2">
-                <FileText className="h-5 w-5 text-green-600" />
-                <span className="text-sm font-medium text-gray-700">{formData.contractFileName}</span>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setFormData((p: any) => ({ ...p, contractFileBase64: "", contractFileName: "" }))}
-                >
-                  <Trash2 className="h-4 w-4 text-red-500" />
-                </Button>
-              </div>
-            ) : (
-              <>
-                <Upload className="h-8 w-8 text-gray-400 mx-auto mb-2" />
-                <p className="text-sm text-gray-600 mb-2">Arraste o contrato PDF ou clique para selecionar</p>
-                <Label
-                  htmlFor="contract-upload"
-                  className="cursor-pointer inline-flex items-center gap-2 px-4 py-2 bg-[#0A2342] text-white rounded-md hover:bg-[#0A2342]/90 text-sm"
-                >
-                  <Upload className="h-4 w-4" />
-                  Selecionar PDF
-                </Label>
-                <Input
-                  id="contract-upload"
-                  type="file"
-                  accept=".pdf"
-                  className="hidden"
-                  onChange={handleFileUpload}
-                />
-              </>
-            )}
+            <Upload className="h-8 w-8 text-gray-400 mx-auto mb-2" />
+            <p className="text-sm text-gray-600 mb-2">
+              {formData.contractFiles.length > 0
+                ? "Adicionar mais documentos"
+                : "Arraste o contrato PDF ou clique para selecionar"}
+            </p>
+            <Label
+              htmlFor="contract-upload"
+              className="cursor-pointer inline-flex items-center gap-2 px-4 py-2 bg-[#0A2342] text-white rounded-md hover:bg-[#0A2342]/90 text-sm"
+            >
+              <Upload className="h-4 w-4" />
+              Selecionar PDF
+            </Label>
+            <Input
+              id="contract-upload"
+              type="file"
+              accept=".pdf"
+              className="hidden"
+              onChange={handleFileUpload}
+            />
           </div>
-          <p className="text-xs text-gray-400 text-center">Apenas PDF, máximo 10MB</p>
+          <p className="text-xs text-gray-400 text-center">Apenas PDF, máximo 10MB por arquivo</p>
         </div>
       )}
     </div>

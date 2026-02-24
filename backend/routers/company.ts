@@ -15,12 +15,13 @@ export const companyRouter = router({
   // Check if company has completed onboarding
   checkOnboarding: protectedProcedure.query(async ({ ctx }) => {
     if (ctx.user.role !== 'company') {
-      return { completed: true }; // Non-company users don't need company onboarding
+      return { completed: true, pendingContractSigning: false };
     }
     const company = await db.getCompanyByUserId(ctx.user.id);
     // Company onboarding is complete if company profile exists with required fields
     const completed = !!(company && company.cnpj && company.company_name);
-    return { completed, company };
+    const pendingContractSigning = company?.pending_contract_signing === true;
+    return { completed, company, pendingContractSigning };
   }),
 
   // Get the agency's contract for company onboarding
@@ -47,6 +48,19 @@ export const companyRouter = router({
       contract_pdf_url: agency.contract_pdf_url || null,
       contract_html: agency.contract_html || null,
     };
+  }),
+
+  // Mark contract signing as complete (called from pending-contracts page)
+  markContractSigningComplete: companyProcedure.mutation(async ({ ctx }) => {
+    const company = await db.getCompanyByUserId(ctx.user.id);
+    if (!company) {
+      throw new TRPCError({ code: 'NOT_FOUND', message: 'Company not found' });
+    }
+    await supabaseAdmin
+      .from('companies')
+      .update({ pending_contract_signing: false, contract_signed_at: new Date().toISOString() })
+      .eq('id', company.id);
+    return { success: true };
   }),
 
   // Submit onboarding (company info + first job + contract signature)

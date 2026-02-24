@@ -7,6 +7,7 @@ import { Building2, Users, FileText, DollarSign, FileCheck, User, Plus } from "l
 import { useState } from "react";
 import CompanyDocumentsModal from "@/components/CompanyDocumentsModal";
 import AddCompanyModal from "@/components/AddCompanyModal";
+import { CandidateCardModal } from "@/components/candidate-card/CandidateCard";
 import { Input } from "@/components/ui/input";
 import { Search, X } from "lucide-react";
 
@@ -17,6 +18,7 @@ export default function ManagementTab() {
   const [selectedEntity, setSelectedEntity] = useState<any>(null);
   const [documentsModalOpen, setDocumentsModalOpen] = useState(false);
   const [showAddCompanyModal, setShowAddCompanyModal] = useState(false);
+  const [selectedCandidate, setSelectedCandidate] = useState<any>(null);
 
   // Filter entities based on search
   const filteredCompanies = companies.filter((company: any) => {
@@ -150,6 +152,7 @@ export default function ManagementTab() {
         <CandidateList
           candidates={filteredCandidates}
           onDocumentsClick={handleDocumentsClick}
+          onProfileClick={(candidate: any) => setSelectedCandidate(candidate)}
           searchTerm={searchTerm}
           isAllAgenciesMode={isAllAgenciesMode}
           availableAgencies={availableAgencies}
@@ -165,6 +168,15 @@ export default function ManagementTab() {
           setSelectedEntity(null);
         }}
       />
+
+      {/* Candidate Profile Modal */}
+      {selectedCandidate && (
+        <CandidateCardModal
+          open={!!selectedCandidate}
+          onClose={() => setSelectedCandidate(null)}
+          profile={selectedCandidate}
+        />
+      )}
 
       {/* Add Company Modal */}
       <AddCompanyModal
@@ -286,7 +298,7 @@ function CompanyList({ companies, onDocumentsClick, searchTerm, isAllAgenciesMod
   );
 }
 
-function CandidateRow({ candidate }: { candidate: any }) {
+function CandidateRow({ candidate, onProfileClick }: { candidate: any; onProfileClick: (candidate: any) => void }) {
   return (
     <div className="p-3 bg-white rounded-lg border-2 border-slate-200 hover:border-orange-300 hover:shadow-md transition-all">
       <div className="flex items-center justify-between">
@@ -334,8 +346,7 @@ function CandidateRow({ candidate }: { candidate: any }) {
             variant="outline"
             size="sm"
             className="text-gray-600 border-gray-300 hover:bg-gray-50 hover:border-orange-300"
-            disabled
-            title="Em desenvolvimento"
+            onClick={() => onProfileClick(candidate)}
           >
             <User className="h-4 w-4 mr-1.5" />
             Perfil
@@ -346,7 +357,7 @@ function CandidateRow({ candidate }: { candidate: any }) {
   );
 }
 
-function CandidateList({ candidates, onDocumentsClick, searchTerm, isAllAgenciesMode, availableAgencies }: { candidates: any[]; onDocumentsClick: (entity: any) => void; searchTerm: string; isAllAgenciesMode: boolean; availableAgencies: { id: string; name: string; city: string | null }[] }) {
+function CandidateList({ candidates, onDocumentsClick, onProfileClick, searchTerm, isAllAgenciesMode, availableAgencies }: { candidates: any[]; onDocumentsClick: (entity: any) => void; onProfileClick: (candidate: any) => void; searchTerm: string; isAllAgenciesMode: boolean; availableAgencies: { id: string; name: string; city: string | null }[] }) {
   if (!isAllAgenciesMode && candidates.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-center">
@@ -378,7 +389,7 @@ function CandidateList({ candidates, onDocumentsClick, searchTerm, isAllAgencies
               {agencyCandidates.length > 0 ? (
                 <div className="space-y-2 mt-2">
                   {agencyCandidates.map((candidate: any) => (
-                    <CandidateRow key={candidate.id} candidate={candidate} />
+                    <CandidateRow key={candidate.id} candidate={candidate} onProfileClick={onProfileClick} />
                   ))}
                 </div>
               ) : (
@@ -394,7 +405,7 @@ function CandidateList({ candidates, onDocumentsClick, searchTerm, isAllAgencies
   return (
     <div className="space-y-2">
       {candidates.map((candidate: any) => (
-        <CandidateRow key={candidate.id} candidate={candidate} />
+        <CandidateRow key={candidate.id} candidate={candidate} onProfileClick={onProfileClick} />
       ))}
     </div>
   );

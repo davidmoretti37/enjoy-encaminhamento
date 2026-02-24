@@ -318,7 +318,29 @@ export default function CompanyOnboarding() {
     } else if (step === 2 && validateStep2()) {
       setStep(3);
       // Prepare Autentique documents for signing (if configured)
-      prepareAutentiqueDocs.mutate({ category: "contrato_inicial" });
+      prepareAutentiqueDocs.mutate({
+        category: "contrato_inicial",
+        companyData: {
+          legalName: formData.legalName || undefined,
+          businessName: formData.businessName || undefined,
+          cnpj: formData.cnpj?.replace(/\D/g, "") || undefined,
+          contactPerson: formData.contactPerson || undefined,
+          phone: formData.phoneNumbers?.find((p: any) => p.number)?.number || undefined,
+          landlinePhone: formData.landlinePhone || undefined,
+          email: formData.emails?.find((e: any) => e.isPrimary)?.email || formData.emails?.[0]?.email || undefined,
+          website: formData.website || undefined,
+          employeeCount: formData.employeeCount || undefined,
+          cep: formData.cep?.replace(/\D/g, "") || undefined,
+          address: formData.address || undefined,
+          complement: formData.complement || undefined,
+          neighborhood: formData.neighborhood || undefined,
+          city: formData.city || undefined,
+          state: formData.state || undefined,
+          jobTitle: formData.jobTitle || undefined,
+          compensation: formData.compensation || undefined,
+          employmentType: formData.employmentType || undefined,
+        },
+      });
     }
   };
 

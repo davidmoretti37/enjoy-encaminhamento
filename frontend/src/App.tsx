@@ -47,6 +47,7 @@ import CompanyRegister from "./pages/CompanyRegister";
 import SettingsPage from "./pages/SettingsPage";
 // Onboarding Pages
 import CompanyOnboarding from "./pages/company/CompanyOnboarding";
+import CompanyPendingContracts from "./pages/company/CompanyPendingContracts";
 import CandidateOnboarding from "./pages/candidate/CandidateOnboarding";
 import CompanyInviteAccept from "./pages/company/CompanyInviteAccept";
 import VagasPage from "./pages/VagasPage";
@@ -128,6 +129,7 @@ function Router() {
 
             {/* Onboarding Routes */}
             <Route path={"/company/onboarding"} component={CompanyOnboarding} />
+            <Route path={"/company/pending-contracts"} component={CompanyPendingContracts} />
             <Route path={"/candidate/onboarding"} component={CandidateOnboarding} />
 
             {/* NEW: Company Funnel Portal - replaces all old company routes */}

@@ -229,6 +229,27 @@ export const contractRouter = router({
   prepareAutentiqueDocuments: companyProcedure
     .input(z.object({
       category: z.enum(['contrato_inicial', 'clt', 'estagio', 'menor_aprendiz']),
+      companyData: z.object({
+        legalName: z.string().optional(),
+        businessName: z.string().optional(),
+        cnpj: z.string().optional(),
+        contactPerson: z.string().optional(),
+        contactCpf: z.string().optional(),
+        phone: z.string().optional(),
+        landlinePhone: z.string().optional(),
+        email: z.string().optional(),
+        website: z.string().optional(),
+        employeeCount: z.string().optional(),
+        cep: z.string().optional(),
+        address: z.string().optional(),
+        complement: z.string().optional(),
+        neighborhood: z.string().optional(),
+        city: z.string().optional(),
+        state: z.string().optional(),
+        jobTitle: z.string().optional(),
+        compensation: z.string().optional(),
+        employmentType: z.string().optional(),
+      }).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       const { createDocument: createAutentiqueDocument, isAutentiqueConfigured } = await import("../integrations/autentique");
@@ -276,9 +297,34 @@ export const contractRouter = router({
 
       for (const template of templates) {
         try {
-          const pdfResponse = await fetch(template.file_url);
-          if (!pdfResponse.ok) continue;
-          const pdfBuffer = Buffer.from(await pdfResponse.arrayBuffer());
+          const fileResponse = await fetch(template.file_url);
+          if (!fileResponse.ok) continue;
+          const fileBuffer = Buffer.from(await fileResponse.arrayBuffer());
+
+          // Determine if template is DOCX (needs filling + conversion) or PDF (send as-is)
+          const isDocx = template.file_url?.toLowerCase().includes('.docx') ||
+            template.file_key?.toLowerCase().endsWith('.docx');
+
+          let pdfBuffer: Buffer;
+
+          if (isDocx && input.companyData) {
+            // Fill DOCX placeholders with company data, then convert to PDF
+            try {
+              const { fillDocxTemplate, buildTemplateData } = await import("../lib/fillDocxTemplate");
+              const templateData = buildTemplateData(input.companyData);
+              console.log(`[Contract] Filling DOCX template "${template.name}" with ${Object.keys(templateData).length} fields`);
+              pdfBuffer = await fillDocxTemplate(fileBuffer, templateData);
+              console.log(`[Contract] DOCX filled and converted to PDF: ${pdfBuffer.length} bytes`);
+            } catch (fillErr: any) {
+              console.error(`[Contract] Failed to fill DOCX template "${template.name}":`, fillErr?.message);
+              continue;  // Skip this template, don't send raw DOCX to Autentique
+            }
+          } else if (isDocx && !input.companyData) {
+            console.warn(`[Contract] DOCX template "${template.name}" but no companyData provided, skipping fill`);
+            pdfBuffer = fileBuffer;
+          } else {
+            pdfBuffer = fileBuffer;
+          }
 
           const result = await createAutentiqueDocument(
             template.name,

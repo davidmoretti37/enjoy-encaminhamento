@@ -453,7 +453,11 @@ export const agencyRouter = router({
         .replace(/[^a-zA-Z0-9._-]/g, '_');
       const key = `documents/${agency.id}/${input.category}/${Date.now()}-${safeName}`;
       const { storagePut } = await import('../storage');
-      const { url } = await storagePut(key, buffer, 'application/pdf');
+      const isDocx = input.fileName.toLowerCase().endsWith('.docx');
+      const mimeType = isDocx
+        ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        : 'application/pdf';
+      const { url } = await storagePut(key, buffer, mimeType);
 
       const result = await db.createDocumentTemplate({
         agencyId: agency.id,
@@ -629,8 +633,10 @@ export const agencyRouter = router({
       notes: z.string().optional(),
       // Contract flag
       contractSigned: z.boolean(),
-      contractFileBase64: z.string().optional(),
-      contractFileName: z.string().optional(),
+      contractFiles: z.array(z.object({
+        base64: z.string(),
+        name: z.string(),
+      })).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       let agency = await db.getAgencyForUserContext(ctx.user.id, ctx.user.role);
@@ -749,20 +755,31 @@ export const agencyRouter = router({
         agency_id: agency.id,
       });
 
-      // Upload signed contract PDF if provided
-      if (input.contractSigned && input.contractFileBase64 && input.contractFileName) {
+      // Upload signed contract PDFs if provided
+      if (input.contractSigned && input.contractFiles && input.contractFiles.length > 0) {
         const { storagePut } = await import('../storage');
-        const buffer = Buffer.from(input.contractFileBase64, 'base64');
-        // Sanitize filename: remove accents, replace spaces/special chars with hyphens
-        const sanitizedName = input.contractFileName
-          .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-          .replace(/[^a-zA-Z0-9._-]/g, '-')
-          .replace(/-+/g, '-');
-        const key = `contracts/signed/company-${result.companyId}/${Date.now()}-${sanitizedName}`;
-        const { url } = await storagePut(key, buffer, 'application/pdf');
+        const uploadedFiles: { url: string; key: string; name: string }[] = [];
+
+        for (const file of input.contractFiles) {
+          const buffer = Buffer.from(file.base64, 'base64');
+          // Sanitize filename: remove accents, replace spaces/special chars with hyphens
+          const sanitizedName = file.name
+            .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+            .replace(/[^a-zA-Z0-9._-]/g, '-')
+            .replace(/-+/g, '-');
+          const key = `contracts/signed/company-${result.companyId}/${Date.now()}-${sanitizedName}`;
+          const { url } = await storagePut(key, buffer, 'application/pdf');
+          uploadedFiles.push({ url, key, name: file.name });
+        }
+
+        // Store all files as JSONB array + first file URL for backward compat
         await supabaseAdmin
           .from('companies')
-          .update({ contract_pdf_url: url, contract_pdf_key: key })
+          .update({
+            contract_files: uploadedFiles,
+            contract_pdf_url: uploadedFiles[0]?.url || null,
+            contract_pdf_key: uploadedFiles[0]?.key || null,
+          })
           .eq('id', result.companyId);
       }
 

@@ -121,11 +121,16 @@ export default function DashboardLayout({
   useEffect(() => {
     if (!user) return;
 
-    // Don't redirect if already on onboarding page
-    if (location.includes('/onboarding')) return;
+    // Don't redirect if already on onboarding or pending-contracts page
+    if (location.includes('/onboarding') || location.includes('/pending-contracts')) return;
 
     if (user.role === 'company' && companyOnboardingQuery.data && !companyOnboardingQuery.data.completed) {
       window.location.href = '/company/onboarding';
+    }
+
+    // Hard gate: redirect to pending-contracts if company hasn't signed agency templates
+    if (user.role === 'company' && companyOnboardingQuery.data?.completed && companyOnboardingQuery.data?.pendingContractSigning) {
+      window.location.href = '/company/pending-contracts';
     }
 
     if (user.role === 'candidate' && candidateOnboardingQuery.data && !candidateOnboardingQuery.data.completed) {

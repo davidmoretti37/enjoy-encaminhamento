@@ -150,8 +150,12 @@ export default function SettingsPage() {
     const file = event.target.files?.[0];
     if (!file || !uploadCategory) return;
 
-    if (file.type !== "application/pdf") {
-      toast.error("Por favor, selecione um arquivo PDF");
+    const allowedTypes = [
+      "application/pdf",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ];
+    if (!allowedTypes.includes(file.type)) {
+      toast.error("Por favor, selecione um arquivo PDF ou DOCX");
       return;
     }
 
@@ -167,7 +171,7 @@ export default function SettingsPage() {
       const base64 = e.target?.result as string;
       uploadDocMutation.mutate({
         category: uploadCategory as any,
-        name: docName.trim() || file.name.replace(/\.pdf$/i, ""),
+        name: docName.trim() || file.name.replace(/\.(pdf|docx)$/i, ""),
         fileBase64: base64.split(",")[1],
         fileName: file.name,
       });
@@ -200,7 +204,7 @@ export default function SettingsPage() {
         {/* Hidden file input shared across categories */}
         <input
           type="file"
-          accept=".pdf"
+          accept=".pdf,.docx"
           ref={docFileInputRef}
           onChange={handleDocFileSelect}
           className="hidden"

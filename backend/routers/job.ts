@@ -434,6 +434,60 @@ export const jobRouter = router({
       return { success: true };
     }),
 
+  // Set interview preference for a job
+  setInterviewPreference: companyProcedure
+    .input(z.object({
+      jobId: z.string().uuid(),
+      preferredInterviewType: z.enum(["online", "in_person"]),
+      locationCep: z.string().optional(),
+      locationAddress: z.string().optional(),
+      locationNumber: z.string().optional(),
+      locationComplement: z.string().optional(),
+      locationNeighborhood: z.string().optional(),
+      locationCity: z.string().optional(),
+      locationState: z.string().optional(),
+      preferredDays: z.array(z.string()).optional(),
+      preferredTimeStart: z.string().optional(),
+      preferredTimeEnd: z.string().optional(),
+      schedulingNotes: z.string().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const company = await db.getCompanyByUserId(ctx.user.id);
+      if (!company) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Company not found' });
+      }
+
+      const { data: job } = await supabaseAdmin
+        .from('jobs')
+        .select('id, company_id')
+        .eq('id', input.jobId)
+        .single();
+
+      if (!job || job.company_id !== company.id) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Job does not belong to this company' });
+      }
+
+      await supabaseAdmin
+        .from('jobs')
+        .update({
+          preferred_interview_type: input.preferredInterviewType,
+          interview_location_cep: input.locationCep || null,
+          interview_location_address: input.locationAddress || null,
+          interview_location_number: input.locationNumber || null,
+          interview_location_complement: input.locationComplement || null,
+          interview_location_neighborhood: input.locationNeighborhood || null,
+          interview_location_city: input.locationCity || null,
+          interview_location_state: input.locationState || null,
+          preferred_days: input.preferredDays || null,
+          preferred_time_start: input.preferredTimeStart || null,
+          preferred_time_end: input.preferredTimeEnd || null,
+          scheduling_notes: input.schedulingNotes || null,
+        })
+        .eq('id', input.jobId);
+
+      return { success: true };
+    }),
+
   // Get jobs by company
   getByCompany: companyProcedure.query(async ({ ctx }) => {
     const company = await db.getCompanyByUserId(ctx.user.id);

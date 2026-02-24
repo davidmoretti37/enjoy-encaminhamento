@@ -82,7 +82,10 @@ export async function acceptAgencyInvitation(
     throw new Error("Invitation expired");
   }
 
-  // Create user account in Supabase Auth
+  // Create user account in Supabase Auth (or reuse existing)
+  let userId: string;
+  let isExistingUser = false;
+
   const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
     email: invitation.email,
     password: password,
@@ -93,24 +96,45 @@ export async function acceptAgencyInvitation(
   });
 
   if (authError) {
-    console.error("[Database] Failed to create auth user:", authError);
-    throw authError;
+    // If user already exists, reuse their account and update role to agency
+    const msg = authError.message || "";
+    if (msg.includes("already been registered") || msg.includes("already exists")) {
+      console.log("[Database] User already exists, converting to agency:", invitation.email);
+      const { data: listData } = await supabaseAdmin.auth.admin.listUsers();
+      const existingUser = listData?.users?.find((u: any) => u.email === invitation.email);
+      if (!existingUser) {
+        throw new Error("User exists in auth but could not be found by email");
+      }
+      // Update their auth metadata role to agency
+      await supabaseAdmin.auth.admin.updateUserById(existingUser.id, {
+        user_metadata: { role: "agency" },
+      });
+      userId = existingUser.id;
+      isExistingUser = true;
+    } else {
+      console.error("[Database] Failed to create auth user:", authError);
+      throw authError;
+    }
+  } else {
+    userId = authData.user.id;
   }
 
-  const userId = authData.user.id;
-
-  // Create user profile
+  // Create or update user profile (upsert handles existing users)
   const { error: userError } = await supabaseAdmin
     .from("users")
-    .insert({
+    .upsert({
       id: userId,
       email: invitation.email,
       role: "agency",
       name: agencyData.agency_name,
-    });
+    }, { onConflict: "id" });
 
   if (userError) {
-    console.error("[Database] Failed to create user profile:", userError);
+    console.error("[Database] Failed to upsert user profile:", userError);
+    // Clean up auth user if we just created it
+    if (!isExistingUser) {
+      await supabaseAdmin.auth.admin.deleteUser(userId).catch(() => {});
+    }
     throw userError;
   }
 
@@ -134,6 +158,12 @@ export async function acceptAgencyInvitation(
 
   if (agencyError) {
     console.error("[Database] Failed to create agency:", agencyError);
+    // Clean up: revert user profile role if existing user, or delete new user
+    if (isExistingUser) {
+      await supabaseAdmin.from("users").update({ role: "company" }).eq("id", userId).catch(() => {});
+    } else {
+      await supabaseAdmin.auth.admin.deleteUser(userId).catch(() => {});
+    }
     throw agencyError;
   }
 
@@ -147,7 +177,7 @@ export async function acceptAgencyInvitation(
     })
     .eq("token", token);
 
-  return { agency, user: authData.user };
+  return { agency, user: authData?.user || { id: userId, email: invitation.email } };
 }
 
 export async function getAllAffiliates(): Promise<any[]> {
