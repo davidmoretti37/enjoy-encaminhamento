@@ -56,6 +56,8 @@ import {
   Link,
   FileText,
   ExternalLink,
+  Pencil,
+  Trash2,
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { Progress } from '@/components/ui/progress';
@@ -1159,6 +1161,20 @@ function JobWithWorkflow({ job, contractTypeLabels, companyName }: { job: any; c
   const [hasCreatedGroup, setHasCreatedGroup] = useState(false);
   const [shouldAutoTrigger, setShouldAutoTrigger] = useState(false);
 
+  // Edit/delete state
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [isDeleteOpen, setIsDeleteOpen] = useState(false);
+  const [editForm, setEditForm] = useState({
+    title: job.title || '',
+    contract_type: job.contract_type || '',
+    work_type: job.work_type || 'presencial',
+    work_schedule: job.work_schedule || '',
+    salary: job.salary_min ? String(job.salary_min) : '',
+    description: job.description || '',
+    requirements: job.specific_requirements || job.requirements || '',
+    openings: String(job.openings || 1),
+  });
+
   // Check if this job has any batches
   const { data: batches } = trpc.batch.getBatchesByJobId.useQuery(
     { jobId: job.id },
@@ -1181,6 +1197,43 @@ function JobWithWorkflow({ job, contractTypeLabels, companyName }: { job: any; c
       toast.error("Erro ao enviar convites. Tente novamente.");
     },
   });
+
+  const updateJobMutation = trpc.job.updateForCompany.useMutation({
+    onSuccess: () => {
+      toast.success('Vaga atualizada!');
+      setIsEditOpen(false);
+      utils.job.getByCompanyId.invalidate({ companyId: job.company_id });
+    },
+    onError: (error) => toast.error(error.message || 'Erro ao atualizar vaga'),
+  });
+
+  const deleteJobMutation = trpc.job.deleteForCompany.useMutation({
+    onSuccess: () => {
+      toast.success('Vaga excluída!');
+      setIsDeleteOpen(false);
+      utils.job.getByCompanyId.invalidate({ companyId: job.company_id });
+    },
+    onError: (error) => toast.error(error.message || 'Erro ao excluir vaga'),
+  });
+
+  const handleSaveEdit = () => {
+    if (!editForm.title || !editForm.description) {
+      toast.error('Preencha os campos obrigatórios');
+      return;
+    }
+    updateJobMutation.mutate({
+      jobId: job.id,
+      title: editForm.title,
+      description: editForm.description,
+      contractType: editForm.contract_type as any || undefined,
+      workType: editForm.work_type as any,
+      workSchedule: editForm.work_schedule || undefined,
+      salaryMin: editForm.salary ? parseFloat(editForm.salary) : undefined,
+      salaryMax: editForm.salary ? parseFloat(editForm.salary) : undefined,
+      requirements: editForm.requirements || undefined,
+      openings: editForm.openings ? parseInt(editForm.openings) : 1,
+    });
+  };
 
   const hasHiringProcess = hiringProcesses && hiringProcesses.length > 0;
   const hasActiveContract = hiringProcesses?.some((hp: any) => hp.status === "active") ?? false;
@@ -1327,12 +1380,20 @@ function JobWithWorkflow({ job, contractTypeLabels, companyName }: { job: any; c
                         {contractTypeLabels[job.contract_type] || job.contract_type}
                       </Badge>
                     </div>
-                    <Badge className={statusConfig.color}>
-                      <span className="flex items-center gap-1">
-                        {statusConfig.icon}
-                        {statusConfig.label}
-                      </span>
-                    </Badge>
+                    <div className="flex items-center gap-2">
+                      <Badge className={statusConfig.color}>
+                        <span className="flex items-center gap-1">
+                          {statusConfig.icon}
+                          {statusConfig.label}
+                        </span>
+                      </Badge>
+                      <Button variant="outline" size="sm" onClick={() => setIsEditOpen(true)} className="h-8 w-8 p-0">
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button variant="outline" size="sm" onClick={() => setIsDeleteOpen(true)} className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50">
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-3 gap-4 mb-4">
@@ -1810,6 +1871,132 @@ function JobWithWorkflow({ job, contractTypeLabels, companyName }: { job: any; c
         steps={getWorkflowSteps()}
         onStepClick={handleStepClick}
       />
+
+      {/* Edit Job Dialog */}
+      <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
+        <DialogContent className="sm:max-w-[600px]">
+          <DialogHeader>
+            <DialogTitle>Editar Vaga</DialogTitle>
+            <DialogDescription>
+              Atualize os detalhes da vaga.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4 max-h-[60vh] overflow-y-auto">
+            <div className="grid gap-2">
+              <Label>Título da vaga *</Label>
+              <Input
+                value={editForm.title}
+                onChange={(e) => setEditForm(prev => ({ ...prev, title: e.target.value }))}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label>Tipo de contrato *</Label>
+              <Select
+                value={editForm.contract_type}
+                onValueChange={(v) => setEditForm(prev => ({ ...prev, contract_type: v }))}
+              >
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="estagio">Estágio</SelectItem>
+                  <SelectItem value="clt">CLT</SelectItem>
+                  <SelectItem value="menor-aprendiz">Jovem Aprendiz</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-2">
+              <Label>Modalidade</Label>
+              <Select
+                value={editForm.work_type}
+                onValueChange={(v) => setEditForm(prev => ({ ...prev, work_type: v }))}
+              >
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="presencial">Presencial</SelectItem>
+                  <SelectItem value="remoto">Remoto</SelectItem>
+                  <SelectItem value="hibrido">Híbrido</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-2">
+              <Label>Horário de trabalho</Label>
+              <WorkSchedulePicker
+                value={editForm.work_schedule}
+                onChange={(v) => setEditForm(prev => ({ ...prev, work_schedule: v }))}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                <Label>Salário (R$)</Label>
+                <Input
+                  type="number"
+                  placeholder="Ex: 1500"
+                  value={editForm.salary}
+                  onChange={(e) => setEditForm(prev => ({ ...prev, salary: e.target.value }))}
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label>Vagas</Label>
+                <Input
+                  type="number"
+                  min="1"
+                  value={editForm.openings}
+                  onChange={(e) => setEditForm(prev => ({ ...prev, openings: e.target.value }))}
+                />
+              </div>
+            </div>
+            <div className="grid gap-2">
+              <Label>Descrição *</Label>
+              <Textarea
+                rows={4}
+                value={editForm.description}
+                onChange={(e) => setEditForm(prev => ({ ...prev, description: e.target.value }))}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label>Requisitos</Label>
+              <Textarea
+                rows={3}
+                value={editForm.requirements}
+                onChange={(e) => setEditForm(prev => ({ ...prev, requirements: e.target.value }))}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsEditOpen(false)}>Cancelar</Button>
+            <Button
+              onClick={handleSaveEdit}
+              disabled={updateJobMutation.isPending}
+              className="bg-[#0A2342] hover:opacity-90"
+            >
+              {updateJobMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              Salvar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Job Confirmation Dialog */}
+      <Dialog open={isDeleteOpen} onOpenChange={setIsDeleteOpen}>
+        <DialogContent className="sm:max-w-[420px]">
+          <DialogHeader>
+            <DialogTitle>Excluir Vaga</DialogTitle>
+            <DialogDescription>
+              Tem certeza que deseja excluir a vaga <strong>"{job.title}"</strong>? Esta ação não pode ser desfeita. Todos os candidatos associados e dados de matching serão removidos.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsDeleteOpen(false)}>Cancelar</Button>
+            <Button
+              variant="destructive"
+              onClick={() => deleteJobMutation.mutate({ jobId: job.id })}
+              disabled={deleteJobMutation.isPending}
+            >
+              {deleteJobMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              Excluir
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -1817,6 +2004,7 @@ function JobWithWorkflow({ job, contractTypeLabels, companyName }: { job: any; c
 export default function CompanyJobFlow() {
   const { selectedCompanyId, setSelectedCompanyId, selectedCompany } = useAgencyFunnel();
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     title: '',
     contract_type: '',
@@ -1836,9 +2024,21 @@ export default function CompanyJobFlow() {
     { enabled: !!selectedCompanyId }
   );
 
+  // Auto-select first job when jobs load, or reset if selected job was deleted
+  useEffect(() => {
+    if (!jobs || jobs.length === 0) {
+      setSelectedJobId(null);
+      return;
+    }
+    const selectedStillExists = jobs.some((j: any) => j.id === selectedJobId);
+    if (!selectedJobId || !selectedStillExists) {
+      setSelectedJobId(jobs[0].id);
+    }
+  }, [jobs, selectedJobId]);
+
   // Create job mutation
   const createJobMutation = trpc.job.createForCompany.useMutation({
-    onSuccess: () => {
+    onSuccess: (data) => {
       toast.success('Vaga criada com sucesso!');
       setIsCreateDialogOpen(false);
       setFormData({
@@ -1851,7 +2051,12 @@ export default function CompanyJobFlow() {
         requirements: '',
         openings: '1',
       });
-      utils.job.getByCompanyId.invalidate({ companyId: selectedCompanyId || '' });
+      utils.job.getByCompanyId.invalidate({ companyId: selectedCompanyId || '' }).then(() => {
+        // Select the newly created job
+        if (data?.jobId) {
+          setSelectedJobId(data.jobId);
+        }
+      });
     },
     onError: (error) => {
       toast.error(error.message || 'Erro ao criar vaga');
@@ -1879,6 +2084,7 @@ export default function CompanyJobFlow() {
   };
 
   const companyName = selectedCompany?.company_name || 'Empresa';
+  const selectedJob = jobs?.find((j: any) => j.id === selectedJobId);
 
   const contractTypeLabels: Record<string, string> = {
     estagio: 'Estágio',
@@ -1908,13 +2114,6 @@ export default function CompanyJobFlow() {
             <p className="text-sm text-slate-600">Vagas e candidatos compatíveis</p>
           </div>
         </div>
-        <Button
-          onClick={() => setIsCreateDialogOpen(true)}
-          className="bg-[#0A2342] hover:opacity-90"
-        >
-          <Plus className="h-4 w-4 mr-2" />
-          Nova Vaga
-        </Button>
       </div>
 
       {/* Create Job Dialog */}
@@ -2032,40 +2231,72 @@ export default function CompanyJobFlow() {
         </DialogContent>
       </Dialog>
 
-      {/* Jobs List */}
-      <div className="space-y-12">
-        {jobsLoading ? (
-          <div className="space-y-3">
-            {Array.from({ length: 3 }).map((_, i) => (
-              <div key={i} className="flex items-center gap-3 p-3">
-                <Skeleton className="h-10 w-10 rounded-lg" />
-                <div className="flex-1 space-y-2">
-                  <Skeleton className="h-4 w-32" />
-                  <Skeleton className="h-3 w-24" />
+      {/* Job Tabs */}
+      {jobsLoading ? (
+        <div className="flex items-center gap-3">
+          {Array.from({ length: 2 }).map((_, i) => (
+            <Skeleton key={i} className="h-14 w-48 rounded-xl" />
+          ))}
+        </div>
+      ) : jobs && jobs.length > 0 ? (
+        <div className="flex items-center gap-3 overflow-x-auto pb-2">
+          {jobs.map((job: any) => {
+            const isSelected = job.id === selectedJobId;
+            const statusCfg = jobStatusConfig[job.status] || jobStatusConfig.open;
+            return (
+              <button
+                key={job.id}
+                onClick={() => setSelectedJobId(job.id)}
+                className={`flex items-center gap-2.5 px-4 py-2.5 rounded-xl border-2 transition-all shrink-0 text-left ${
+                  isSelected
+                    ? 'border-[#FF6B35] bg-orange-50/50 shadow-sm'
+                    : 'border-slate-200 bg-white hover:border-slate-300'
+                }`}
+              >
+                <Briefcase className={`h-4 w-4 shrink-0 ${isSelected ? 'text-[#FF6B35]' : 'text-slate-400'}`} />
+                <div className="min-w-0">
+                  <p className={`text-sm font-medium truncate max-w-[160px] ${isSelected ? 'text-[#0A2342]' : 'text-slate-700'}`}>
+                    {job.title}
+                  </p>
+                  <p className={`text-xs ${isSelected ? 'text-[#FF6B35]' : 'text-slate-400'}`}>
+                    {contractTypeLabels[job.contract_type] || job.contract_type}
+                  </p>
                 </div>
-                <Skeleton className="h-6 w-16 rounded-full" />
-              </div>
-            ))}
+              </button>
+            );
+          })}
+          {/* New Job tab */}
+          <button
+            onClick={() => setIsCreateDialogOpen(true)}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 border-dashed border-slate-300 hover:border-slate-400 transition-all shrink-0"
+          >
+            <Plus className="h-4 w-4 text-slate-400" />
+            <span className="text-sm text-slate-500">Nova Vaga</span>
+          </button>
+        </div>
+      ) : (
+        <div className="flex flex-col items-center justify-center py-16 text-center">
+          <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mb-4">
+            <Briefcase className="h-8 w-8 text-gray-400" />
           </div>
-        ) : jobs && jobs.length > 0 ? (
-          jobs.map((job: any) => (
-            <JobWithWorkflow
-              key={job.id}
-              job={job}
-              contractTypeLabels={contractTypeLabels}
-              companyName={companyName}
-            />
-          ))
-        ) : (
-          <div className="flex flex-col items-center justify-center py-16 text-center">
-            <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mb-4">
-              <Briefcase className="h-8 w-8 text-gray-400" />
-            </div>
-            <h3 className="text-base font-medium text-gray-700 mb-1">Nenhuma vaga cadastrada</h3>
-            <p className="text-gray-500 text-sm">Esta empresa ainda não cadastrou nenhuma vaga</p>
-          </div>
-        )}
-      </div>
+          <h3 className="text-base font-medium text-gray-700 mb-1">Nenhuma vaga cadastrada</h3>
+          <p className="text-gray-500 text-sm mb-4">Esta empresa ainda não cadastrou nenhuma vaga</p>
+          <Button onClick={() => setIsCreateDialogOpen(true)} className="bg-[#0A2342] hover:opacity-90">
+            <Plus className="h-4 w-4 mr-2" />
+            Criar Primeira Vaga
+          </Button>
+        </div>
+      )}
+
+      {/* Selected Job Workflow */}
+      {selectedJob && (
+        <JobWithWorkflow
+          key={selectedJob.id}
+          job={selectedJob}
+          contractTypeLabels={contractTypeLabels}
+          companyName={companyName}
+        />
+      )}
     </div>
   );
 }

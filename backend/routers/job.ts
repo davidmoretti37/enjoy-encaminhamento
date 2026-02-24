@@ -68,6 +68,101 @@ export const jobRouter = router({
       return { jobId };
     }),
 
+  // Update job for a company (admin/agency access)
+  updateForCompany: agencyProcedure
+    .input(z.object({
+      jobId: z.string().uuid(),
+      title: z.string().min(1).optional(),
+      description: z.string().min(1).optional(),
+      contractType: z.enum(["estagio", "clt", "menor-aprendiz"]).optional(),
+      workType: z.enum(["presencial", "remoto", "hibrido"]).optional(),
+      workSchedule: z.string().optional(),
+      salaryMin: z.number().optional(),
+      salaryMax: z.number().optional(),
+      requirements: z.string().optional(),
+      openings: z.number().optional(),
+      status: z.enum(["draft", "open", "closed", "filled", "paused"]).optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const { jobId, ...fields } = input;
+
+      // Verify job exists
+      const { data: job } = await supabaseAdmin
+        .from('jobs').select('id, company_id, agency_id').eq('id', jobId).single();
+      if (!job) throw new TRPCError({ code: 'NOT_FOUND', message: 'Vaga não encontrada' });
+
+      // Agency users can only edit jobs belonging to their agency
+      if (ctx.user.role === 'agency') {
+        const agency = await db.getAgencyForUserContext(ctx.user.id, ctx.user.role);
+        if (!agency || job.agency_id !== agency.id) {
+          throw new TRPCError({ code: 'FORBIDDEN', message: 'Vaga não pertence à sua agência' });
+        }
+      }
+
+      const updateData: any = {};
+      if (fields.title !== undefined) updateData.title = fields.title;
+      if (fields.description !== undefined) updateData.description = fields.description;
+      if (fields.contractType !== undefined) updateData.contract_type = fields.contractType;
+      if (fields.workType !== undefined) updateData.work_type = fields.workType;
+      if (fields.workSchedule !== undefined) updateData.work_schedule = fields.workSchedule || null;
+      if (fields.salaryMin !== undefined) updateData.salary_min = fields.salaryMin || null;
+      if (fields.salaryMax !== undefined) updateData.salary_max = fields.salaryMax || null;
+      if (fields.requirements !== undefined) updateData.specific_requirements = fields.requirements || null;
+      if (fields.openings !== undefined) updateData.openings = fields.openings;
+      if (fields.status !== undefined) updateData.status = fields.status;
+
+      await supabaseAdmin.from('jobs').update(updateData).eq('id', jobId);
+
+      // Regenerate AI summary if title or description changed
+      if (fields.title || fields.description) {
+        const { data: updatedJob } = await supabaseAdmin
+          .from('jobs').select('title, description, contract_type, work_type').eq('id', jobId).single();
+        if (updatedJob) {
+          generateJobSummary({
+            title: updatedJob.title,
+            description: updatedJob.description,
+            contractType: updatedJob.contract_type,
+            workType: updatedJob.work_type,
+            requirements: fields.requirements,
+          }).then(async (summary) => {
+            if (summary) {
+              await db.updateJob(jobId, { summary, summary_generated_at: new Date().toISOString() });
+              await generateJobEmbedding(jobId);
+            }
+          }).catch((err) => console.error('Failed to regenerate job summary:', err));
+        }
+      }
+
+      return { success: true };
+    }),
+
+  // Delete job (admin/agency access)
+  deleteForCompany: agencyProcedure
+    .input(z.object({
+      jobId: z.string().uuid(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      // Verify job exists
+      const { data: job } = await supabaseAdmin
+        .from('jobs').select('id, company_id, agency_id').eq('id', input.jobId).single();
+      if (!job) throw new TRPCError({ code: 'NOT_FOUND', message: 'Vaga não encontrada' });
+
+      // Agency users can only delete jobs belonging to their agency
+      if (ctx.user.role === 'agency') {
+        const agency = await db.getAgencyForUserContext(ctx.user.id, ctx.user.role);
+        if (!agency || job.agency_id !== agency.id) {
+          throw new TRPCError({ code: 'FORBIDDEN', message: 'Vaga não pertence à sua agência' });
+        }
+      }
+
+      // Delete related records first
+      await supabaseAdmin.from('job_matches').delete().eq('job_id', input.jobId);
+      await supabaseAdmin.from('applications').delete().eq('job_id', input.jobId);
+      await supabaseAdmin.from('jobs').delete().eq('id', input.jobId);
+
+      return { success: true };
+    }),
+
   // Create job for a specific company (admin/agency access)
   createForCompany: protectedProcedure
     .input(z.object({
