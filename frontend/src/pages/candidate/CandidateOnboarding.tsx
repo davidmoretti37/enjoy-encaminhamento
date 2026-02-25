@@ -61,6 +61,7 @@ export default function CandidateOnboarding() {
   const [step, setStep] = useState(1);
   const [submitting, setSubmitting] = useState(false);
   const [calendarMonth, setCalendarMonth] = useState<Date>(new Date(2000, 0));
+  const [calendarOpen, setCalendarOpen] = useState(false);
 
   // Form state - Step 1 (Personal + Education merged)
   const [formData, setFormData] = useState({
@@ -250,8 +251,9 @@ export default function CandidateOnboarding() {
 
   const handleNext = () => {
     if (step === 1 && validateStep1()) {
-      // Close any open Radix portals (Select, Popover) before unmounting step 1
+      // Close any open Radix portals (Select, Popover, Calendar) before unmounting step 1
       // This prevents removeChild DOM errors from portal cleanup race conditions
+      setCalendarOpen(false);
       (document.activeElement as HTMLElement)?.blur?.();
       setTimeout(() => setStep(2), 0);
     }
@@ -438,7 +440,7 @@ export default function CandidateOnboarding() {
                 <div className="grid md:grid-cols-3 gap-4">
                   <div className="space-y-2">
                     <Label>Data de Nascimento</Label>
-                    <Popover>
+                    <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
                       <PopoverTrigger asChild>
                         <Button
                           variant="outline"
@@ -500,6 +502,8 @@ export default function CandidateOnboarding() {
                               } else {
                                 handleInputChange('date_of_birth', '');
                               }
+                              // Close popover after selection to prevent portal cleanup race condition
+                              setCalendarOpen(false);
                             }}
                             disabled={(date) =>
                               date > new Date() || date < new Date("1950-01-01")

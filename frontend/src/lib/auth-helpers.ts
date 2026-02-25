@@ -39,7 +39,33 @@ export async function signUp(
     },
   });
 
-  if (error) throw error;
+  if (error) {
+    // If email already exists (partial registration), try signing in as recovery
+    const msg = error.message?.toLowerCase() || "";
+    const isAlreadyRegistered =
+      msg.includes("already registered") ||
+      msg.includes("already been registered") ||
+      msg.includes("user already exists");
+
+    if (isAlreadyRegistered) {
+      console.log("[Auth] Email already registered, attempting sign-in recovery...");
+      const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (signInError) {
+        // Wrong password or other issue — tell user to log in with their password
+        throw new Error("Este email já está cadastrado. Faça login com sua senha.");
+      }
+
+      // Recovery succeeded — user can continue to onboarding
+      console.log("[Auth] Recovery sign-in successful:", signInData.user?.email);
+      return signInData;
+    }
+
+    throw error;
+  }
 
   // After successful signup, create user profile via backend API (bypasses RLS)
   if (data.user) {

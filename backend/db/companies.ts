@@ -303,36 +303,74 @@ export async function createCompanyWithUser(input: {
   pendingContractSigning?: boolean;
   contractSignedAt?: string;
 }): Promise<{ email: string; userId: string; companyId: string }> {
-  const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
-    email: input.email,
-    password: input.password,
-    email_confirm: true,
-    user_metadata: {
-      role: "company",
-      name: input.companyName,
-    },
-  });
+  // Check if auth user already exists (handles partial registration retries)
+  const { data: existingUsers } = await supabaseAdmin.auth.admin.listUsers();
+  const existingAuthUser = existingUsers?.users?.find((u: any) => u.email === input.email);
 
-  if (authError || !authData.user) {
-    console.error("Error creating user for company:", authError);
-    throw new Error(authError?.message || "Failed to create user account");
+  let userId: string;
+
+  if (existingAuthUser) {
+    // Reuse existing auth user — update password so they can log in
+    console.log("[createCompanyWithUser] Reusing existing auth user:", existingAuthUser.id);
+    const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
+      existingAuthUser.id,
+      { password: input.password }
+    );
+    if (updateError) {
+      console.error("Error updating existing auth user:", updateError);
+      throw new Error(`Failed to update existing user account: ${updateError.message}`);
+    }
+    userId = existingAuthUser.id;
+  } else {
+    const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
+      email: input.email,
+      password: input.password,
+      email_confirm: true,
+      user_metadata: {
+        role: "company",
+        name: input.companyName,
+      },
+    });
+
+    if (authError || !authData.user) {
+      console.error("Error creating user for company:", authError);
+      throw new Error(authError?.message || "Failed to create user account");
+    }
+    userId = authData.user.id;
   }
 
-  const { error: userError } = await supabaseAdmin.from("users").insert({
-    id: authData.user.id,
-    email: input.email,
-    name: input.companyName,
-    role: "company",
-  });
+  // Upsert user record (handles both new and retry cases)
+  const { error: userError } = await supabaseAdmin.from("users").upsert(
+    {
+      id: userId,
+      email: input.email,
+      name: input.companyName,
+      role: "company",
+    },
+    { onConflict: "id" }
+  );
 
   if (userError) {
-    console.error("Error creating user record:", userError);
-    await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
+    console.error("Error upserting user record:", userError);
+    if (!existingAuthUser) {
+      await supabaseAdmin.auth.admin.deleteUser(userId);
+    }
     throw userError;
   }
 
+  // Check if company already exists for this user (retry scenario)
+  const existingCompany = await getCompanyByUserId(userId);
+  if (existingCompany) {
+    console.log("[createCompanyWithUser] Company already exists, returning existing:", existingCompany.id);
+    return {
+      email: input.email,
+      userId,
+      companyId: existingCompany.id,
+    };
+  }
+
   const companyData: any = {
-    user_id: authData.user.id,
+    user_id: userId,
     company_name: input.companyName,
     email: input.email,
     status: "active",
@@ -362,8 +400,10 @@ export async function createCompanyWithUser(input: {
 
   if (companyError) {
     console.error("Error creating company record:", companyError);
-    await supabaseAdmin.from("users").delete().eq("id", authData.user.id);
-    await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
+    if (!existingAuthUser) {
+      await supabaseAdmin.from("users").delete().eq("id", userId);
+      await supabaseAdmin.auth.admin.deleteUser(userId);
+    }
     throw companyError;
   }
 
@@ -390,7 +430,7 @@ export async function createCompanyWithUser(input: {
 
   return {
     email: input.email,
-    userId: authData.user.id,
+    userId,
     companyId: companyResult.id,
   };
 }

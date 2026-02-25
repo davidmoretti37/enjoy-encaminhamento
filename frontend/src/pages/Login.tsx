@@ -19,7 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { signIn, signUp, signInWithOAuth } from '@/lib/auth-helpers';
+import { signIn, signUp, signInWithOAuth, getSession } from '@/lib/auth-helpers';
 import { useAuth } from '@/_core/hooks/useAuth';
 import { trpc } from '@/lib/trpc';
 import { Briefcase, Loader2, MapPin } from 'lucide-react';
@@ -90,7 +90,23 @@ export default function Login() {
       } else if (user?.role === 'company') {
         window.location.href = '/company/portal';
       } else if (user?.role === 'candidate') {
-        window.location.href = '/candidate';
+        // Check if candidate has completed onboarding before redirecting
+        try {
+          const session = await getSession();
+          const res = await fetch('/api/trpc/candidate.checkOnboarding', {
+            headers: {
+              'Authorization': `Bearer ${session?.access_token}`,
+            },
+          });
+          const json = await res.json();
+          if (json?.result?.data?.json?.completed === false) {
+            window.location.href = '/candidate/onboarding';
+          } else {
+            window.location.href = '/candidate';
+          }
+        } catch {
+          window.location.href = '/candidate';
+        }
       } else {
         // User is logged in but we couldn't determine role yet
         // Go to a neutral page that will redirect properly once role is known
@@ -112,7 +128,7 @@ export default function Login() {
       await signUp(signupEmail, signupPassword, {
         name: signupName,
         role: signupRole,
-        agency_id: signupAgencyId || null,
+        agency_id: signupAgencyId || undefined,
       });
       toast.success('Conta criada com sucesso!');
 
