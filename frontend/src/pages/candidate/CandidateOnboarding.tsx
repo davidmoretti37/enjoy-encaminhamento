@@ -457,46 +457,34 @@ export default function CandidateOnboarding() {
                       </PopoverTrigger>
                       <PopoverContent className="w-auto p-0" align="start">
                         <div className="p-3 space-y-3">
-                          {/* Month and Year selectors */}
+                          {/* Month and Year selectors — native selects to avoid Radix portal-inside-portal crash */}
                           <div className="flex items-center justify-center gap-2">
-                            <Select
-                              value={calendarMonth.getMonth().toString()}
-                              onValueChange={(month) => {
+                            <select
+                              value={calendarMonth.getMonth()}
+                              onChange={(e) => {
                                 const newDate = new Date(calendarMonth);
-                                newDate.setMonth(parseInt(month));
+                                newDate.setMonth(parseInt(e.target.value));
                                 setCalendarMonth(newDate);
                               }}
+                              className="h-8 px-2 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                             >
-                              <SelectTrigger className="w-[120px] h-8">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'].map((month, index) => (
-                                  <SelectItem key={index} value={index.toString()}>
-                                    {month}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                            <Select
-                              value={calendarMonth.getFullYear().toString()}
-                              onValueChange={(year) => {
+                              {['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'].map((month, index) => (
+                                <option key={index} value={index}>{month}</option>
+                              ))}
+                            </select>
+                            <select
+                              value={calendarMonth.getFullYear()}
+                              onChange={(e) => {
                                 const newMonth = new Date(calendarMonth);
-                                newMonth.setFullYear(parseInt(year));
+                                newMonth.setFullYear(parseInt(e.target.value));
                                 setCalendarMonth(newMonth);
                               }}
+                              className="h-8 px-2 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                             >
-                              <SelectTrigger className="w-[90px] h-8">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent className="max-h-[200px]">
-                                {Array.from({ length: new Date().getFullYear() - 1949 }, (_, i) => new Date().getFullYear() - i).map((year) => (
-                                  <SelectItem key={year} value={year.toString()}>
-                                    {year}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
+                              {Array.from({ length: new Date().getFullYear() - 1949 }, (_, i) => new Date().getFullYear() - i).map((year) => (
+                                <option key={year} value={year}>{year}</option>
+                              ))}
+                            </select>
                           </div>
                           <Calendar
                             mode="single"
