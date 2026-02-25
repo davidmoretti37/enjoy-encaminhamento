@@ -174,7 +174,13 @@ export default function ManagementTab() {
         <CandidateCardModal
           open={!!selectedCandidate}
           onClose={() => setSelectedCandidate(null)}
-          profile={selectedCandidate}
+          profile={{
+            ...selectedCandidate,
+            name: selectedCandidate.full_name || selectedCandidate.name || "Candidato",
+            education: selectedCandidate.education_level || selectedCandidate.education,
+            email: selectedCandidate.email || selectedCandidate.users?.email,
+            phone: selectedCandidate.phone,
+          }}
         />
       )}
 

@@ -69,6 +69,7 @@ export default function CandidateSettingsScreen() {
     education: "Formação",
     experience: "Experiência",
     preferences: "Preferências",
+    assessments: "Avaliações",
     documents: "Documentos",
   };
 
@@ -799,6 +800,11 @@ export default function CandidateSettingsScreen() {
           </>
         )}
 
+        {/* Assessments Tab */}
+        {activeTab === "assessments" && (
+          <CandidateAssessmentsTab profile={profile} />
+        )}
+
         {/* Documents Tab */}
         {activeTab === "documents" && (
           <CandidateDocumentsTab />
@@ -932,6 +938,166 @@ const SIGNER_ROLE_LABELS: Record<string, string> = {
   educational_institution: "Instituição de Ensino",
   company: "Empresa",
 };
+
+function DISCBar({ label, value, color }: { label: string; value: number; color: string }) {
+  return (
+    <div className="flex items-center gap-3">
+      <span className="w-24 text-sm font-medium text-slate-700">{label}</span>
+      <div className="flex-1 h-4 bg-slate-100 rounded-full overflow-hidden">
+        <motion.div
+          initial={{ width: 0 }}
+          animate={{ width: `${Math.min(value, 100)}%` }}
+          transition={{ duration: 0.8, ease: "easeOut" }}
+          className={`h-full rounded-full ${color}`}
+        />
+      </div>
+      <span className="w-10 text-sm font-semibold text-slate-600 text-right">{value}%</span>
+    </div>
+  );
+}
+
+function CandidateAssessmentsTab({ profile }: { profile: any }) {
+  const hasDisc = profile?.disc_completed_at || profile?.disc_dominante != null;
+  const hasPdp = profile?.pdp_completed_at || profile?.pdp_competencies?.length > 0;
+
+  if (!hasDisc && !hasPdp) {
+    return (
+      <CardEntrance>
+        <div className="bg-white rounded-xl border-2 border-slate-200 shadow-sm p-12 text-center">
+          <FileText className="w-12 h-12 text-slate-400 mx-auto mb-3" />
+          <p className="text-slate-500">Nenhuma avaliação concluída</p>
+          <p className="text-slate-400 text-sm mt-1">Complete o DISC e PDP no processo de onboarding</p>
+        </div>
+      </CardEntrance>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* DISC Results */}
+      {hasDisc && (
+        <CardEntrance>
+          <div className="bg-white rounded-xl border-2 border-slate-200 shadow-sm p-6">
+            <div className="flex items-center gap-3 mb-5">
+              <div className="w-10 h-10 rounded-lg bg-purple-500/20 flex items-center justify-center">
+                <Sparkles className="w-5 h-5 text-purple-600" />
+              </div>
+              <div>
+                <h3 className="text-[#0A2342] font-semibold">Perfil DISC</h3>
+                {profile.disc_completed_at && (
+                  <p className="text-slate-400 text-xs">
+                    Concluído em {new Date(profile.disc_completed_at).toLocaleDateString('pt-BR')}
+                  </p>
+                )}
+              </div>
+            </div>
+            <div className="space-y-3">
+              <DISCBar label="Dominante" value={profile.disc_dominante || 0} color="bg-red-500" />
+              <DISCBar label="Influente" value={profile.disc_influente || 0} color="bg-yellow-500" />
+              <DISCBar label="Estável" value={profile.disc_estavel || 0} color="bg-green-500" />
+              <DISCBar label="Conforme" value={profile.disc_conforme || 0} color="bg-blue-500" />
+            </div>
+          </div>
+        </CardEntrance>
+      )}
+
+      {/* PDP Results */}
+      {hasPdp && (
+        <CardEntrance delay={0.1}>
+          <div className="bg-white rounded-xl border-2 border-slate-200 shadow-sm p-6">
+            <div className="flex items-center gap-3 mb-5">
+              <div className="w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center">
+                <GraduationCap className="w-5 h-5 text-blue-600" />
+              </div>
+              <div>
+                <h3 className="text-[#0A2342] font-semibold">Plano de Desenvolvimento Pessoal (PDP)</h3>
+                {profile.pdp_completed_at && (
+                  <p className="text-slate-400 text-xs">
+                    Concluído em {new Date(profile.pdp_completed_at).toLocaleDateString('pt-BR')}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {/* Competencies */}
+            {profile.pdp_competencies?.length > 0 && (
+              <div className="mb-4">
+                <h4 className="text-sm font-medium text-slate-600 mb-2">Competências</h4>
+                <div className="flex flex-wrap gap-2">
+                  {profile.pdp_competencies.map((comp: string, i: number) => (
+                    <span key={i} className="px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200 text-xs font-medium">
+                      {comp}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Intrapersonal Skills */}
+            {profile.pdp_intrapersonal && Object.keys(profile.pdp_intrapersonal).length > 0 && (
+              <div className="mb-4">
+                <h4 className="text-sm font-medium text-slate-600 mb-2">Habilidades Intrapessoais</h4>
+                <div className="flex flex-wrap gap-2">
+                  {Object.entries(profile.pdp_intrapersonal).map(([key, values]: [string, any]) => (
+                    Array.isArray(values) ? values.map((v: string, i: number) => (
+                      <span key={`${key}-${i}`} className="px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-medium">
+                        {v}
+                      </span>
+                    )) : (
+                      <span key={key} className="px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-medium">
+                        {key}: {String(values)}
+                      </span>
+                    )
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Interpersonal Skills */}
+            {profile.pdp_interpersonal && Object.keys(profile.pdp_interpersonal).length > 0 && (
+              <div className="mb-4">
+                <h4 className="text-sm font-medium text-slate-600 mb-2">Habilidades Interpessoais</h4>
+                <div className="flex flex-wrap gap-2">
+                  {Object.entries(profile.pdp_interpersonal).map(([key, values]: [string, any]) => (
+                    Array.isArray(values) ? values.map((v: string, i: number) => (
+                      <span key={`${key}-${i}`} className="px-2.5 py-1 rounded-full bg-orange-50 text-orange-700 border border-orange-200 text-xs font-medium">
+                        {v}
+                      </span>
+                    )) : (
+                      <span key={key} className="px-2.5 py-1 rounded-full bg-orange-50 text-orange-700 border border-orange-200 text-xs font-medium">
+                        {key}: {String(values)}
+                      </span>
+                    )
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Skills */}
+            {profile.pdp_skills && Object.keys(profile.pdp_skills).length > 0 && (
+              <div>
+                <h4 className="text-sm font-medium text-slate-600 mb-2">Habilidades Técnicas</h4>
+                <div className="flex flex-wrap gap-2">
+                  {Object.entries(profile.pdp_skills).map(([key, values]: [string, any]) => (
+                    Array.isArray(values) ? values.map((v: string, i: number) => (
+                      <span key={`${key}-${i}`} className="px-2.5 py-1 rounded-full bg-violet-50 text-violet-700 border border-violet-200 text-xs font-medium">
+                        {v}
+                      </span>
+                    )) : (
+                      <span key={key} className="px-2.5 py-1 rounded-full bg-violet-50 text-violet-700 border border-violet-200 text-xs font-medium">
+                        {key}: {String(values)}
+                      </span>
+                    )
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </CardEntrance>
+      )}
+    </div>
+  );
+}
 
 function CandidateDocumentsTab() {
   const { data: docs, isLoading } = trpc.candidate.getMyDocuments.useQuery();

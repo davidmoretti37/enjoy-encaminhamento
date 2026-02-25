@@ -965,81 +965,13 @@ export default function CalendarPage() {
             </DialogHeader>
 
             <div className="flex-1 overflow-y-auto space-y-6 py-4 pr-2">
-              {/* Section 1: Time Blocking */}
-              <div className="space-y-4">
-                <div className="flex items-center gap-2 text-sm font-semibold text-slate-700 border-b pb-2">
-                  <Ban className="h-4 w-4" />
-                  Bloquear Horários
-                </div>
-                <div className="flex justify-center">
-                  <div className="grid grid-cols-2 gap-12 max-w-3xl w-full">
-                    <div className="flex flex-col items-center">
-                      <Label className="mb-2 block text-xs font-medium text-slate-600 self-start">Selecione as datas</Label>
-                      <Calendar
-                        mode="multiple"
-                        selected={blockerSelectedDates}
-                        onSelect={(dates) => dates && dates.length > 0 && setBlockerSelectedDates(dates)}
-                        locale={ptBR}
-                        className="rounded-md border"
-                      />
-                      {blockerSelectedDates.length > 1 && (
-                        <p className="text-xs text-blue-600 mt-2">
-                          {blockerSelectedDates.length} dias selecionados
-                        </p>
-                      )}
-                    </div>
-                    <div>
-                      <Label className="mb-2 block text-xs font-medium text-slate-600">
-                        Horários - {blockerSelectedDates.length === 1
-                          ? format(blockerSelectedDates[0], "dd/MM", { locale: ptBR })
-                          : `${blockerSelectedDates.length} dias`}
-                      </Label>
-                      {blockerSlots && blockerSlots.length > 0 ? (
-                        <div className="max-h-[320px] overflow-y-auto space-y-1 pr-1">
-                          {blockerSlots.map((slot: any) => {
-                            const isLoading = blockingSlot === slot.start;
-                            return (
-                              <button
-                                key={slot.start}
-                                onClick={() => handleBlockerSlotSelect(slot)}
-                                disabled={isLoading || !!blockingSlot}
-                                className={`w-full flex items-center justify-between p-2.5 rounded text-sm transition-colors ${
-                                  isLoading
-                                    ? 'bg-blue-50 border border-blue-200 text-blue-700'
-                                    : slot.blocked
-                                      ? 'bg-red-50 border border-red-200 text-red-700 hover:bg-red-100'
-                                      : 'bg-slate-50 border border-slate-200 hover:bg-slate-100'
-                                } ${blockingSlot && !isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
-                              >
-                                <span>
-                                  {format(new Date(slot.start), "HH:mm")} - {format(new Date(slot.end), "HH:mm")}
-                                </span>
-                                {isLoading ? (
-                                  <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
-                                ) : slot.blocked ? (
-                                  <Ban className="h-4 w-4 text-red-500" />
-                                ) : null}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      ) : (
-                        <div className="text-center py-12 text-muted-foreground text-sm border rounded-md bg-slate-50">
-                          <Clock className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                          <p className="text-sm">Configure horários de trabalho primeiro</p>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Section 2: Working Hours - Weekly Schedule */}
+              {/* Section 1: Working Hours - Weekly Schedule (shown first so users configure hours before blocking) */}
               <div className="space-y-4">
                 <div className="flex items-center gap-2 text-sm font-semibold text-slate-700 border-b pb-2">
                   <Clock className="h-4 w-4" />
                   Horários de Trabalho
                 </div>
+                <p className="text-xs text-muted-foreground pl-6">Configure os dias e horários em que você está disponível para reuniões</p>
                 <div className="space-y-2 pl-6">
                   {DAYS_OF_WEEK.map((day) => {
                     const dayAvailability = availability?.find(
@@ -1138,6 +1070,75 @@ export default function CalendarPage() {
                       </div>
                     );
                   })}
+                </div>
+              </div>
+
+              {/* Section 2: Time Blocking */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 text-sm font-semibold text-slate-700 border-b pb-2">
+                  <Ban className="h-4 w-4" />
+                  Bloquear Horários
+                </div>
+                <div className="flex justify-center">
+                  <div className="grid grid-cols-2 gap-12 max-w-3xl w-full">
+                    <div className="flex flex-col items-center">
+                      <Label className="mb-2 block text-xs font-medium text-slate-600 self-start">Selecione as datas</Label>
+                      <Calendar
+                        mode="multiple"
+                        selected={blockerSelectedDates}
+                        onSelect={(dates) => dates && dates.length > 0 && setBlockerSelectedDates(dates)}
+                        locale={ptBR}
+                        className="rounded-md border"
+                      />
+                      {blockerSelectedDates.length > 1 && (
+                        <p className="text-xs text-blue-600 mt-2">
+                          {blockerSelectedDates.length} dias selecionados
+                        </p>
+                      )}
+                    </div>
+                    <div>
+                      <Label className="mb-2 block text-xs font-medium text-slate-600">
+                        Horários - {blockerSelectedDates.length === 1
+                          ? format(blockerSelectedDates[0], "dd/MM", { locale: ptBR })
+                          : `${blockerSelectedDates.length} dias`}
+                      </Label>
+                      {blockerSlots && blockerSlots.length > 0 ? (
+                        <div className="max-h-[320px] overflow-y-auto space-y-1 pr-1">
+                          {blockerSlots.map((slot: any) => {
+                            const isLoading = blockingSlot === slot.start;
+                            return (
+                              <button
+                                key={slot.start}
+                                onClick={() => handleBlockerSlotSelect(slot)}
+                                disabled={isLoading || !!blockingSlot}
+                                className={`w-full flex items-center justify-between p-2.5 rounded text-sm transition-colors ${
+                                  isLoading
+                                    ? 'bg-blue-50 border border-blue-200 text-blue-700'
+                                    : slot.blocked
+                                      ? 'bg-red-50 border border-red-200 text-red-700 hover:bg-red-100'
+                                      : 'bg-slate-50 border border-slate-200 hover:bg-slate-100'
+                                } ${blockingSlot && !isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                              >
+                                <span>
+                                  {format(new Date(slot.start), "HH:mm")} - {format(new Date(slot.end), "HH:mm")}
+                                </span>
+                                {isLoading ? (
+                                  <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
+                                ) : slot.blocked ? (
+                                  <Ban className="h-4 w-4 text-red-500" />
+                                ) : null}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div className="text-center py-12 text-muted-foreground text-sm border rounded-md bg-slate-50">
+                          <Clock className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                          <p className="text-sm">Configure horários de trabalho primeiro</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </div>
               </div>
 

@@ -250,7 +250,10 @@ export default function CandidateOnboarding() {
 
   const handleNext = () => {
     if (step === 1 && validateStep1()) {
-      setStep(2);
+      // Close any open Radix portals (Select, Popover) before unmounting step 1
+      // This prevents removeChild DOM errors from portal cleanup race conditions
+      (document.activeElement as HTMLElement)?.blur?.();
+      setTimeout(() => setStep(2), 0);
     }
   };
 

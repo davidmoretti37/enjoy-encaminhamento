@@ -18,6 +18,11 @@ class ErrorBoundary extends Component<Props, State> {
   }
 
   static getDerivedStateFromError(error: Error): State {
+    // Ignore known Radix UI portal cleanup errors (removeChild race condition)
+    // These happen when portals (Select, Popover) are open during component unmount
+    if (error?.name === "NotFoundError" && error?.message?.includes("removeChild")) {
+      return { hasError: false, error: null };
+    }
     return { hasError: true, error };
   }
 

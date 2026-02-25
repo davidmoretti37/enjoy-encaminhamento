@@ -506,6 +506,49 @@ export const companyRouter = router({
       return { jobId };
     }),
 
+  // Update job details (company can edit their own jobs)
+  updateJob: companyProcedure
+    .input(z.object({
+      jobId: z.string().uuid(),
+      title: z.string().min(1).optional(),
+      description: z.string().min(1).optional(),
+      contract_type: z.enum(['estagio', 'clt', 'menor-aprendiz']).optional(),
+      work_schedule: z.string().optional(),
+      salary_min: z.number().optional(),
+      salary_max: z.number().optional(),
+      requirements: z.string().optional(),
+      openings: z.number().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const company = await db.getCompanyByUserId(ctx.user.id);
+      if (!company) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Company not found' });
+      }
+
+      const { jobId, ...fields } = input;
+
+      // Verify job belongs to this company
+      const { data: job } = await supabaseAdmin
+        .from('jobs').select('id, company_id').eq('id', jobId).single();
+      if (!job || job.company_id !== company.id) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Vaga não pertence à sua empresa' });
+      }
+
+      const updateData: any = {};
+      if (fields.title !== undefined) updateData.title = fields.title;
+      if (fields.description !== undefined) updateData.description = fields.description;
+      if (fields.contract_type !== undefined) updateData.contract_type = fields.contract_type;
+      if (fields.work_schedule !== undefined) updateData.work_schedule = fields.work_schedule || null;
+      if (fields.salary_min !== undefined) updateData.salary_min = fields.salary_min || null;
+      if (fields.salary_max !== undefined) updateData.salary_max = fields.salary_max || null;
+      if (fields.requirements !== undefined) updateData.specific_requirements = fields.requirements || null;
+      if (fields.openings !== undefined) updateData.openings = fields.openings;
+
+      await supabaseAdmin.from('jobs').update(updateData).eq('id', jobId);
+
+      return { success: true };
+    }),
+
   pauseJob: companyProcedure
     .input(z.object({ jobId: z.string() }))
     .mutation(async ({ ctx, input }) => {

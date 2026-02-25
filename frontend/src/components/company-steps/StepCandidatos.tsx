@@ -2,6 +2,7 @@ import { useState, lazy, Suspense } from "react";
 import { createPortal } from "react-dom";
 import { motion } from "framer-motion";
 import { useCompanyFunnel } from "@/contexts/CompanyFunnelContext";
+import { trpc } from "@/lib/trpc";
 import {
   Users,
   MapPin,
@@ -14,6 +15,7 @@ import {
   Globe,
   ChevronDown,
   Phone,
+  UserPlus,
 } from "lucide-react";
 import { CardEntrance } from "@/components/funnel";
 
@@ -28,7 +30,30 @@ export default function StepCandidatos() {
 
   // Filter batches for selected job
   const jobBatches = batches.filter((b: any) => b.job?.id === selectedJobId);
-  const allCandidates = jobBatches.flatMap((b: any) => b.candidates || []);
+  const batchCandidates = jobBatches.flatMap((b: any) => b.candidates || []);
+
+  // Also fetch direct applications for this job
+  const { data: directApplications } = trpc.application.getByJob.useQuery(
+    { jobId: selectedJobId! },
+    { enabled: !!selectedJobId }
+  );
+
+  // Merge batch candidates with direct applicants (dedup by candidate id)
+  const batchCandidateIds = new Set(batchCandidates.map((c: any) => c.id || c.candidate_id));
+  const directApplicants = (directApplications || [])
+    .filter((app: any) => !batchCandidateIds.has(app.candidate_id))
+    .map((app: any) => ({
+      id: app.candidate_id,
+      candidate: app.candidates || app.candidate,
+      match_score: null,
+      source: 'application' as const,
+      application_status: app.status,
+    }));
+
+  const allCandidates = [
+    ...batchCandidates,
+    ...directApplicants,
+  ];
 
   const [interviewModalOpen, setInterviewModalOpen] = useState(false);
 
@@ -319,6 +344,14 @@ function CandidateCard({ candidate, isSelected, onToggle, onView }: CandidateCar
               )}
             </div>
           </div>
+
+          {/* Direct application badge */}
+          {candidate.source === 'application' && (
+            <span className="px-2.5 py-1 rounded-full bg-purple-50 text-purple-600 border border-purple-200 text-xs font-medium flex items-center gap-1">
+              <UserPlus className="w-3 h-3" />
+              Candidatura
+            </span>
+          )}
 
           {/* Match score with enhanced design */}
           {candidate.match_score && (

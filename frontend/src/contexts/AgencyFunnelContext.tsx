@@ -135,18 +135,9 @@ export function AgencyFunnelProvider({ children }: { children: ReactNode }) {
 
   // Combine direct signups and outreach companies
   const companies = useMemo(() => {
-    const completedMeetings = meetings.filter((m: any) => m.contract_signed_at);
-
-    // Convert direct companies to meeting-like format
+    // Direct signup companies always show (they are registered in the system)
     const directAsMeetings = directCompanies
       .filter((c: any) => c.status === 'active' || c.status === 'pending')
-      .filter((c: any) => {
-        // Exclude companies that already have a meeting record
-        const hasOutreachRecord = meetings?.some((m: any) =>
-          m.company_email === c.email || m.company_name === c.company_name
-        );
-        return !hasOutreachRecord;
-      })
       .map((c: any) => ({
         id: c.id,
         company_name: c.company_name || c.business_name,
@@ -158,7 +149,19 @@ export function AgencyFunnelProvider({ children }: { children: ReactNode }) {
         agency_id: c.agency_id || null,
       }));
 
-    return [...completedMeetings, ...directAsMeetings];
+    // Add completed outreach meetings that don't correspond to a direct company
+    const directEmails = new Set(directCompanies.map((c: any) => c.email?.toLowerCase()).filter(Boolean));
+    const directNames = new Set(directCompanies.map((c: any) => (c.company_name || c.business_name)?.toLowerCase()).filter(Boolean));
+
+    const completedMeetings = meetings
+      .filter((m: any) => m.contract_signed_at)
+      .filter((m: any) => {
+        const emailMatch = m.company_email && directEmails.has(m.company_email.toLowerCase());
+        const nameMatch = m.company_name && directNames.has(m.company_name.toLowerCase());
+        return !emailMatch && !nameMatch;
+      });
+
+    return [...directAsMeetings, ...completedMeetings];
   }, [directCompanies, meetings]);
 
   const isCompaniesLoading = isTodasMode

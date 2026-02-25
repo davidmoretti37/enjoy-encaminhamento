@@ -1,4 +1,7 @@
+import { useState } from "react";
 import { useCompanyFunnel } from "@/contexts/CompanyFunnelContext";
+import { trpc } from "@/lib/trpc";
+import { toast } from "sonner";
 import {
   Briefcase,
   Clock,
@@ -10,6 +13,10 @@ import {
   GraduationCap,
   Building2,
   Users,
+  Pencil,
+  Save,
+  X,
+  Loader2,
 } from "lucide-react";
 import { CardEntrance } from "@/components/funnel";
 import { format } from "date-fns";
@@ -36,7 +43,52 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; icon: typeof
 };
 
 export default function StepVagaCriada() {
-  const { selectedJob } = useCompanyFunnel();
+  const { selectedJob, refreshData } = useCompanyFunnel();
+  const [editing, setEditing] = useState(false);
+  const [editForm, setEditForm] = useState({
+    title: "",
+    description: "",
+    requirements: "",
+    work_schedule: "",
+    salary_min: "",
+    openings: "",
+  });
+
+  const updateJobMutation = trpc.company.updateJob.useMutation({
+    onSuccess: () => {
+      toast.success("Vaga atualizada com sucesso!");
+      setEditing(false);
+      refreshData();
+    },
+    onError: (error: any) => {
+      toast.error(`Erro ao atualizar: ${error.message}`);
+    },
+  });
+
+  const startEditing = () => {
+    if (!selectedJob) return;
+    setEditForm({
+      title: selectedJob.title || "",
+      description: selectedJob.description || "",
+      requirements: selectedJob.requirements || selectedJob.specific_requirements || "",
+      work_schedule: selectedJob.work_schedule || "",
+      salary_min: selectedJob.salary_min ? String(selectedJob.salary_min) : "",
+      openings: selectedJob.openings ? String(selectedJob.openings) : "1",
+    });
+    setEditing(true);
+  };
+
+  const handleSave = () => {
+    if (!selectedJob) return;
+    const data: any = { jobId: selectedJob.id };
+    if (editForm.title) data.title = editForm.title;
+    if (editForm.description) data.description = editForm.description;
+    if (editForm.requirements !== undefined) data.requirements = editForm.requirements;
+    if (editForm.work_schedule !== undefined) data.work_schedule = editForm.work_schedule;
+    if (editForm.salary_min) data.salary_min = parseFloat(editForm.salary_min);
+    if (editForm.openings) data.openings = parseInt(editForm.openings);
+    updateJobMutation.mutate(data);
+  };
 
   if (!selectedJob) {
     return (
@@ -86,79 +138,172 @@ export default function StepVagaCriada() {
       <CardEntrance delay={0.05}>
         <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
           <div className="p-5 border-b border-slate-100">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center">
-                <FileText className="w-5 h-5 text-[#0A2342]" />
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center">
+                  <FileText className="w-5 h-5 text-[#0A2342]" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-semibold text-[#0A2342]">{selectedJob.title}</h2>
+                  {selectedJob.created_at && (
+                    <p className="text-slate-500 text-xs">
+                      Criada em {format(new Date(selectedJob.created_at), "dd/MM/yyyy")}
+                    </p>
+                  )}
+                </div>
+              </div>
+              {!editing && (
+                <button
+                  onClick={startEditing}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 text-slate-600 text-sm font-medium hover:bg-slate-200 transition-all"
+                >
+                  <Pencil className="w-3.5 h-3.5" />
+                  Editar
+                </button>
+              )}
+            </div>
+          </div>
+
+          {editing ? (
+            <div className="p-5 space-y-4">
+              <div>
+                <label className="text-sm font-medium text-[#0A2342] mb-1 block">Título da Vaga</label>
+                <input
+                  type="text"
+                  value={editForm.title}
+                  onChange={(e) => setEditForm(f => ({ ...f, title: e.target.value }))}
+                  className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
               </div>
               <div>
-                <h2 className="text-lg font-semibold text-[#0A2342]">{selectedJob.title}</h2>
-                {selectedJob.created_at && (
-                  <p className="text-slate-500 text-xs">
-                    Criada em {format(new Date(selectedJob.created_at), "dd/MM/yyyy")}
-                  </p>
+                <label className="text-sm font-medium text-[#0A2342] mb-1 block">Descrição</label>
+                <textarea
+                  value={editForm.description}
+                  onChange={(e) => setEditForm(f => ({ ...f, description: e.target.value }))}
+                  rows={4}
+                  className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-[#0A2342] mb-1 block">Requisitos</label>
+                <textarea
+                  value={editForm.requirements}
+                  onChange={(e) => setEditForm(f => ({ ...f, requirements: e.target.value }))}
+                  rows={3}
+                  className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                />
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="text-sm font-medium text-[#0A2342] mb-1 block">Salário (R$)</label>
+                  <input
+                    type="number"
+                    value={editForm.salary_min}
+                    onChange={(e) => setEditForm(f => ({ ...f, salary_min: e.target.value }))}
+                    className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-[#0A2342] mb-1 block">Horário</label>
+                  <input
+                    type="text"
+                    value={editForm.work_schedule}
+                    onChange={(e) => setEditForm(f => ({ ...f, work_schedule: e.target.value }))}
+                    className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-[#0A2342] mb-1 block">N° de Vagas</label>
+                  <input
+                    type="number"
+                    value={editForm.openings}
+                    onChange={(e) => setEditForm(f => ({ ...f, openings: e.target.value }))}
+                    className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  onClick={() => setEditing(false)}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-lg border border-slate-200 text-slate-600 text-sm font-medium hover:bg-slate-50 transition-all"
+                >
+                  <X className="w-4 h-4" />
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleSave}
+                  disabled={updateJobMutation.isPending}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#0A2342] text-white text-sm font-medium hover:bg-[#0A2342]/90 transition-all disabled:opacity-50"
+                >
+                  {updateJobMutation.isPending ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Save className="w-4 h-4" />
+                  )}
+                  Salvar
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="p-5 space-y-4">
+              {/* Info grid */}
+              <div className="grid grid-cols-2 gap-3">
+                <InfoItem
+                  icon={GraduationCap}
+                  label="Tipo de contrato"
+                  value={contractLabel}
+                />
+                {selectedJob.salary_min && (
+                  <InfoItem
+                    icon={DollarSign}
+                    label="Salário"
+                    value={`R$ ${Number(selectedJob.salary_min).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`}
+                  />
+                )}
+                {selectedJob.work_schedule && (
+                  <InfoItem
+                    icon={Clock}
+                    label="Horário"
+                    value={selectedJob.work_schedule}
+                  />
+                )}
+                {selectedJob.city && (
+                  <InfoItem
+                    icon={MapPin}
+                    label="Local"
+                    value={selectedJob.city}
+                  />
+                )}
+                {(selectedJob.vacancies || selectedJob.openings) && (
+                  <InfoItem
+                    icon={Users}
+                    label="Vagas"
+                    value={`${selectedJob.vacancies || selectedJob.openings} vaga${(selectedJob.vacancies || selectedJob.openings) > 1 ? "s" : ""}`}
+                  />
                 )}
               </div>
-            </div>
-          </div>
 
-          <div className="p-5 space-y-4">
-            {/* Info grid */}
-            <div className="grid grid-cols-2 gap-3">
-              <InfoItem
-                icon={GraduationCap}
-                label="Tipo de contrato"
-                value={contractLabel}
-              />
-              {selectedJob.salary_min && (
-                <InfoItem
-                  icon={DollarSign}
-                  label="Salário"
-                  value={`R$ ${Number(selectedJob.salary_min).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`}
-                />
+              {/* Description */}
+              {selectedJob.description && (
+                <div>
+                  <h4 className="text-sm font-medium text-[#0A2342] mb-2">Descrição</h4>
+                  <p className="text-sm text-slate-600 whitespace-pre-line leading-relaxed">
+                    {selectedJob.description}
+                  </p>
+                </div>
               )}
-              {selectedJob.work_schedule && (
-                <InfoItem
-                  icon={Clock}
-                  label="Horário"
-                  value={selectedJob.work_schedule}
-                />
-              )}
-              {selectedJob.city && (
-                <InfoItem
-                  icon={MapPin}
-                  label="Local"
-                  value={selectedJob.city}
-                />
-              )}
-              {selectedJob.vacancies && (
-                <InfoItem
-                  icon={Users}
-                  label="Vagas"
-                  value={`${selectedJob.vacancies} vaga${selectedJob.vacancies > 1 ? "s" : ""}`}
-                />
+
+              {/* Requirements */}
+              {(selectedJob.requirements || selectedJob.specific_requirements) && (
+                <div>
+                  <h4 className="text-sm font-medium text-[#0A2342] mb-2">Requisitos</h4>
+                  <p className="text-sm text-slate-600 whitespace-pre-line leading-relaxed">
+                    {selectedJob.requirements || selectedJob.specific_requirements}
+                  </p>
+                </div>
               )}
             </div>
-
-            {/* Description */}
-            {selectedJob.description && (
-              <div>
-                <h4 className="text-sm font-medium text-[#0A2342] mb-2">Descrição</h4>
-                <p className="text-sm text-slate-600 whitespace-pre-line leading-relaxed">
-                  {selectedJob.description}
-                </p>
-              </div>
-            )}
-
-            {/* Requirements */}
-            {selectedJob.requirements && (
-              <div>
-                <h4 className="text-sm font-medium text-[#0A2342] mb-2">Requisitos</h4>
-                <p className="text-sm text-slate-600 whitespace-pre-line leading-relaxed">
-                  {selectedJob.requirements}
-                </p>
-              </div>
-            )}
-          </div>
+          )}
         </div>
       </CardEntrance>
     </div>

@@ -12,6 +12,8 @@ import {
   Building2,
   Download,
   User,
+  Mail,
+  Phone,
 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -19,6 +21,8 @@ import { ptBR } from "date-fns/locale";
 interface CandidateProfile {
   id: string;
   name: string;
+  email?: string;
+  phone?: string;
   city?: string;
   state?: string;
   age?: number;
@@ -559,6 +563,24 @@ export function CandidateCard({
 
       {/* ── Body ── */}
       <div className="bg-white rounded-b-xl border border-t-0 border-slate-200">
+
+        {/* Contact Info */}
+        {(profile.email || profile.phone) && (
+          <div className="mx-8 mt-4 flex items-center gap-4">
+            {profile.email && (
+              <a href={`mailto:${profile.email}`} className="flex items-center gap-1.5 text-sm text-slate-600 hover:text-[#0A2342] transition-colors">
+                <Mail className="w-3.5 h-3.5 text-slate-400" />
+                {profile.email}
+              </a>
+            )}
+            {profile.phone && (
+              <a href={`tel:${profile.phone}`} className="flex items-center gap-1.5 text-sm text-slate-600 hover:text-[#0A2342] transition-colors">
+                <Phone className="w-3.5 h-3.5 text-slate-400" />
+                {profile.phone}
+              </a>
+            )}
+          </div>
+        )}
 
         {/* Interview Banner */}
         {interview && (

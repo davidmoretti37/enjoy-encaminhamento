@@ -19,8 +19,8 @@ export function createEmailTransporter() {
 // Helper function to send emails
 export async function sendEmail(to: string, subject: string, html: string): Promise<boolean> {
   if (!ENV.smtp.isConfigured()) {
-    console.log("[Email] SMTP not configured, email not sent:", { to, subject });
-    return false;
+    console.error("[Email] SMTP not configured. Set SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS in .env");
+    throw new Error("Envio de e-mail não está configurado. Contate o administrador.");
   }
 
   try {
@@ -35,6 +35,6 @@ export async function sendEmail(to: string, subject: string, html: string): Prom
     return true;
   } catch (err: any) {
     console.error("[Email] Failed to send:", err.message);
-    throw err;
+    throw new Error(`Falha ao enviar e-mail: ${err.message}`);
   }
 }

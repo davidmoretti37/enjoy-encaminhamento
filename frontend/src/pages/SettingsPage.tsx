@@ -20,6 +20,9 @@ import {
   FolderOpen,
   CreditCard,
   Save,
+  Link,
+  Copy,
+  Check,
 } from "lucide-react";
 import { useState, useRef } from "react";
 import { toast } from "sonner";
@@ -102,11 +105,10 @@ export default function SettingsPage() {
   const agencyProfileQuery = trpc.agency.getProfile.useQuery(undefined, {
     enabled: canManageDocs,
     onSuccess: (data: any) => {
-      if (!paymentInfoLoaded && data) {
+      if (data) {
         setPixKey(data.pix_key || "");
         setPixKeyType(data.pix_key_type || "cnpj");
         setPaymentInstructions(data.payment_instructions || "");
-        setPaymentInfoLoaded(true);
       }
     },
   });
@@ -128,9 +130,9 @@ export default function SettingsPage() {
   const handleSavePaymentInfo = () => {
     setSavingPaymentInfo(true);
     updateProfileMutation.mutate({
-      pix_key: pixKey || undefined,
-      pix_key_type: (pixKeyType as any) || undefined,
-      payment_instructions: paymentInstructions || undefined,
+      pix_key: pixKey,
+      pix_key_type: (pixKeyType as any) || "cnpj",
+      payment_instructions: paymentInstructions,
     });
   };
 
@@ -435,6 +437,11 @@ export default function SettingsPage() {
           </Card>
         )}
 
+        {/* Public Links Section */}
+        {canManageDocs && user && (
+          <PublicLinksCard userId={user.id} />
+        )}
+
         {/* Logout Section */}
         <Card>
           <CardHeader>
@@ -486,5 +493,86 @@ export default function SettingsPage() {
         </AlertDialog>
       </div>
     </DashboardLayout>
+  );
+}
+
+function PublicLinksCard({ userId }: { userId: string }) {
+  const [copiedLink, setCopiedLink] = useState<string | null>(null);
+  const baseUrl = window.location.origin;
+
+  const links = [
+    {
+      key: "form",
+      label: "Formulário de Cadastro de Empresas",
+      description: "Compartilhe este link para empresas se cadastrarem na sua agência",
+      url: `${baseUrl}/form/${userId}`,
+    },
+    {
+      key: "book",
+      label: "Agendamento de Reuniões",
+      description: "Compartilhe este link para empresas agendarem reuniões com você",
+      url: `${baseUrl}/book/${userId}`,
+    },
+  ];
+
+  const handleCopy = async (url: string, key: string) => {
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopiedLink(key);
+      toast.success("Link copiado!");
+      setTimeout(() => setCopiedLink(null), 2000);
+    } catch {
+      toast.error("Erro ao copiar link");
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Link className="h-5 w-5" />
+          Links Públicos
+        </CardTitle>
+        <CardDescription>
+          Links para compartilhar com empresas parceiras
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {links.map((link) => (
+          <div key={link.key} className="p-3 bg-slate-50 border rounded-lg space-y-2">
+            <div>
+              <p className="text-sm font-medium">{link.label}</p>
+              <p className="text-xs text-muted-foreground">{link.description}</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <code className="flex-1 text-xs bg-white px-3 py-2 rounded border truncate">
+                {link.url}
+              </code>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleCopy(link.url, link.key)}
+                className="shrink-0 gap-1.5"
+              >
+                {copiedLink === link.key ? (
+                  <Check className="h-3.5 w-3.5 text-green-600" />
+                ) : (
+                  <Copy className="h-3.5 w-3.5" />
+                )}
+                {copiedLink === link.key ? "Copiado" : "Copiar"}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => window.open(link.url, "_blank")}
+                className="shrink-0"
+              >
+                <ExternalLink className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          </div>
+        ))}
+      </CardContent>
+    </Card>
   );
 }
