@@ -166,6 +166,33 @@ export const adminRouter = router({
     return await db.getPaymentsPendingReview();
   }),
 
+  updatePaymentDetails: agencyProcedure
+    .input(z.object({
+      paymentId: z.string().uuid(),
+      amount: z.number().min(0).optional(),
+      due_date: z.string().optional(),
+      billing_period: z.string().optional(),
+      notes: z.string().optional(),
+      payment_type: z.enum(['monthly-fee', 'insurance-fee', 'setup-fee', 'penalty', 'refund']).optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const agencyId = await getAgencyScope(ctx);
+      if (agencyId) {
+        await verifyPaymentBelongsToAgency(input.paymentId, agencyId);
+      }
+
+      const { paymentId, ...fields } = input;
+      const updates: any = {};
+      if (fields.amount !== undefined) updates.amount = fields.amount;
+      if (fields.due_date !== undefined) updates.due_date = fields.due_date;
+      if (fields.billing_period !== undefined) updates.billing_period = fields.billing_period;
+      if (fields.notes !== undefined) updates.notes = fields.notes;
+      if (fields.payment_type !== undefined) updates.payment_type = fields.payment_type;
+
+      await db.updatePayment(paymentId, updates);
+      return { success: true };
+    }),
+
   reviewPaymentReceipt: agencyProcedure
     .input(z.object({
       paymentId: z.string().uuid(),

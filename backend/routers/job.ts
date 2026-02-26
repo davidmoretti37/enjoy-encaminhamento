@@ -186,11 +186,19 @@ export const jobRouter = router({
         });
       }
 
-      // Get agency_id for the job (only for agency users)
+      // Get agency_id for the job
       let agencyId = null;
       if (ctx.user.role === 'agency') {
         const agency = await db.getAgencyForUserContext(ctx.user.id, ctx.user.role);
         agencyId = agency?.id;
+      } else if (ctx.user.role === 'admin') {
+        // For admin, use the company's existing agency_id
+        const { data: companyData } = await supabaseAdmin
+          .from('companies')
+          .select('agency_id')
+          .eq('id', input.companyId)
+          .single();
+        agencyId = companyData?.agency_id;
       }
 
       // Insert job directly

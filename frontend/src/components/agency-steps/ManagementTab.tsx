@@ -3,7 +3,7 @@ import { useAgencyContext } from "@/contexts/AgencyContext";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Building2, Users, FileText, DollarSign, FileCheck, User, Plus, Briefcase } from "lucide-react";
+import { Building2, Users, FileText, DollarSign, FileCheck, User, Plus } from "lucide-react";
 import { useState } from "react";
 import { useLocation } from "wouter";
 import CompanyDocumentsModal from "@/components/CompanyDocumentsModal";
@@ -221,15 +221,6 @@ function CompanyRow({ company, onDocumentsClick }: { company: any; onDocumentsCl
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            className="text-gray-600 border-gray-300 hover:bg-gray-50 hover:border-orange-300"
-            onClick={() => setLocation(`/agency/companies/${company.id}/jobs`)}
-          >
-            <Briefcase className="h-4 w-4 mr-1.5" />
-            Vagas
-          </Button>
           <Button
             variant="outline"
             size="sm"

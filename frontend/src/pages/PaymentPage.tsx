@@ -16,6 +16,9 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { trpc } from "@/lib/trpc";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   DollarSign,
   CheckCircle,
@@ -28,6 +31,7 @@ import {
   ThumbsDown,
   ChevronDown,
   ChevronUp,
+  Pencil,
 } from "lucide-react";
 import DashboardLayout from "@/components/DashboardLayout";
 import { useState, useMemo } from "react";
@@ -39,6 +43,9 @@ export default function PaymentPage() {
   const [receiptModalOpen, setReceiptModalOpen] = useState(false);
   const [selectedReceiptPayment, setSelectedReceiptPayment] = useState<any>(null);
   const [expandedCompanies, setExpandedCompanies] = useState<Record<string, boolean>>({});
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [editingPayment, setEditingPayment] = useState<any>(null);
+  const [editForm, setEditForm] = useState({ amount: '', due_date: '', billing_period: '', payment_type: '', notes: '' });
 
   // Determine role capabilities
   const isAffiliate = user?.role === 'admin' || user?.role === 'super_admin';
@@ -141,6 +148,19 @@ export default function PaymentPage() {
     },
   });
 
+  const updatePaymentMutation = trpc.admin.updatePaymentDetails.useMutation({
+    onSuccess: () => {
+      toast.success('Pagamento atualizado!');
+      refetchPayments();
+      if (isAgency) groupedPaymentsQuery.refetch();
+      setEditModalOpen(false);
+      setEditingPayment(null);
+    },
+    onError: (error) => {
+      toast.error(error.message || 'Erro ao atualizar pagamento');
+    },
+  });
+
   if (!authLoading && (!user || !['admin', 'agency'].includes(user.role))) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -170,6 +190,30 @@ export default function PaymentPage() {
     if (selectedReceiptPayment) {
       reviewReceiptMutation.mutate({ paymentId: selectedReceiptPayment.id, action: 'reject', notes: 'Comprovante rejeitado pelo administrador' });
     }
+  };
+
+  const handleEditPayment = (payment: any) => {
+    setEditingPayment(payment);
+    setEditForm({
+      amount: payment.amount ? String(payment.amount / 100) : '',
+      due_date: payment.due_date ? payment.due_date.split('T')[0] : '',
+      billing_period: payment.billing_period || '',
+      payment_type: payment.payment_type || '',
+      notes: payment.notes || '',
+    });
+    setEditModalOpen(true);
+  };
+
+  const handleSavePayment = () => {
+    if (!editingPayment) return;
+    updatePaymentMutation.mutate({
+      paymentId: editingPayment.id,
+      amount: editForm.amount ? Math.round(parseFloat(editForm.amount) * 100) : undefined,
+      due_date: editForm.due_date || undefined,
+      billing_period: editForm.billing_period || undefined,
+      payment_type: editForm.payment_type as any || undefined,
+      notes: editForm.notes || undefined,
+    });
   };
 
   const toggleCompanyExpanded = (companyId: string) => {
@@ -504,6 +548,7 @@ export default function PaymentPage() {
                                 <TableHead>Periodo</TableHead>
                                 <TableHead>Status</TableHead>
                                 <TableHead>Comprovante</TableHead>
+                                <TableHead className="w-[60px]"></TableHead>
                               </TableRow>
                             </TableHeader>
                             <TableBody>
@@ -524,6 +569,11 @@ export default function PaymentPage() {
                                     ) : (
                                       <span className="text-xs text-gray-400">-</span>
                                     )}
+                                  </TableCell>
+                                  <TableCell>
+                                    <Button variant="ghost" size="sm" onClick={() => handleEditPayment(payment)}>
+                                      <Pencil className="h-3.5 w-3.5" />
+                                    </Button>
                                   </TableCell>
                                 </TableRow>
                               ))}
@@ -595,6 +645,72 @@ export default function PaymentPage() {
                   </Button>
                 </>
               )}
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Edit Payment Modal */}
+        <Dialog open={editModalOpen} onOpenChange={setEditModalOpen}>
+          <DialogContent className="sm:max-w-[450px]">
+            <DialogHeader>
+              <DialogTitle>Editar Pagamento</DialogTitle>
+              <DialogDescription>
+                Altere os detalhes do pagamento
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="grid gap-2">
+                <Label>Valor (R$)</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={editForm.amount}
+                  onChange={(e) => setEditForm(prev => ({ ...prev, amount: e.target.value }))}
+                  placeholder="0.00"
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label>Data de Vencimento</Label>
+                <Input
+                  type="date"
+                  value={editForm.due_date}
+                  onChange={(e) => setEditForm(prev => ({ ...prev, due_date: e.target.value }))}
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label>Periodo</Label>
+                <Input
+                  value={editForm.billing_period}
+                  onChange={(e) => setEditForm(prev => ({ ...prev, billing_period: e.target.value }))}
+                  placeholder="2026-03"
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label>Tipo</Label>
+                <Select
+                  value={editForm.payment_type}
+                  onValueChange={(value) => setEditForm(prev => ({ ...prev, payment_type: value }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="monthly-fee">Mensalidade</SelectItem>
+                    <SelectItem value="insurance-fee">Seguro</SelectItem>
+                    <SelectItem value="setup-fee">Taxa de Setup</SelectItem>
+                    <SelectItem value="penalty">Multa</SelectItem>
+                    <SelectItem value="refund">Reembolso</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setEditModalOpen(false)}>
+                Cancelar
+              </Button>
+              <Button onClick={handleSavePayment} disabled={updatePaymentMutation.isPending}>
+                {updatePaymentMutation.isPending ? 'Salvando...' : 'Salvar'}
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>

@@ -7,7 +7,7 @@ import { Button } from "./ui/button";
 import LumaBar from "./ui/LumaBar";
 import AgencyFilterHeader from "./AgencyFilterHeader";
 import { trpc } from "@/lib/trpc";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 
 interface MenuItem {
   icon: any;
@@ -88,6 +88,12 @@ export default function DashboardLayout({
 }) {
   const { loading, user, logout } = useAuth();
   const [location] = useLocation();
+
+  // Track if user has visited the payments page this session — dismiss badge after visit
+  const hasVisitedPayments = useRef(false);
+  if (location.includes('payment')) {
+    hasVisitedPayments.current = true;
+  }
 
   // Check onboarding status for companies
   const companyOnboardingQuery = trpc.company.checkOnboarding.useQuery(undefined, {
@@ -195,7 +201,7 @@ export default function DashboardLayout({
     label: item.label,
     href: item.path,
     icon: item.icon,
-    badge: item.path.includes('payment') ? paymentBadge :
+    badge: item.path.includes('payment') ? (hasVisitedPayments.current ? 0 : paymentBadge) :
            item.path.includes('notification') ? notificationBadge : undefined,
   }));
 

@@ -72,6 +72,7 @@ export default function CompanyDocumentsModal({
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({
     contract: false,
     form: false,
+    signedDocs: true,
     employees: false,
     emails: false,
   });
@@ -177,7 +178,8 @@ export default function CompanyDocumentsModal({
   const realMeeting = historyData?.meeting;
 
   // Contract data can come from meeting (outreach flow), company (onboarding flow), or signed_documents
-  const latestSignedDoc = (historyData as any)?.signedContratoInicial?.[0];
+  const allSignedDocs = (historyData as any)?.signedContratoInicial || [];
+  const latestSignedDoc = allSignedDocs[0];
 
   const contractData = {
     signed_at: companyData?.contract_signed_at || realMeeting?.contract_signed_at || latestSignedDoc?.signed_at,
@@ -466,8 +468,28 @@ export default function CompanyDocumentsModal({
                       </Button>
                     )}
 
-                    {/* View uploaded PDF if exists */}
-                    {contractData.pdf_url && (
+                    {/* View uploaded PDFs - show all from contract_files if available */}
+                    {Array.isArray(companyData?.contract_files) && companyData.contract_files.length > 0 ? (
+                      <div className="space-y-2">
+                        <p className="text-sm font-medium text-gray-700">
+                          Documentos Enviados ({companyData.contract_files.length})
+                        </p>
+                        {companyData.contract_files.map((file: { url: string; key?: string; name?: string }, idx: number) => (
+                          <div key={file.key || idx} className="flex items-center gap-2">
+                            <a
+                              href={file.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-2 text-sm text-blue-600 hover:text-blue-800"
+                            >
+                              <Download className="h-4 w-4" />
+                              {file.name || `Documento ${idx + 1}`}
+                              <ExternalLink className="h-3 w-3" />
+                            </a>
+                          </div>
+                        ))}
+                      </div>
+                    ) : contractData.pdf_url ? (
                       <div className="flex items-center gap-2">
                         <a
                           href={contractData.pdf_url}
@@ -480,7 +502,7 @@ export default function CompanyDocumentsModal({
                           <ExternalLink className="h-3 w-3" />
                         </a>
                       </div>
-                    )}
+                    ) : null}
 
                     {/* Upload contract section - only show if not signed */}
                     {!contractData.signed_at && (
@@ -527,6 +549,97 @@ export default function CompanyDocumentsModal({
                   </div>
                 </CollapsibleContent>
               </Collapsible>
+
+              {/* Signed Documents Section - Show all signed documents */}
+              {allSignedDocs.length > 0 && (
+                <Collapsible open={openSections.signedDocs} onOpenChange={() => toggleSection('signedDocs')}>
+                  <CollapsibleTrigger className="w-full">
+                    <div className="flex items-center justify-between p-4 rounded-lg border bg-white hover:bg-gray-50 transition-colors">
+                      <div className="flex items-center gap-3">
+                        {openSections.signedDocs ? (
+                          <ChevronDown className="h-5 w-5 text-gray-500" />
+                        ) : (
+                          <ChevronRight className="h-5 w-5 text-gray-500" />
+                        )}
+                        <FileCheck className="h-5 w-5 text-green-600" />
+                        <span className="font-medium">Documentos Assinados</span>
+                      </div>
+                      <Badge variant="secondary">{allSignedDocs.length}</Badge>
+                    </div>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <div className="px-4 py-3 ml-8 border-l-2 border-gray-200 space-y-3">
+                      {allSignedDocs.map((doc: any) => (
+                        <div key={doc.id} className="rounded-lg border bg-gray-50 p-3 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <FileText className="h-4 w-4 text-blue-600" />
+                              <span className="font-medium text-sm">
+                                {doc.template?.name || doc.category || 'Documento'}
+                              </span>
+                            </div>
+                            <Badge className="bg-green-100 text-green-700">
+                              <CheckCircle2 className="h-3 w-3 mr-1" />
+                              Assinado
+                            </Badge>
+                          </div>
+                          <div className="text-sm text-muted-foreground space-y-1">
+                            {doc.signer_name && (
+                              <p>Assinado por: <span className="font-medium text-gray-700">{doc.signer_name}</span></p>
+                            )}
+                            {doc.signer_cpf && (
+                              <p>CPF: <span className="font-medium text-gray-700">{doc.signer_cpf}</span></p>
+                            )}
+                            {doc.signed_at && (
+                              <p>Data: <span className="font-medium text-gray-700">
+                                {format(new Date(doc.signed_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
+                              </span></p>
+                            )}
+                          </div>
+                          <div className="flex gap-2 pt-1">
+                            {doc.signed_pdf_url && (
+                              <a
+                                href={doc.signed_pdf_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800"
+                              >
+                                <Download className="h-3 w-3" />
+                                PDF Assinado
+                              </a>
+                            )}
+                            {doc.template?.file_url && (
+                              <a
+                                href={doc.template.file_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800"
+                              >
+                                <ExternalLink className="h-3 w-3" />
+                                Template Original
+                              </a>
+                            )}
+                            {doc.signature && (
+                              <button
+                                onClick={() => setViewingSignature({
+                                  name: doc.signer_name || 'Assinante',
+                                  role: 'Empresa',
+                                  date: doc.signed_at ? new Date(doc.signed_at).toLocaleDateString("pt-BR") : '',
+                                  signature: doc.signature,
+                                })}
+                                className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800"
+                              >
+                                <PenLine className="h-3 w-3" />
+                                Ver Assinatura
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </CollapsibleContent>
+                </Collapsible>
+              )}
 
               {/* Employee Contracts Section */}
               <Collapsible open={openSections.employees} onOpenChange={() => toggleSection('employees')}>
