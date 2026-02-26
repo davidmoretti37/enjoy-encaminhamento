@@ -44,7 +44,7 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import DashboardLayout from "@/components/DashboardLayout";
 import EmailComposeModal from "@/components/EmailComposeModal";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   format,
   addDays,
@@ -209,6 +209,13 @@ export default function CalendarPage() {
       toast.error(`Erro ao desbloquear: ${error.message}`);
     },
   });
+
+  // Auto-open settings modal when no availability is configured
+  useEffect(() => {
+    if ((isAffiliate || isAgency) && availability !== undefined && (!availability || (Array.isArray(availability) && availability.length === 0))) {
+      setSettingsModalOpen(true);
+    }
+  }, [availability, isAffiliate, isAgency]);
 
   // Meeting action mutations
   const updateMeetingStatusMutation = trpc.outreach.updateMeetingStatus.useMutation({

@@ -28,7 +28,12 @@ import {
   ChevronDown,
   ChevronUp,
   Building2,
-  FileText
+  FileText,
+  Pencil,
+  Loader2,
+  Mail,
+  Phone,
+  User,
 } from "lucide-react";
 import JobProgressBar, { statusToStep } from "@/components/JobProgressBar";
 import { Link } from "wouter";
@@ -51,6 +56,17 @@ export default function CompanyJobs() {
   const { user, loading: authLoading } = useAuth();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [showSummary, setShowSummary] = useState(false);
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [editingJob, setEditingJob] = useState<any>(null);
+  const [editFormData, setEditFormData] = useState({
+    title: '',
+    contract_type: '',
+    salary: '',
+    description: '',
+    requirements: '',
+    work_schedule: '',
+  });
+  const [expandedApplications, setExpandedApplications] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     title: '',
     contract_type: '',
@@ -113,6 +129,51 @@ export default function CompanyJobs() {
       toast.error('Erro ao iniciar busca: ' + error.message);
     },
   });
+
+  const updateJobMutation = trpc.company.updateJob.useMutation({
+    onSuccess: () => {
+      toast.success('Vaga atualizada com sucesso!');
+      setEditModalOpen(false);
+      setEditingJob(null);
+      utils.company.getJobs.invalidate();
+    },
+    onError: (error) => {
+      toast.error(error.message || 'Erro ao atualizar vaga');
+    },
+  });
+
+  // Applications query — only fetches when a job is expanded
+  const { data: applications, isLoading: applicationsLoading } = trpc.application.getByJob.useQuery(
+    { jobId: expandedApplications! },
+    { enabled: !!expandedApplications }
+  );
+
+  const openEditModal = (job: any) => {
+    setEditingJob(job);
+    setEditFormData({
+      title: job.title || '',
+      contract_type: job.contract_type || '',
+      salary: job.salary_min ? String(job.salary_min) : '',
+      description: job.description || '',
+      requirements: job.requirements || job.specific_requirements || '',
+      work_schedule: job.work_schedule || '',
+    });
+    setEditModalOpen(true);
+  };
+
+  const handleEditSubmit = () => {
+    if (!editingJob) return;
+    updateJobMutation.mutate({
+      jobId: editingJob.id,
+      title: editFormData.title || undefined,
+      description: editFormData.description || undefined,
+      contract_type: (editFormData.contract_type as 'estagio' | 'clt' | 'menor-aprendiz') || undefined,
+      salary_min: editFormData.salary ? parseFloat(editFormData.salary) : undefined,
+      salary_max: editFormData.salary ? parseFloat(editFormData.salary) : undefined,
+      work_schedule: editFormData.work_schedule || undefined,
+      requirements: editFormData.requirements || undefined,
+    });
+  };
 
   if (!user || user.role !== 'company') {
     return (
@@ -247,6 +308,88 @@ export default function CompanyJobs() {
                 </Button>
               </DialogFooter>
             </DialogContent>
+        </Dialog>
+
+        {/* Edit Job Dialog */}
+        <Dialog open={editModalOpen} onOpenChange={setEditModalOpen}>
+          <DialogContent className="sm:max-w-[600px]">
+            <DialogHeader>
+              <DialogTitle>Editar Vaga</DialogTitle>
+              <DialogDescription>
+                Atualize os detalhes da vaga.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              <div className="grid gap-2">
+                <Label htmlFor="edit-title">Título da vaga *</Label>
+                <Input
+                  id="edit-title"
+                  value={editFormData.title}
+                  onChange={(e) => setEditFormData(prev => ({ ...prev, title: e.target.value }))}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="edit-contract_type">Tipo de contrato *</Label>
+                  <Select
+                    value={editFormData.contract_type}
+                    onValueChange={(value) => setEditFormData(prev => ({ ...prev, contract_type: value }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="estagio">Estágio</SelectItem>
+                      <SelectItem value="clt">CLT</SelectItem>
+                      <SelectItem value="menor-aprendiz">Menor Aprendiz</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="edit-salary">Salário (R$)</Label>
+                  <Input
+                    id="edit-salary"
+                    type="number"
+                    value={editFormData.salary}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, salary: e.target.value }))}
+                  />
+                </div>
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="edit-work_schedule">Horário de trabalho</Label>
+                <WorkSchedulePicker
+                  value={editFormData.work_schedule}
+                  onChange={(value) => setEditFormData(prev => ({ ...prev, work_schedule: value }))}
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="edit-description">Descrição das atividades *</Label>
+                <Textarea
+                  id="edit-description"
+                  rows={3}
+                  value={editFormData.description}
+                  onChange={(e) => setEditFormData(prev => ({ ...prev, description: e.target.value }))}
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="edit-requirements">Requisitos</Label>
+                <Textarea
+                  id="edit-requirements"
+                  rows={3}
+                  value={editFormData.requirements}
+                  onChange={(e) => setEditFormData(prev => ({ ...prev, requirements: e.target.value }))}
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setEditModalOpen(false)}>
+                Cancelar
+              </Button>
+              <Button onClick={handleEditSubmit} disabled={updateJobMutation.isPending}>
+                {updateJobMutation.isPending ? 'Salvando...' : 'Salvar Alterações'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
         </Dialog>
 
         {/* Jobs List */}
@@ -425,6 +568,22 @@ export default function CompanyJobs() {
 
                       {/* Actions */}
                       <div className="flex justify-end gap-2 mt-4 pt-4 border-t border-gray-100">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => openEditModal(job)}
+                        >
+                          <Pencil className="h-4 w-4 mr-1" />
+                          Editar
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setExpandedApplications(expandedApplications === job.id ? null : job.id)}
+                        >
+                          <Users className="h-4 w-4 mr-1" />
+                          Ver Candidatos
+                        </Button>
                         {job.status === 'searching' && (
                           <Button
                             variant="outline"
@@ -459,6 +618,66 @@ export default function CompanyJobs() {
                           </Button>
                         )}
                       </div>
+
+                      {/* Applications List */}
+                      {expandedApplications === job.id && (
+                        <div className="mt-4 pt-4 border-t border-gray-100">
+                          <h4 className="text-sm font-medium text-gray-700 mb-3">Candidatos ({applications?.length || 0})</h4>
+                          {applicationsLoading ? (
+                            <div className="flex items-center justify-center py-6">
+                              <Loader2 className="h-5 w-5 animate-spin text-gray-400" />
+                            </div>
+                          ) : applications && applications.length > 0 ? (
+                            <div className="space-y-2">
+                              {applications.map((app: any) => (
+                                <div key={app.id} className="flex items-center justify-between p-3 bg-white rounded-lg border">
+                                  <div className="flex items-center gap-3">
+                                    <div className="h-8 w-8 rounded-full bg-gray-100 flex items-center justify-center">
+                                      <User className="h-4 w-4 text-gray-500" />
+                                    </div>
+                                    <div>
+                                      <p className="text-sm font-medium text-gray-900">
+                                        {app.candidates?.full_name || 'Candidato'}
+                                      </p>
+                                      <div className="flex items-center gap-3 text-xs text-gray-500">
+                                        {app.candidates?.email && (
+                                          <span className="flex items-center gap-1">
+                                            <Mail className="h-3 w-3" />
+                                            {app.candidates.email}
+                                          </span>
+                                        )}
+                                        {app.candidates?.phone && (
+                                          <span className="flex items-center gap-1">
+                                            <Phone className="h-3 w-3" />
+                                            {app.candidates.phone}
+                                          </span>
+                                        )}
+                                        {app.candidates?.city && (
+                                          <span className="flex items-center gap-1">
+                                            <MapPin className="h-3 w-3" />
+                                            {app.candidates.city}{app.candidates.state ? `, ${app.candidates.state}` : ''}
+                                          </span>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <Badge variant="secondary" className="text-xs">
+                                    {app.status === 'applied' && 'Em análise'}
+                                    {app.status === 'screening' && 'Pré-selecionado'}
+                                    {app.status === 'interview-scheduled' && 'Entrevista'}
+                                    {app.status === 'interviewed' && 'Entrevistado'}
+                                    {app.status === 'selected' && 'Selecionado'}
+                                    {app.status === 'rejected' && 'Não selecionado'}
+                                    {!['applied', 'screening', 'interview-scheduled', 'interviewed', 'selected', 'rejected'].includes(app.status) && (app.status || 'Pendente')}
+                                  </Badge>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-sm text-gray-400 text-center py-4">Nenhum candidato para esta vaga ainda</p>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </CardContent>
                 </Card>

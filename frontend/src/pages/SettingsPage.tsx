@@ -24,7 +24,7 @@ import {
   Copy,
   Check,
 } from "lucide-react";
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { toast } from "sonner";
 import { useAgencyContext } from "@/contexts/AgencyContext";
 import {
@@ -104,14 +104,18 @@ export default function SettingsPage() {
   // Agency profile (for payment info)
   const agencyProfileQuery = trpc.agency.getProfile.useQuery(undefined, {
     enabled: canManageDocs,
-    onSuccess: (data: any) => {
-      if (data) {
-        setPixKey(data.pix_key || "");
-        setPixKeyType(data.pix_key_type || "cnpj");
-        setPaymentInstructions(data.payment_instructions || "");
-      }
-    },
   });
+
+  // Sync payment info state from query data
+  useEffect(() => {
+    const data = agencyProfileQuery.data as any;
+    if (data && !paymentInfoLoaded) {
+      setPixKey(data.pix_key || "");
+      setPixKeyType(data.pix_key_type || "cnpj");
+      setPaymentInstructions(data.payment_instructions || "");
+      setPaymentInfoLoaded(true);
+    }
+  }, [agencyProfileQuery.data, paymentInfoLoaded]);
 
   const utils = trpc.useUtils();
 
@@ -119,6 +123,7 @@ export default function SettingsPage() {
     onSuccess: () => {
       toast.success("Informacoes de pagamento salvas!");
       setSavingPaymentInfo(false);
+      setPaymentInfoLoaded(false);
       utils.agency.getProfile.invalidate();
     },
     onError: (error: any) => {

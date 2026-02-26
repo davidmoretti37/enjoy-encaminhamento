@@ -3,8 +3,9 @@ import { useAgencyContext } from "@/contexts/AgencyContext";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Building2, Users, FileText, DollarSign, FileCheck, User, Plus } from "lucide-react";
+import { Building2, Users, FileText, DollarSign, FileCheck, User, Plus, Briefcase } from "lucide-react";
 import { useState } from "react";
+import { useLocation } from "wouter";
 import CompanyDocumentsModal from "@/components/CompanyDocumentsModal";
 import AddCompanyModal from "@/components/AddCompanyModal";
 import { CandidateCardModal } from "@/components/candidate-card/CandidateCard";
@@ -198,6 +199,8 @@ export default function ManagementTab() {
 }
 
 function CompanyRow({ company, onDocumentsClick }: { company: any; onDocumentsClick: (entity: any) => void }) {
+  const [, setLocation] = useLocation();
+
   return (
     <div className="p-3 bg-white rounded-lg border-2 border-slate-200 hover:border-orange-300 hover:shadow-md transition-all">
       <div className="flex items-center justify-between">
@@ -206,15 +209,27 @@ function CompanyRow({ company, onDocumentsClick }: { company: any; onDocumentsCl
             <Building2 className="h-4 w-4 text-white" />
           </div>
           <div>
-            <span className="text-sm font-medium text-gray-900">
+            <button
+              className="text-sm font-medium text-gray-900 hover:text-blue-700 hover:underline text-left"
+              onClick={() => setLocation(`/agency/companies/${company.id}/jobs`)}
+            >
               {company.company_name || "Empresa sem nome"}
-            </span>
+            </button>
             {company.contact_name && (
               <p className="text-xs text-gray-500">{company.contact_name}</p>
             )}
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="text-gray-600 border-gray-300 hover:bg-gray-50 hover:border-orange-300"
+            onClick={() => setLocation(`/agency/companies/${company.id}/jobs`)}
+          >
+            <Briefcase className="h-4 w-4 mr-1.5" />
+            Vagas
+          </Button>
           <Button
             variant="outline"
             size="sm"

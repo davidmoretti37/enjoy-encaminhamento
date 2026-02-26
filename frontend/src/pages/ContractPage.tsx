@@ -54,7 +54,7 @@ export default function ContractPage() {
   const refetchContracts = isAffiliate ? affiliateContractsQuery.refetch : agencyContractsQuery.refetch;
   const contractsLoading = affiliateContractsQuery.isLoading || agencyContractsQuery.isLoading;
 
-  // Mutations (admin only)
+  // Mutations (admin + agency)
   const updateStatusMutation = trpc.admin.updateContractStatus.useMutation({
     onSuccess: () => {
       refetchContracts();
@@ -244,7 +244,7 @@ export default function ContractPage() {
                     <TableHead>Salário</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>{isAdmin ? 'Início' : 'Data Início'}</TableHead>
-                    {isAdmin && <TableHead className="text-right">Ações</TableHead>}
+                    {(isAdmin || isAgency) && <TableHead className="text-right">Ações</TableHead>}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -272,7 +272,7 @@ export default function ContractPage() {
                         <TableCell>
                           {contract.start_date ? new Date(contract.start_date).toLocaleDateString('pt-BR') : '-'}
                         </TableCell>
-                        {isAdmin && (
+                        {(isAdmin || isAgency) && (
                           <TableCell className="text-right">
                             <div className="flex justify-end gap-2">
                               {contract.status === 'pending-signature' && (

@@ -108,7 +108,7 @@ export function AgencyProvider({ children }: { children: ReactNode }) {
     currentAgency,
     availableAgencies,
     isLoading: isLoadingAgencies,
-    isAllAgenciesMode: currentAgency === null,
+    isAllAgenciesMode: isAdmin && currentAgency === null,
     isServerSynced: isAdmin ? serverSynced : true,
     setCurrentAgency,
   };

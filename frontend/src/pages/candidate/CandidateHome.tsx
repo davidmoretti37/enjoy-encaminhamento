@@ -15,7 +15,8 @@ import {
   CheckCircle,
   PartyPopper,
   AlertTriangle,
-  ArrowRight
+  ArrowRight,
+  Sparkles,
 } from "lucide-react";
 import { useLocation } from "wouter";
 
@@ -216,6 +217,29 @@ export default function CandidateHome() {
               Explorar vagas
             </Button>
           </div>
+        )}
+
+        {/* Assessments Card - DISC & PDP */}
+        {profile && (profile.disc_completed_at || profile.pdp_completed_at) && (
+          <Card className="border-purple-200 bg-purple-50/50">
+            <CardContent className="pt-6">
+              <div className="flex items-center gap-4">
+                <div className="h-12 w-12 rounded-full bg-purple-100 flex items-center justify-center">
+                  <Sparkles className="h-6 w-6 text-purple-600" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="font-bold text-purple-900">Seus Resultados DISC & PDP</h3>
+                  <p className="text-purple-700 text-sm">
+                    Veja seu perfil comportamental e competências
+                  </p>
+                </div>
+                <Button variant="outline" onClick={() => setLocation('/candidate/perfil?tab=assessments')}>
+                  Ver Resultados
+                  <ArrowRight className="h-4 w-4 ml-2" />
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
         )}
 
         {/* Profile Completion Card - only show if incomplete */}

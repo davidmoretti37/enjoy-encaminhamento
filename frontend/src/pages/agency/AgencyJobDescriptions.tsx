@@ -48,6 +48,8 @@ import {
   ThumbsUp,
   SlidersHorizontal,
   UserPlus,
+  Pencil,
+  Trash2,
 } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 import { Slider } from '@/components/ui/slider';
@@ -652,6 +654,23 @@ export default function AgencyJobDescriptions() {
     openings: '1',
   });
 
+  // Edit job dialog state
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [editingJob, setEditingJob] = useState<any>(null);
+  const [editFormData, setEditFormData] = useState({
+    title: '',
+    contract_type: '',
+    work_type: 'presencial',
+    work_schedule: '',
+    salary: '',
+    description: '',
+    requirements: '',
+    openings: '1',
+  });
+
+  // Delete confirmation state
+  const [deleteConfirmJob, setDeleteConfirmJob] = useState<any>(null);
+
   const utils = trpc.useUtils();
 
   // Get jobs for this company
@@ -700,6 +719,75 @@ export default function AgencyJobDescriptions() {
       requirements: formData.requirements || undefined,
       openings: formData.openings ? parseInt(formData.openings) : 1,
     });
+  };
+
+  // Edit job mutation
+  const updateJobMutation = trpc.job.updateForCompany.useMutation({
+    onSuccess: () => {
+      toast.success('Vaga atualizada com sucesso!');
+      setIsEditDialogOpen(false);
+      setEditingJob(null);
+      utils.job.getByCompanyId.invalidate({ companyId: companyId || '' });
+    },
+    onError: (error) => {
+      toast.error(error.message || 'Erro ao atualizar vaga');
+    },
+  });
+
+  // Delete job mutation
+  const deleteJobMutation = trpc.job.deleteForCompany.useMutation({
+    onSuccess: () => {
+      toast.success('Vaga excluída com sucesso!');
+      setDeleteConfirmJob(null);
+      utils.job.getByCompanyId.invalidate({ companyId: companyId || '' });
+    },
+    onError: (error) => {
+      toast.error(error.message || 'Erro ao excluir vaga');
+    },
+  });
+
+  const handleEditJob = (job: any) => {
+    setEditingJob(job);
+    setEditFormData({
+      title: job.title || '',
+      contract_type: job.contract_type || '',
+      work_type: job.work_type || 'presencial',
+      work_schedule: job.work_schedule || '',
+      salary: job.salary_min ? String(job.salary_min) : '',
+      description: job.description || '',
+      requirements: job.specific_requirements || job.requirements || '',
+      openings: String(job.openings || 1),
+    });
+    setIsEditDialogOpen(true);
+  };
+
+  const handleSaveEdit = () => {
+    if (!editingJob || !editFormData.title || !editFormData.description) {
+      toast.error('Preencha os campos obrigatórios');
+      return;
+    }
+    updateJobMutation.mutate({
+      jobId: editingJob.id,
+      title: editFormData.title,
+      description: editFormData.description,
+      contractType: editFormData.contract_type as 'estagio' | 'clt' | 'menor-aprendiz' || undefined,
+      workType: editFormData.work_type as 'presencial' | 'remoto' | 'hibrido',
+      workSchedule: editFormData.work_schedule || undefined,
+      salaryMin: editFormData.salary ? parseFloat(editFormData.salary) : undefined,
+      salaryMax: editFormData.salary ? parseFloat(editFormData.salary) : undefined,
+      requirements: editFormData.requirements || undefined,
+      openings: editFormData.openings ? parseInt(editFormData.openings) : 1,
+    });
+  };
+
+  const handleDeleteJob = (job: any) => {
+    setDeleteConfirmJob(job);
+  };
+
+  const confirmDelete = () => {
+    if (deleteConfirmJob) {
+      deleteJobMutation.mutate({ jobId: deleteConfirmJob.id });
+    }
   };
 
   // Get company name from the first job (if available)
@@ -879,12 +967,30 @@ export default function AgencyJobDescriptions() {
                             {contractTypeLabels[job.contract_type] || job.contract_type}
                           </Badge>
                         </div>
-                        <Badge className={statusConfig.color}>
-                          <span className="flex items-center gap-1">
-                            {statusConfig.icon}
-                            {statusConfig.label}
-                          </span>
-                        </Badge>
+                        <div className="flex items-center gap-2">
+                          <Badge className={statusConfig.color}>
+                            <span className="flex items-center gap-1">
+                              {statusConfig.icon}
+                              {statusConfig.label}
+                            </span>
+                          </Badge>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleEditJob(job)}
+                            className="h-8 w-8 p-0"
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleDeleteJob(job)}
+                            className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
                       </div>
 
                       {/* Info Grid - Same style as company portal */}
@@ -1057,6 +1163,145 @@ export default function AgencyJobDescriptions() {
           )}
         </div>
         </ContentTransition>
+
+        {/* Edit Job Dialog */}
+        <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+          <DialogContent className="sm:max-w-[600px]">
+            <DialogHeader>
+              <DialogTitle>Editar Vaga</DialogTitle>
+              <DialogDescription>
+                Altere os detalhes da vaga para {companyName}.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-4 max-h-[60vh] overflow-y-auto">
+              <div className="grid gap-2">
+                <Label htmlFor="edit-title">Título da vaga *</Label>
+                <Input
+                  id="edit-title"
+                  placeholder="Ex: Auxiliar Administrativo"
+                  value={editFormData.title}
+                  onChange={(e) => setEditFormData(prev => ({ ...prev, title: e.target.value }))}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="edit-contract_type">Tipo de contrato *</Label>
+                  <Select
+                    value={editFormData.contract_type}
+                    onValueChange={(value) => setEditFormData(prev => ({ ...prev, contract_type: value }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="estagio">Estágio</SelectItem>
+                      <SelectItem value="clt">CLT</SelectItem>
+                      <SelectItem value="menor-aprendiz">Jovem Aprendiz</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="edit-work_type">Modalidade</Label>
+                  <Select
+                    value={editFormData.work_type}
+                    onValueChange={(value) => setEditFormData(prev => ({ ...prev, work_type: value }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="presencial">Presencial</SelectItem>
+                      <SelectItem value="remoto">Remoto</SelectItem>
+                      <SelectItem value="hibrido">Híbrido</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="edit-salary">Salário (R$)</Label>
+                  <Input
+                    id="edit-salary"
+                    type="number"
+                    placeholder="1500"
+                    value={editFormData.salary}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, salary: e.target.value }))}
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="edit-openings">Número de vagas</Label>
+                  <Input
+                    id="edit-openings"
+                    type="number"
+                    min="1"
+                    placeholder="1"
+                    value={editFormData.openings}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, openings: e.target.value }))}
+                  />
+                </div>
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="edit-work_schedule">Horário de trabalho</Label>
+                <WorkSchedulePicker
+                  value={editFormData.work_schedule}
+                  onChange={(value) => setEditFormData(prev => ({ ...prev, work_schedule: value }))}
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="edit-description">Descrição das atividades *</Label>
+                <Textarea
+                  id="edit-description"
+                  placeholder="Descreva as principais atividades e responsabilidades..."
+                  rows={3}
+                  value={editFormData.description}
+                  onChange={(e) => setEditFormData(prev => ({ ...prev, description: e.target.value }))}
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="edit-requirements">Requisitos</Label>
+                <Textarea
+                  id="edit-requirements"
+                  placeholder="Descreva os requisitos necessários..."
+                  rows={3}
+                  value={editFormData.requirements}
+                  onChange={(e) => setEditFormData(prev => ({ ...prev, requirements: e.target.value }))}
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>
+                Cancelar
+              </Button>
+              <Button onClick={handleSaveEdit} disabled={updateJobMutation.isPending}>
+                {updateJobMutation.isPending ? 'Salvando...' : 'Salvar Alterações'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Delete Confirmation Dialog */}
+        <Dialog open={!!deleteConfirmJob} onOpenChange={(open) => !open && setDeleteConfirmJob(null)}>
+          <DialogContent className="sm:max-w-[400px]">
+            <DialogHeader>
+              <DialogTitle>Excluir Vaga</DialogTitle>
+              <DialogDescription>
+                Tem certeza que deseja excluir a vaga "{deleteConfirmJob?.title}"? Esta ação não pode ser desfeita.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter className="gap-2">
+              <Button variant="outline" onClick={() => setDeleteConfirmJob(null)}>
+                Cancelar
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={confirmDelete}
+                disabled={deleteJobMutation.isPending}
+              >
+                {deleteJobMutation.isPending ? 'Excluindo...' : 'Excluir Vaga'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </DashboardLayout>
   );

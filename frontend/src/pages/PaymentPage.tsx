@@ -60,9 +60,9 @@ export default function PaymentPage() {
   // For affiliate commission card
   const affiliateQuery = trpc.affiliate.getByUserId.useQuery(undefined, { enabled: isAffiliate });
 
-  // Pending review receipts (admin only)
+  // Pending review receipts (admin + agency)
   const pendingReviewQuery = trpc.admin.getPaymentsPendingReview.useQuery(undefined, {
-    enabled: isAdmin,
+    enabled: isAdmin || isAgency,
   });
 
   // Select the right data based on role
@@ -352,7 +352,7 @@ export default function PaymentPage() {
           </Card>
 
           {/* Pending Receipts Card */}
-          {isAdmin && pendingReviews.length > 0 && (
+          {(isAdmin || isAgency) && pendingReviews.length > 0 && (
             <Card className="border-orange-200 bg-orange-50/50 shadow-md hover:shadow-lg transition-shadow">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium text-orange-700">Comprovantes Pendentes</CardTitle>
@@ -367,7 +367,7 @@ export default function PaymentPage() {
         </div>
 
         {/* Pending Receipt Reviews - Admin only */}
-        {isAdmin && pendingReviews.length > 0 && (
+        {(isAdmin || isAgency) && pendingReviews.length > 0 && (
           <Card className="border-orange-200">
             <CardHeader>
               <CardTitle className="text-lg flex items-center gap-2 text-orange-700">
@@ -583,7 +583,7 @@ export default function PaymentPage() {
               <Button variant="outline" onClick={() => setReceiptModalOpen(false)}>
                 Fechar
               </Button>
-              {isAdmin && (
+              {(isAdmin || isAgency) && (
                 <>
                   <Button variant="destructive" onClick={handleRejectReceipt} disabled={reviewReceiptMutation.isPending}>
                     <ThumbsDown className="h-4 w-4 mr-1" />

@@ -383,13 +383,10 @@ export async function createCompanyWithUser(input: {
   if (input.state) companyData.state = input.state;
   if (input.agencyId) companyData.agency_id = input.agencyId;
   if (input.affiliateId) companyData.affiliate_id = input.affiliateId;
-  if (input.contactPerson) companyData.contact_name = input.contactPerson;
+  // contact_name and employee_count don't exist on companies table — stored in company_forms
   if (input.businessName) companyData.business_name = input.businessName;
   if (input.website) companyData.website = input.website;
-  if (input.employeeCount) companyData.employee_count = input.employeeCount;
   if (input.cep) companyData.postal_code = input.cep;
-  // complement and neighborhood are stored in company_forms, not in companies table
-  if (input.pendingContractSigning !== undefined) companyData.pending_contract_signing = input.pendingContractSigning;
   if (input.contractSignedAt) companyData.contract_signed_at = input.contractSignedAt;
 
   const { data: companyResult, error: companyError } = await supabaseAdmin

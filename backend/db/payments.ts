@@ -346,6 +346,70 @@ export async function getPaymentAlertCounts(): Promise<{
   };
 }
 
+// Agency-scoped version of getPaymentAlertCounts
+export async function getPaymentAlertCountsByAgency(agencyId: string): Promise<{
+  upcoming: number;
+  overdue: number;
+  pendingReview: number;
+  total: number;
+}> {
+  const now = new Date();
+  const sevenDaysFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString();
+
+  const { count: upcoming } = await supabaseAdmin
+    .from("payments")
+    .select("*, companies!inner(agency_id)", { count: "exact", head: true })
+    .eq("status", "pending")
+    .eq("companies.agency_id", agencyId)
+    .lte("due_date", sevenDaysFromNow)
+    .gte("due_date", now.toISOString());
+
+  const { count: overdue } = await supabaseAdmin
+    .from("payments")
+    .select("*, companies!inner(agency_id)", { count: "exact", head: true })
+    .eq("status", "overdue")
+    .eq("companies.agency_id", agencyId);
+
+  const { count: pendingReview } = await supabaseAdmin
+    .from("payments")
+    .select("*, companies!inner(agency_id)", { count: "exact", head: true })
+    .eq("receipt_status", "pending-review")
+    .eq("companies.agency_id", agencyId);
+
+  const u = upcoming || 0;
+  const o = overdue || 0;
+  const p = pendingReview || 0;
+
+  return {
+    upcoming: u,
+    overdue: o,
+    pendingReview: p,
+    total: u + o + p,
+  };
+}
+
+// Agency-scoped version of getPaymentsPendingReview
+export async function getPaymentsPendingReviewByAgency(agencyId: string): Promise<any[]> {
+  const { data, error } = await supabaseAdmin
+    .from("payments")
+    .select(`
+      *,
+      contracts(contract_number, contract_type, candidate_id,
+        candidate:candidates(id, full_name)
+      ),
+      companies!inner(company_name, email, agency_id)
+    `)
+    .eq("receipt_status", "pending-review")
+    .eq("companies.agency_id", agencyId)
+    .order("receipt_uploaded_at", { ascending: true });
+
+  if (error) {
+    console.error("[Database] Failed to get agency pending review payments:", error);
+    return [];
+  }
+  return data || [];
+}
+
 // ============================================
 // Agency payment tracking (per-company breakdown)
 // ============================================
