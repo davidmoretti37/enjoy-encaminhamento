@@ -173,7 +173,9 @@ export const adminRouter = router({
       due_date: z.string().optional(),
       billing_period: z.string().optional(),
       notes: z.string().optional(),
+      job_id: z.string().uuid().nullable().optional(),
       payment_type: z.enum(['monthly-fee', 'insurance-fee', 'setup-fee', 'penalty', 'refund']).optional(),
+      status: z.enum(['pending', 'paid', 'overdue', 'failed', 'refunded']).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       const agencyId = await getAgencyScope(ctx);
@@ -187,9 +189,69 @@ export const adminRouter = router({
       if (fields.due_date !== undefined) updates.due_date = fields.due_date;
       if (fields.billing_period !== undefined) updates.billing_period = fields.billing_period;
       if (fields.notes !== undefined) updates.notes = fields.notes;
+      if (fields.job_id !== undefined) updates.job_id = fields.job_id;
       if (fields.payment_type !== undefined) updates.payment_type = fields.payment_type;
+      if (fields.status !== undefined) {
+        updates.status = fields.status;
+        if (fields.status === 'paid') {
+          updates.paid_at = new Date().toISOString();
+        }
+      }
 
       await db.updatePayment(paymentId, updates);
+      return { success: true };
+    }),
+
+  createManualPayment: agencyProcedure
+    .input(z.object({
+      company_id: z.string().uuid(),
+      job_id: z.string().uuid().optional(),
+      amount: z.number().min(0),
+      due_date: z.string(),
+      billing_period: z.string().optional(),
+      payment_type: z.enum(['monthly-fee', 'insurance-fee', 'setup-fee', 'penalty', 'refund']),
+      status: z.enum(['pending', 'paid', 'overdue']).default('pending'),
+      notes: z.string().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const agencyId = await getAgencyScope(ctx);
+      if (agencyId) {
+        // Verify company belongs to agency
+        const company = await db.getCompanyById(input.company_id);
+        if (!company || company.agency_id !== agencyId) {
+          throw new TRPCError({ code: 'FORBIDDEN', message: 'Company does not belong to your agency' });
+        }
+      }
+
+      const paymentData: any = {
+        company_id: input.company_id,
+        job_id: input.job_id || null,
+        amount: input.amount,
+        due_date: input.due_date,
+        billing_period: input.billing_period || null,
+        payment_type: input.payment_type,
+        status: input.status,
+        notes: input.notes || null,
+      };
+      if (input.status === 'paid') {
+        paymentData.paid_at = new Date().toISOString();
+      }
+
+      const id = await db.createPayment(paymentData);
+      return { success: true, id };
+    }),
+
+  deletePayment: agencyProcedure
+    .input(z.object({
+      paymentId: z.string().uuid(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const agencyId = await getAgencyScope(ctx);
+      if (agencyId) {
+        await verifyPaymentBelongsToAgency(input.paymentId, agencyId);
+      }
+
+      await db.deletePayment(input.paymentId);
       return { success: true };
     }),
 

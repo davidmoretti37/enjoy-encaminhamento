@@ -264,6 +264,27 @@ export const affiliateRouter = router({
       return await db.getPaymentsByAffiliateId(affiliate.id, agencyId);
     }),
 
+  // Get payments grouped by company (with jobs for vaga tabs)
+  getPaymentsGroupedByCompany: protectedProcedure
+    .input(z.object({ agencyId: z.string().uuid().nullable().optional() }).optional())
+    .query(async ({ ctx, input }) => {
+      const affiliate = await db.getAffiliateByUserId(ctx.user.id);
+      if (!affiliate) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Affiliate not found' });
+      }
+      const agencyId = input?.agencyId === null
+        ? undefined
+        : (input?.agencyId ?? await db.getAdminAgencyContext(ctx.user.id));
+
+      if (agencyId) {
+        return await db.getPaymentsGroupedByCompany(agencyId);
+      }
+      // All agencies mode - get all affiliate's agency IDs
+      const agencies = await db.getAgenciesByAffiliateId(affiliate.id);
+      const agencyIds = agencies.map((a: any) => a.id);
+      return await db.getPaymentsGroupedByCompany(null, agencyIds);
+    }),
+
   // Bulk import companies from Excel/CSV
   bulkImportCompanies: protectedProcedure
     .input(z.object({

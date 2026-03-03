@@ -31,6 +31,12 @@ export async function updatePayment(id: string, data: Partial<InsertPayment>): P
   if (error) throw error;
 }
 
+export async function deletePayment(id: string): Promise<void> {
+  const { error } = await supabaseAdmin.from("payments").delete().eq("id", id);
+
+  if (error) throw error;
+}
+
 export async function getPaymentById(paymentId: string, companyId: string): Promise<Payment | null> {
   const { data, error } = await supabase
     .from("payments")
@@ -50,7 +56,7 @@ export async function getAllPayments(): Promise<any[]> {
     .select(
       `
       *,
-      contracts(contract_number),
+      contracts(contract_number, job:jobs(id, title)),
       companies(company_name, email)
     `
     )
@@ -237,6 +243,7 @@ export async function generateContractPayments(contractId: string): Promise<numb
     payments.push({
       contract_id: contractId,
       company_id: contract.company_id,
+      job_id: contract.job_id || null,
       amount: contract.insurance_fee,
       payment_type: 'insurance-fee',
       due_date: contract.start_date,
@@ -281,6 +288,7 @@ export async function generateContractPayments(contractId: string): Promise<numb
     payments.push({
       contract_id: contractId,
       company_id: contract.company_id,
+      job_id: contract.job_id || null,
       amount: monthlyFee,
       payment_type: 'monthly-fee',
       due_date: current.toISOString(),
@@ -414,20 +422,48 @@ export async function getPaymentsPendingReviewByAgency(agencyId: string): Promis
 // Agency payment tracking (per-company breakdown)
 // ============================================
 
-export async function getPaymentsGroupedByCompany(agencyId: string) {
-  // Get all payments for companies belonging to this agency
-  const { data, error } = await supabaseAdmin
+export async function getPaymentsGroupedByCompany(agencyId?: string | null, agencyIds?: string[]) {
+  // Get all payments for companies belonging to the agency/agencies
+  let query = supabaseAdmin
     .from("payments")
     .select(`
       *,
-      companies!inner(id, company_name, agency_id)
-    `)
-    .eq("companies.agency_id", agencyId)
-    .order("due_date", { ascending: true });
+      companies!inner(id, company_name, agency_id),
+      job:jobs(id, title),
+      contracts(
+        id, contract_number,
+        candidate:candidates(id, full_name),
+        job:jobs(id, title)
+      )
+    `);
+
+  if (agencyId) {
+    query = query.eq("companies.agency_id", agencyId);
+  } else if (agencyIds && agencyIds.length > 0) {
+    query = query.in("companies.agency_id", agencyIds);
+  }
+
+  const { data, error } = await query.order("due_date", { ascending: true });
 
   if (error) {
     console.error("[Database] Failed to get payments grouped by company:", error);
     return [];
+  }
+
+  // Collect unique company IDs and fetch their jobs
+  const companyIds = [...new Set((data || []).map((p: any) => p.companies?.id).filter(Boolean))];
+
+  // Fetch all jobs for these companies in one query
+  const { data: jobsData } = await supabaseAdmin
+    .from("jobs")
+    .select("id, title, company_id")
+    .in("company_id", companyIds.length > 0 ? companyIds : ['_none_']);
+
+  // Build a map of company_id -> jobs[]
+  const companyJobsMap: Record<string, { id: string; title: string }[]> = {};
+  for (const job of jobsData || []) {
+    if (!companyJobsMap[job.company_id]) companyJobsMap[job.company_id] = [];
+    companyJobsMap[job.company_id].push({ id: job.id, title: job.title });
   }
 
   // Group by company
@@ -441,6 +477,7 @@ export async function getPaymentsGroupedByCompany(agencyId: string) {
     pendingCount: number;
     pendingAmount: number;
     nextPaymentDate: string | null;
+    jobs: { id: string; title: string }[];
     payments: any[];
   }> = {};
 
@@ -463,6 +500,7 @@ export async function getPaymentsGroupedByCompany(agencyId: string) {
         pendingCount: 0,
         pendingAmount: 0,
         nextPaymentDate: null,
+        jobs: companyJobsMap[companyId] || [],
         payments: [],
       };
     }

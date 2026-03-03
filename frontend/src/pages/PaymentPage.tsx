@@ -19,6 +19,7 @@ import { trpc } from "@/lib/trpc";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import {
   DollarSign,
   CheckCircle,
@@ -32,6 +33,8 @@ import {
   ChevronDown,
   ChevronUp,
   Pencil,
+  Plus,
+  Trash2,
 } from "lucide-react";
 import DashboardLayout from "@/components/DashboardLayout";
 import { useState, useMemo } from "react";
@@ -45,7 +48,13 @@ export default function PaymentPage() {
   const [expandedCompanies, setExpandedCompanies] = useState<Record<string, boolean>>({});
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [editingPayment, setEditingPayment] = useState<any>(null);
-  const [editForm, setEditForm] = useState({ amount: '', due_date: '', billing_period: '', payment_type: '', notes: '' });
+  const [editForm, setEditForm] = useState({ amount: '', due_date: '', billing_period: '', payment_type: '', status: '', notes: '', job_id: '' });
+  const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [createCompanyId, setCreateCompanyId] = useState<string>('');
+  const [createForm, setCreateForm] = useState({ amount: '', due_date: '', billing_period: '', payment_type: 'monthly-fee', status: 'pending', notes: '', job_id: '' });
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [deletingPayment, setDeletingPayment] = useState<any>(null);
+  const [activeVagaTabs, setActiveVagaTabs] = useState<Record<string, string>>({});
 
   // Determine role capabilities
   const isAffiliate = user?.role === 'admin' || user?.role === 'super_admin';
@@ -59,10 +68,15 @@ export default function PaymentPage() {
   );
   const agencyPaymentsQuery = trpc.agency.getPayments.useQuery(undefined, { enabled: isAgency });
 
-  // Per-company grouped data (agency only - admin groups client-side)
-  const groupedPaymentsQuery = trpc.agency.getPaymentsGroupedByCompany.useQuery(undefined, {
+  // Per-company grouped data (server-side for both admin and agency)
+  const agencyGroupedQuery = trpc.agency.getPaymentsGroupedByCompany.useQuery(undefined, {
     enabled: isAgency,
   });
+  const affiliateGroupedQuery = trpc.affiliate.getPaymentsGroupedByCompany.useQuery(
+    { agencyId: currentAgency?.id ?? null },
+    { enabled: isAffiliate }
+  );
+  const groupedPaymentsQuery = isAgency ? agencyGroupedQuery : affiliateGroupedQuery;
 
   // For affiliate commission card
   const affiliateQuery = trpc.affiliate.getByUserId.useQuery(undefined, { enabled: isAffiliate });
@@ -72,67 +86,21 @@ export default function PaymentPage() {
     enabled: isAdmin || isAgency,
   });
 
+  // Jobs for the selected company (used in create payment modal)
+  const companyJobsQuery = trpc.job.getByCompanyId.useQuery(
+    { companyId: createCompanyId },
+    { enabled: !!createCompanyId }
+  );
+
   // Select the right data based on role
   const payments = isAffiliate ? affiliatePaymentsQuery.data : agencyPaymentsQuery.data;
   const refetchPayments = isAffiliate ? affiliatePaymentsQuery.refetch : agencyPaymentsQuery.refetch;
-  const paymentsLoading = affiliatePaymentsQuery.isLoading || agencyPaymentsQuery.isLoading;
+  const paymentsLoading = affiliatePaymentsQuery.isLoading || agencyPaymentsQuery.isLoading || groupedPaymentsQuery.isLoading;
   const affiliate = affiliateQuery.data;
   const pendingReviews = pendingReviewQuery.data || [];
 
-  // Group payments by company (client-side for admin, server-side for agency)
-  const companyGroups = useMemo(() => {
-    if (isAgency) return groupedPaymentsQuery.data || [];
-
-    // Group admin payments client-side
-    if (!payments || payments.length === 0) return [];
-
-    const grouped: Record<string, any> = {};
-    for (const payment of payments) {
-      const companyId = payment.companies?.id || 'unknown';
-      const companyName = payment.companies?.company_name || 'N/A';
-
-      if (!grouped[companyId]) {
-        grouped[companyId] = {
-          companyId,
-          companyName,
-          totalDue: 0,
-          totalPaid: 0,
-          overdueCount: 0,
-          overdueAmount: 0,
-          pendingCount: 0,
-          pendingAmount: 0,
-          nextPaymentDate: null,
-          payments: [],
-        };
-      }
-
-      const g = grouped[companyId];
-      g.payments.push(payment);
-
-      if (payment.status === 'paid') {
-        g.totalPaid += payment.amount || 0;
-      } else if (payment.status === 'overdue') {
-        g.overdueCount++;
-        g.overdueAmount += payment.amount || 0;
-        g.totalDue += payment.amount || 0;
-      } else if (payment.status === 'pending') {
-        g.pendingCount++;
-        g.pendingAmount += payment.amount || 0;
-        g.totalDue += payment.amount || 0;
-
-        if (payment.due_date && (!g.nextPaymentDate || payment.due_date < g.nextPaymentDate)) {
-          g.nextPaymentDate = payment.due_date;
-        }
-      }
-    }
-
-    return Object.values(grouped).sort((a: any, b: any) => {
-      if (a.overdueCount > 0 && b.overdueCount === 0) return -1;
-      if (b.overdueCount > 0 && a.overdueCount === 0) return 1;
-      if (a.nextPaymentDate && b.nextPaymentDate) return a.nextPaymentDate.localeCompare(b.nextPaymentDate);
-      return 0;
-    });
-  }, [isAgency, payments, groupedPaymentsQuery.data]);
+  // Group payments by company (server-side for both admin and agency)
+  const companyGroups = groupedPaymentsQuery.data || [];
 
   // Mutations (admin only - for receipt review)
   const reviewReceiptMutation = trpc.admin.reviewPaymentReceipt.useMutation({
@@ -140,7 +108,7 @@ export default function PaymentPage() {
       toast.success(variables.action === 'approve' ? 'Comprovante aprovado!' : 'Comprovante rejeitado');
       pendingReviewQuery.refetch();
       refetchPayments();
-      if (isAgency) groupedPaymentsQuery.refetch();
+      groupedPaymentsQuery.refetch();
       setReceiptModalOpen(false);
     },
     onError: (error) => {
@@ -152,12 +120,38 @@ export default function PaymentPage() {
     onSuccess: () => {
       toast.success('Pagamento atualizado!');
       refetchPayments();
-      if (isAgency) groupedPaymentsQuery.refetch();
+      groupedPaymentsQuery.refetch();
       setEditModalOpen(false);
       setEditingPayment(null);
     },
     onError: (error) => {
       toast.error(error.message || 'Erro ao atualizar pagamento');
+    },
+  });
+
+  const createPaymentMutation = trpc.admin.createManualPayment.useMutation({
+    onSuccess: () => {
+      toast.success('Pagamento criado!');
+      refetchPayments();
+      groupedPaymentsQuery.refetch();
+      setCreateModalOpen(false);
+      setCreateForm({ amount: '', due_date: '', billing_period: '', payment_type: 'monthly-fee', status: 'pending', notes: '', job_id: '' });
+    },
+    onError: (error) => {
+      toast.error(error.message || 'Erro ao criar pagamento');
+    },
+  });
+
+  const deletePaymentMutation = trpc.admin.deletePayment.useMutation({
+    onSuccess: () => {
+      toast.success('Pagamento excluido!');
+      refetchPayments();
+      groupedPaymentsQuery.refetch();
+      setDeleteModalOpen(false);
+      setDeletingPayment(null);
+    },
+    onError: (error) => {
+      toast.error(error.message || 'Erro ao excluir pagamento');
     },
   });
 
@@ -194,12 +188,17 @@ export default function PaymentPage() {
 
   const handleEditPayment = (payment: any) => {
     setEditingPayment(payment);
+    // Also set createCompanyId so the job query fetches this company's jobs
+    const companyId = payment.companies?.id || payment.company_id || '';
+    setCreateCompanyId(companyId);
     setEditForm({
       amount: payment.amount ? String(payment.amount / 100) : '',
       due_date: payment.due_date ? payment.due_date.split('T')[0] : '',
       billing_period: payment.billing_period || '',
       payment_type: payment.payment_type || '',
+      status: payment.status || '',
       notes: payment.notes || '',
+      job_id: payment.job?.id || payment.job_id || '',
     });
     setEditModalOpen(true);
   };
@@ -212,8 +211,43 @@ export default function PaymentPage() {
       due_date: editForm.due_date || undefined,
       billing_period: editForm.billing_period || undefined,
       payment_type: editForm.payment_type as any || undefined,
+      status: editForm.status as any || undefined,
       notes: editForm.notes || undefined,
+      job_id: editForm.job_id || null,
     });
+  };
+
+  const handleCreatePayment = (companyId: string) => {
+    setCreateCompanyId(companyId);
+    setCreateForm({ amount: '', due_date: '', billing_period: '', payment_type: 'monthly-fee', status: 'pending', notes: '', job_id: '' });
+    setCreateModalOpen(true);
+  };
+
+  const handleSaveNewPayment = () => {
+    if (!createForm.amount || !createForm.due_date) {
+      toast.error('Preencha valor e data de vencimento');
+      return;
+    }
+    createPaymentMutation.mutate({
+      company_id: createCompanyId,
+      job_id: createForm.job_id || undefined,
+      amount: Math.round(parseFloat(createForm.amount) * 100),
+      due_date: new Date(createForm.due_date).toISOString(),
+      billing_period: createForm.billing_period || undefined,
+      payment_type: createForm.payment_type as any,
+      status: createForm.status as any,
+      notes: createForm.notes || undefined,
+    });
+  };
+
+  const handleDeletePayment = (payment: any) => {
+    setDeletingPayment(payment);
+    setDeleteModalOpen(true);
+  };
+
+  const confirmDeletePayment = () => {
+    if (!deletingPayment) return;
+    deletePaymentMutation.mutate({ paymentId: deletingPayment.id });
   };
 
   const toggleCompanyExpanded = (companyId: string) => {
@@ -537,50 +571,124 @@ export default function PaymentPage() {
                         </div>
                       </button>
 
-                      {isExpanded && (
-                        <div className="border-t">
-                          <Table>
-                            <TableHeader>
-                              <TableRow>
-                                <TableHead>Tipo</TableHead>
-                                <TableHead>Valor</TableHead>
-                                <TableHead>Vencimento</TableHead>
-                                <TableHead>Periodo</TableHead>
-                                <TableHead>Status</TableHead>
-                                <TableHead>Comprovante</TableHead>
-                                <TableHead className="w-[60px]"></TableHead>
-                              </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                              {group.payments.map((payment: any) => (
-                                <TableRow key={payment.id}>
-                                  <TableCell>{getPaymentTypeBadge(payment.payment_type)}</TableCell>
-                                  <TableCell className="font-semibold">{formatCurrency(payment.amount || 0)}</TableCell>
-                                  <TableCell>
-                                    {payment.due_date ? new Date(payment.due_date).toLocaleDateString('pt-BR') : '-'}
-                                  </TableCell>
-                                  <TableCell>{payment.billing_period || '-'}</TableCell>
-                                  <TableCell>{getStatusBadge(payment.status)}</TableCell>
-                                  <TableCell>
-                                    {payment.receipt_url ? (
-                                      <button onClick={() => handleReviewReceipt(payment)} className="hover:opacity-80">
-                                        {getReceiptStatusBadge(payment.receipt_status)}
-                                      </button>
-                                    ) : (
-                                      <span className="text-xs text-gray-400">-</span>
-                                    )}
-                                  </TableCell>
-                                  <TableCell>
-                                    <Button variant="ghost" size="sm" onClick={() => handleEditPayment(payment)}>
-                                      <Pencil className="h-3.5 w-3.5" />
-                                    </Button>
-                                  </TableCell>
+                      {isExpanded && (() => {
+                        // Group payments by vaga (job) - prefer direct job relation, fallback to contract's job
+                        const vagaMap: Record<string, { id: string; title: string; payments: any[] }> = {};
+                        for (const p of group.payments) {
+                          const jobId = p.job?.id || p.contracts?.job?.id || 'general';
+                          const jobTitle = p.job?.title || p.contracts?.job?.title || 'Geral';
+                          if (!vagaMap[jobId]) vagaMap[jobId] = { id: jobId, title: jobTitle, payments: [] };
+                          vagaMap[jobId].payments.push(p);
+                        }
+
+                        // Build tabs from the company's actual jobs (not just from payment data)
+                        const companyJobs: { id: string; title: string }[] = (group as any).jobs || [];
+                        const allVagas: { id: string; title: string }[] = [];
+                        for (const job of companyJobs) {
+                          allVagas.push({ id: job.id, title: job.title });
+                        }
+                        // Add 'Geral' if there are unlinked payments
+                        if (vagaMap['general']) {
+                          allVagas.push({ id: 'general', title: 'Geral' });
+                        }
+
+                        const hasMultipleVagas = allVagas.length > 1;
+                        const activeTab = activeVagaTabs[group.companyId] || 'all';
+                        const filteredPayments = activeTab === 'all'
+                          ? group.payments
+                          : vagaMap[activeTab]?.payments || [];
+
+                        return (
+                          <div className="border-t">
+                            {/* Vaga tabs + Add button */}
+                            <div className="flex items-center justify-between px-4 pt-3 pb-1">
+                              {hasMultipleVagas ? (
+                                <div className="flex items-center gap-1 flex-wrap">
+                                  <button
+                                    onClick={() => setActiveVagaTabs(prev => ({ ...prev, [group.companyId]: 'all' }))}
+                                    className={`px-3 py-1 text-xs rounded-full transition-colors ${
+                                      activeTab === 'all'
+                                        ? 'bg-[#0A2342] text-white'
+                                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                    }`}
+                                  >
+                                    Todos
+                                  </button>
+                                  {allVagas.map(v => (
+                                    <button
+                                      key={v.id}
+                                      onClick={() => setActiveVagaTabs(prev => ({ ...prev, [group.companyId]: v.id }))}
+                                      className={`px-3 py-1 text-xs rounded-full transition-colors ${
+                                        activeTab === v.id
+                                          ? 'bg-[#0A2342] text-white'
+                                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                      }`}
+                                    >
+                                      {v.title}
+                                    </button>
+                                  ))}
+                                </div>
+                              ) : (
+                                <div />
+                              )}
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={(e) => { e.stopPropagation(); handleCreatePayment(group.companyId); }}
+                                className="shrink-0"
+                              >
+                                <Plus className="h-3.5 w-3.5 mr-1" />
+                                Novo
+                              </Button>
+                            </div>
+                            <Table>
+                              <TableHeader>
+                                <TableRow>
+                                  <TableHead>Tipo</TableHead>
+                                  <TableHead>Valor</TableHead>
+                                  <TableHead>Vencimento</TableHead>
+                                  <TableHead>Periodo</TableHead>
+                                  <TableHead>Status</TableHead>
+                                  <TableHead>Comprovante</TableHead>
+                                  <TableHead className="w-[80px]"></TableHead>
                                 </TableRow>
-                              ))}
-                            </TableBody>
-                          </Table>
-                        </div>
-                      )}
+                              </TableHeader>
+                              <TableBody>
+                                {filteredPayments.map((payment: any) => (
+                                  <TableRow key={payment.id}>
+                                    <TableCell>{getPaymentTypeBadge(payment.payment_type)}</TableCell>
+                                    <TableCell className="font-semibold">{formatCurrency(payment.amount || 0)}</TableCell>
+                                    <TableCell>
+                                      {payment.due_date ? new Date(payment.due_date).toLocaleDateString('pt-BR') : '-'}
+                                    </TableCell>
+                                    <TableCell>{payment.billing_period || '-'}</TableCell>
+                                    <TableCell>{getStatusBadge(payment.status)}</TableCell>
+                                    <TableCell>
+                                      {payment.receipt_url ? (
+                                        <button onClick={() => handleReviewReceipt(payment)} className="hover:opacity-80">
+                                          {getReceiptStatusBadge(payment.receipt_status)}
+                                        </button>
+                                      ) : (
+                                        <span className="text-xs text-gray-400">-</span>
+                                      )}
+                                    </TableCell>
+                                    <TableCell>
+                                      <div className="flex items-center gap-0.5">
+                                        <Button variant="ghost" size="sm" onClick={() => handleEditPayment(payment)}>
+                                          <Pencil className="h-3.5 w-3.5" />
+                                        </Button>
+                                        <Button variant="ghost" size="sm" onClick={() => handleDeletePayment(payment)} className="text-red-500 hover:text-red-700">
+                                          <Trash2 className="h-3.5 w-3.5" />
+                                        </Button>
+                                      </div>
+                                    </TableCell>
+                                  </TableRow>
+                                ))}
+                              </TableBody>
+                            </Table>
+                          </div>
+                        );
+                      })()}
                     </div>
                   );
                 })}
@@ -659,31 +767,70 @@ export default function PaymentPage() {
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4">
-              <div className="grid gap-2">
-                <Label>Valor (R$)</Label>
-                <Input
-                  type="number"
-                  step="0.01"
-                  value={editForm.amount}
-                  onChange={(e) => setEditForm(prev => ({ ...prev, amount: e.target.value }))}
-                  placeholder="0.00"
-                />
+              {companyJobsQuery.data && companyJobsQuery.data.length > 0 && (
+                <div className="grid gap-2">
+                  <Label>Vaga</Label>
+                  <Select
+                    value={editForm.job_id}
+                    onValueChange={(value) => setEditForm(prev => ({ ...prev, job_id: value }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione a vaga" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {companyJobsQuery.data.map((job: any) => (
+                        <SelectItem key={job.id} value={job.id}>{job.title}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="grid gap-2">
+                  <Label>Valor (R$)</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={editForm.amount}
+                    onChange={(e) => setEditForm(prev => ({ ...prev, amount: e.target.value }))}
+                    placeholder="0.00"
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label>Status</Label>
+                  <Select
+                    value={editForm.status}
+                    onValueChange={(value) => setEditForm(prev => ({ ...prev, status: value }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="pending">Pendente</SelectItem>
+                      <SelectItem value="paid">Pago</SelectItem>
+                      <SelectItem value="overdue">Atrasado</SelectItem>
+                      <SelectItem value="refunded">Reembolsado</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
-              <div className="grid gap-2">
-                <Label>Data de Vencimento</Label>
-                <Input
-                  type="date"
-                  value={editForm.due_date}
-                  onChange={(e) => setEditForm(prev => ({ ...prev, due_date: e.target.value }))}
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label>Periodo</Label>
-                <Input
-                  value={editForm.billing_period}
-                  onChange={(e) => setEditForm(prev => ({ ...prev, billing_period: e.target.value }))}
-                  placeholder="2026-03"
-                />
+              <div className="grid grid-cols-2 gap-4">
+                <div className="grid gap-2">
+                  <Label>Data de Vencimento</Label>
+                  <Input
+                    type="date"
+                    value={editForm.due_date}
+                    onChange={(e) => setEditForm(prev => ({ ...prev, due_date: e.target.value }))}
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label>Periodo</Label>
+                  <Input
+                    value={editForm.billing_period}
+                    onChange={(e) => setEditForm(prev => ({ ...prev, billing_period: e.target.value }))}
+                    placeholder="2026-03"
+                  />
+                </div>
               </div>
               <div className="grid gap-2">
                 <Label>Tipo</Label>
@@ -703,6 +850,15 @@ export default function PaymentPage() {
                   </SelectContent>
                 </Select>
               </div>
+              <div className="grid gap-2">
+                <Label>Observacoes</Label>
+                <Textarea
+                  value={editForm.notes}
+                  onChange={(e) => setEditForm(prev => ({ ...prev, notes: e.target.value }))}
+                  placeholder="Observacoes sobre o pagamento..."
+                  rows={2}
+                />
+              </div>
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setEditModalOpen(false)}>
@@ -710,6 +866,156 @@ export default function PaymentPage() {
               </Button>
               <Button onClick={handleSavePayment} disabled={updatePaymentMutation.isPending}>
                 {updatePaymentMutation.isPending ? 'Salvando...' : 'Salvar'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Create Payment Modal */}
+        <Dialog open={createModalOpen} onOpenChange={setCreateModalOpen}>
+          <DialogContent className="sm:max-w-[450px]">
+            <DialogHeader>
+              <DialogTitle>Novo Pagamento</DialogTitle>
+              <DialogDescription>
+                Crie um novo pagamento para esta empresa
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              {companyJobsQuery.data && companyJobsQuery.data.length > 0 && (
+                <div className="grid gap-2">
+                  <Label>Vaga</Label>
+                  <Select
+                    value={createForm.job_id}
+                    onValueChange={(value) => setCreateForm(prev => ({ ...prev, job_id: value }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione a vaga" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {companyJobsQuery.data.map((job: any) => (
+                        <SelectItem key={job.id} value={job.id}>{job.title}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="grid gap-2">
+                  <Label>Valor (R$) *</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={createForm.amount}
+                    onChange={(e) => setCreateForm(prev => ({ ...prev, amount: e.target.value }))}
+                    placeholder="0.00"
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label>Status</Label>
+                  <Select
+                    value={createForm.status}
+                    onValueChange={(value) => setCreateForm(prev => ({ ...prev, status: value }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="pending">Pendente</SelectItem>
+                      <SelectItem value="paid">Pago</SelectItem>
+                      <SelectItem value="overdue">Atrasado</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="grid gap-2">
+                  <Label>Data de Vencimento *</Label>
+                  <Input
+                    type="date"
+                    value={createForm.due_date}
+                    onChange={(e) => setCreateForm(prev => ({ ...prev, due_date: e.target.value }))}
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label>Periodo</Label>
+                  <Input
+                    value={createForm.billing_period}
+                    onChange={(e) => setCreateForm(prev => ({ ...prev, billing_period: e.target.value }))}
+                    placeholder="2026-03"
+                  />
+                </div>
+              </div>
+              <div className="grid gap-2">
+                <Label>Tipo</Label>
+                <Select
+                  value={createForm.payment_type}
+                  onValueChange={(value) => setCreateForm(prev => ({ ...prev, payment_type: value }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="monthly-fee">Mensalidade</SelectItem>
+                    <SelectItem value="insurance-fee">Seguro</SelectItem>
+                    <SelectItem value="setup-fee">Taxa de Setup</SelectItem>
+                    <SelectItem value="penalty">Multa</SelectItem>
+                    <SelectItem value="refund">Reembolso</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid gap-2">
+                <Label>Observacoes</Label>
+                <Textarea
+                  value={createForm.notes}
+                  onChange={(e) => setCreateForm(prev => ({ ...prev, notes: e.target.value }))}
+                  placeholder="Observacoes sobre o pagamento..."
+                  rows={2}
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setCreateModalOpen(false)}>
+                Cancelar
+              </Button>
+              <Button onClick={handleSaveNewPayment} disabled={createPaymentMutation.isPending}>
+                {createPaymentMutation.isPending ? 'Criando...' : 'Criar Pagamento'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Delete Confirmation Modal */}
+        <Dialog open={deleteModalOpen} onOpenChange={setDeleteModalOpen}>
+          <DialogContent className="sm:max-w-[400px]">
+            <DialogHeader>
+              <DialogTitle>Excluir Pagamento</DialogTitle>
+              <DialogDescription>
+                Tem certeza que deseja excluir este pagamento?
+              </DialogDescription>
+            </DialogHeader>
+            {deletingPayment && (
+              <div className="py-4 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-gray-600">Valor:</span>
+                  <span className="font-semibold">{formatCurrency(deletingPayment.amount || 0)}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-gray-600">Vencimento:</span>
+                  <span>{deletingPayment.due_date ? new Date(deletingPayment.due_date).toLocaleDateString('pt-BR') : '-'}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-gray-600">Status:</span>
+                  {getStatusBadge(deletingPayment.status)}
+                </div>
+                <p className="text-sm text-red-600 mt-3">Esta acao nao pode ser desfeita.</p>
+              </div>
+            )}
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setDeleteModalOpen(false)}>
+                Cancelar
+              </Button>
+              <Button variant="destructive" onClick={confirmDeletePayment} disabled={deletePaymentMutation.isPending}>
+                {deletePaymentMutation.isPending ? 'Excluindo...' : 'Excluir'}
               </Button>
             </DialogFooter>
           </DialogContent>
