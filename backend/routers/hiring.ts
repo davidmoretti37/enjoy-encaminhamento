@@ -14,6 +14,7 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { createDocument as createAutentiqueDoc, isAutentiqueConfigured } from "../integrations/autentique";
 import { ENV } from "../_core/env";
+import { fillDocxTemplate, buildHiringTemplateData, scanPlaceholders, PLACEHOLDER_LABELS } from "../lib/fillDocxTemplate";
 
 // ============================================
 // HIRING ROUTER
@@ -297,6 +298,7 @@ export const hiringRouter = router({
       paymentDay: z.number().int().min(1).max(28),
       monthlySalary: z.number().int().min(0).optional(), // In cents
       selectedTemplateIds: z.array(z.string().uuid()).min(1), // Agency selects which documents to send
+      manualFields: z.record(z.string()).optional(), // Manual overrides for template placeholders
     }))
     .mutation(async ({ input }) => {
       const process = await hiringDb.getHiringProcessById(input.hiringProcessId);
@@ -422,12 +424,90 @@ export const hiringRouter = router({
               });
             }
 
+            // Build template data for DOCX filling
+            const agency = company?.agency_id ? await db.getAgencyById(company.agency_id) : null;
+            const templateData = buildHiringTemplateData({
+              company: company ? {
+                company_name: company.company_name,
+                business_name: company.business_name,
+                cnpj: company.cnpj,
+                contact_name: company.contact_person,
+                contact_cpf: company.contact_cpf,
+                phone: company.phone,
+                landline_phone: company.landline_phone,
+                email: company.email,
+                company_email: company.company_email,
+                website: company.website,
+                employee_count: company.employee_count,
+                cep: company.cep,
+                address: company.address,
+                complement: company.complement,
+                neighborhood: company.neighborhood,
+                city: company.city,
+                state: company.state,
+              } : undefined,
+              candidate: candidate ? {
+                full_name: candidate.full_name,
+                cpf: candidate.cpf,
+                rg: candidate.rg,
+                email: candidate.email,
+                phone: candidate.phone,
+                date_of_birth: candidate.date_of_birth,
+                address: candidate.address,
+                city: candidate.city,
+                state: candidate.state,
+                zip_code: candidate.zip_code,
+                education_level: candidate.education_level,
+                institution: candidate.institution,
+                course: candidate.course,
+                parent_guardian_name: candidate.parent_guardian_name,
+                parent_guardian_cpf: candidate.parent_guardian_cpf,
+                parent_guardian_email: candidate.parent_guardian_email,
+                parent_guardian_phone: candidate.parent_guardian_phone,
+                educational_institution_name: candidate.educational_institution_name,
+                educational_institution_email: candidate.educational_institution_email,
+                educational_institution_contact: candidate.educational_institution_contact,
+              } : undefined,
+              job: job ? {
+                title: job.title,
+                salary: job.salary,
+                contract_type: job.contract_type,
+              } : undefined,
+              agency: agency ? {
+                name: agency.name,
+                city: agency.city,
+              } : undefined,
+              hiring: {
+                start_date: process.start_date,
+                end_date: endDateStr,
+                duration_months: input.durationMonths,
+                monthly_salary: input.monthlySalary || process.monthly_salary,
+                monthly_fee: input.monthlyFee,
+                payment_day: input.paymentDay,
+                hiring_type: process.hiring_type,
+              },
+              manualFields: input.manualFields,
+            });
+
             const autentiqueDocIds: string[] = [];
 
             for (const template of templates) {
-              // Download PDF from storage
-              const pdfResponse = await fetch(template.file_url);
-              const pdfBuffer = Buffer.from(await pdfResponse.arrayBuffer());
+              // Download file from storage
+              const fileResponse = await fetch(template.file_url);
+              const fileBuffer = Buffer.from(await fileResponse.arrayBuffer());
+
+              // Check if DOCX - if so, fill placeholders and convert to PDF
+              const isDocx = template.file_url?.endsWith(".docx") || template.name?.endsWith(".docx");
+              let pdfBuffer: Buffer;
+
+              if (isDocx) {
+                console.log(`[Hiring] Filling DOCX template: ${template.name}`);
+                pdfBuffer = await fillDocxTemplate(fileBuffer, templateData);
+                console.log(`[Hiring] Template filled and converted to PDF: ${pdfBuffer.length} bytes`);
+              } else {
+                // Already a PDF, use as-is
+                pdfBuffer = fileBuffer;
+              }
 
               // Upload to Autentique with all signers
               const result = await createAutentiqueDoc(
@@ -1038,6 +1118,154 @@ export const hiringRouter = router({
       });
 
       return { token: invitation.token, alreadyExisted: false };
+    }),
+
+  /**
+   * Scan selected DOCX templates for placeholders and return auto-filled vs missing fields.
+   * Used by the agency review screen before sending contracts.
+   */
+  getTemplatePlaceholders: agencyProcedure
+    .input(z.object({
+      hiringProcessId: z.string().uuid(),
+      selectedTemplateIds: z.array(z.string().uuid()).min(1),
+    }))
+    .mutation(async ({ input }) => {
+      const process = await hiringDb.getHiringProcessById(input.hiringProcessId);
+      if (!process) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Hiring process not found" });
+      }
+
+      const candidate = await db.getCandidateById(process.candidate_id);
+      const company = await db.getCompanyById(process.company_id);
+      const job = await db.getJobById(process.job_id);
+      const agency = company?.agency_id ? await db.getAgencyById(company.agency_id) : null;
+
+      // Build auto-filled data from available records
+      const autoData = buildHiringTemplateData({
+        company: company ? {
+          company_name: company.company_name,
+          business_name: company.business_name,
+          cnpj: company.cnpj,
+          contact_name: company.contact_person,
+          contact_cpf: company.contact_cpf,
+          phone: company.phone,
+          landline_phone: company.landline_phone,
+          email: company.email,
+          company_email: company.company_email,
+          website: company.website,
+          employee_count: company.employee_count,
+          cep: company.cep,
+          address: company.address,
+          complement: company.complement,
+          neighborhood: company.neighborhood,
+          city: company.city,
+          state: company.state,
+        } : undefined,
+        candidate: candidate ? {
+          full_name: candidate.full_name,
+          cpf: candidate.cpf,
+          rg: candidate.rg,
+          email: candidate.email,
+          phone: candidate.phone,
+          date_of_birth: candidate.date_of_birth,
+          address: candidate.address,
+          city: candidate.city,
+          state: candidate.state,
+          zip_code: candidate.zip_code,
+          education_level: candidate.education_level,
+          institution: candidate.institution,
+          course: candidate.course,
+          parent_guardian_name: candidate.parent_guardian_name,
+          parent_guardian_cpf: candidate.parent_guardian_cpf,
+          parent_guardian_email: candidate.parent_guardian_email,
+          parent_guardian_phone: candidate.parent_guardian_phone,
+          educational_institution_name: candidate.educational_institution_name,
+          educational_institution_email: candidate.educational_institution_email,
+          educational_institution_contact: candidate.educational_institution_contact,
+        } : undefined,
+        job: job ? {
+          title: job.title,
+          salary: job.salary,
+          contract_type: job.contract_type,
+        } : undefined,
+        agency: agency ? {
+          name: agency.name,
+          city: agency.city,
+        } : undefined,
+        hiring: {
+          start_date: process.start_date,
+          end_date: process.end_date,
+          duration_months: process.contract_duration_months,
+          monthly_salary: process.monthly_salary,
+          monthly_fee: process.calculated_fee,
+          payment_day: process.payment_day,
+          hiring_type: process.hiring_type,
+        },
+      });
+
+      // Scan each template
+      const templates = await db.getDocumentTemplatesByIds(input.selectedTemplateIds);
+      const results: Array<{
+        templateId: string;
+        templateName: string;
+        autoFilled: Record<string, string>;
+        missing: Array<{ key: string; label: string }>;
+      }> = [];
+
+      for (const template of templates) {
+        const isDocx = template.file_url?.endsWith(".docx") || template.name?.endsWith(".docx");
+
+        if (!isDocx) {
+          // Non-DOCX templates have no placeholders to fill
+          results.push({
+            templateId: template.id,
+            templateName: template.name,
+            autoFilled: {},
+            missing: [],
+          });
+          continue;
+        }
+
+        try {
+          const response = await fetch(template.file_url);
+          const buffer = Buffer.from(await response.arrayBuffer());
+          const placeholders = scanPlaceholders(buffer);
+
+          const autoFilled: Record<string, string> = {};
+          const missing: Array<{ key: string; label: string }> = [];
+
+          for (const key of placeholders) {
+            if (autoData[key]) {
+              autoFilled[key] = autoData[key];
+            } else {
+              missing.push({
+                key,
+                label: PLACEHOLDER_LABELS[key] || key,
+              });
+            }
+          }
+
+          results.push({
+            templateId: template.id,
+            templateName: template.name,
+            autoFilled,
+            missing,
+          });
+        } catch (err: any) {
+          console.error(`[Hiring] Failed to scan placeholders in ${template.name}:`, err.message);
+          results.push({
+            templateId: template.id,
+            templateName: template.name,
+            autoFilled: {},
+            missing: [],
+          });
+        }
+      }
+
+      return {
+        templates: results,
+        allPlaceholderLabels: PLACEHOLDER_LABELS,
+      };
     }),
 
   // ============================================

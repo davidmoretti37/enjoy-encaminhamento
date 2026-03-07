@@ -96,6 +96,19 @@ export async function reorderDocumentTemplates(
   }
 }
 
+export async function getDocumentTemplatesByIds(templateIds: string[]): Promise<any[]> {
+  if (!templateIds.length) return [];
+  const { data, error } = await supabaseAdmin
+    .from("agency_document_templates")
+    .select("*")
+    .in("id", templateIds);
+  if (error) {
+    console.error("[Database] Failed to get document templates by IDs:", error);
+    return [];
+  }
+  return data || [];
+}
+
 export async function getDocumentTemplateById(templateId: string): Promise<any | null> {
   const { data, error } = await supabaseAdmin
     .from("agency_document_templates")

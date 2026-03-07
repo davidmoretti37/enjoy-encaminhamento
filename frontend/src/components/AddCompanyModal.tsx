@@ -32,6 +32,8 @@ import {
   Upload,
   Check,
   Loader2,
+  Sparkles,
+  Send,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -1010,13 +1012,41 @@ function Step3Documents({ formData, setFormData, handleFileUpload, removeContrac
 // Step 4: Payment
 // ============================================
 function Step4Payment({ formData, setFormData }: any) {
+  const [aiInput, setAiInput] = useState("");
+  const [aiApplied, setAiApplied] = useState(false);
+  const parseInstruction = trpc.agency.parsePaymentInstruction.useMutation({
+    onSuccess: (data) => {
+      setFormData((p: any) => ({
+        ...p,
+        hasPayment: true,
+        monthlyAmount: data.monthlyAmount ? String(data.monthlyAmount) : p.monthlyAmount,
+        paymentStartDate: data.startDate || p.paymentStartDate,
+        paymentEndDate: data.endDate || p.paymentEndDate,
+        paymentDay: data.paymentDay ? String(data.paymentDay) : p.paymentDay,
+        paidMonths: data.paidMonths ? String(data.paidMonths) : p.paidMonths,
+        paymentNotes: data.notes || p.paymentNotes,
+      }));
+      setAiApplied(true);
+      toast.success("Campos preenchidos pela IA!");
+    },
+    onError: (error) => {
+      toast.error(error.message || "Erro ao processar instrucao");
+    },
+  });
+
+  const handleAiSubmit = () => {
+    if (!aiInput.trim()) return;
+    setAiApplied(false);
+    parseInstruction.mutate({ instruction: aiInput.trim() });
+  };
+
   return (
     <div className="space-y-6">
       <div className="text-center py-4">
         <DollarSign className="h-12 w-12 text-gray-300 mx-auto mb-3" />
         <h3 className="text-lg font-medium text-gray-900 mb-1">Pagamentos</h3>
         <p className="text-sm text-gray-500">
-          Deseja configurar cobrança mensal para esta empresa?
+          Deseja configurar cobranca mensal para esta empresa?
         </p>
       </div>
 
@@ -1048,76 +1078,115 @@ function Step4Payment({ formData, setFormData }: any) {
               : "border-gray-200 text-gray-600 hover:border-gray-300"
           }`}
         >
-          Não, sem pagamento
+          Nao, sem pagamento
         </button>
       </div>
 
       {formData.hasPayment && (
-        <div className="space-y-4 mt-4 bg-gray-50 rounded-lg p-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <Label>Valor Mensal (R$) *</Label>
-              <Input
-                type="number"
-                step="0.01"
-                min="0"
-                value={formData.monthlyAmount}
-                onChange={(e) => setFormData((p: any) => ({ ...p, monthlyAmount: e.target.value }))}
-                placeholder="Ex: 250.00"
-              />
+        <div className="space-y-4 mt-4">
+          {/* AI Assistant */}
+          <div className="bg-gradient-to-r from-purple-50 to-blue-50 border border-purple-200 rounded-lg p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <Sparkles className="h-4 w-4 text-purple-600" />
+              <span className="text-sm font-medium text-purple-700">Assistente IA</span>
             </div>
-            <div>
-              <Label>Dia do Vencimento</Label>
+            <div className="flex gap-2">
               <Input
-                type="number"
-                min="1"
-                max="31"
-                value={formData.paymentDay}
-                onChange={(e) => setFormData((p: any) => ({ ...p, paymentDay: e.target.value }))}
-                placeholder="Ex: 10"
+                value={aiInput}
+                onChange={(e) => { setAiInput(e.target.value); setAiApplied(false); }}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleAiSubmit(); }}
+                placeholder="Ex: cobrar R$300/mes comecando em marco, dia 10, por 12 meses"
+                className="flex-1 bg-white"
+                disabled={parseInstruction.isPending}
               />
+              <Button
+                size="sm"
+                onClick={handleAiSubmit}
+                disabled={parseInstruction.isPending || !aiInput.trim()}
+                className="bg-purple-600 hover:bg-purple-700 shrink-0"
+              >
+                {parseInstruction.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Send className="h-4 w-4" />
+                )}
+              </Button>
             </div>
+            {aiApplied && (
+              <p className="text-xs text-purple-600 mt-2 flex items-center gap-1">
+                <Check className="h-3 w-3" />
+                Campos preenchidos! Revise e ajuste se necessario.
+              </p>
+            )}
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <Label>Data de Início *</Label>
-              <Input
-                type="date"
-                value={formData.paymentStartDate}
-                onChange={(e) => setFormData((p: any) => ({ ...p, paymentStartDate: e.target.value }))}
-              />
+          {/* Manual form */}
+          <div className="bg-gray-50 rounded-lg p-4 space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>Valor Mensal (R$) *</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={formData.monthlyAmount}
+                  onChange={(e) => setFormData((p: any) => ({ ...p, monthlyAmount: e.target.value }))}
+                  placeholder="Ex: 250.00"
+                />
+              </div>
+              <div>
+                <Label>Dia do Vencimento</Label>
+                <Input
+                  type="number"
+                  min="1"
+                  max="31"
+                  value={formData.paymentDay}
+                  onChange={(e) => setFormData((p: any) => ({ ...p, paymentDay: e.target.value }))}
+                  placeholder="Ex: 10"
+                />
+              </div>
             </div>
-            <div>
-              <Label>Data de Término</Label>
-              <Input
-                type="date"
-                value={formData.paymentEndDate}
-                onChange={(e) => setFormData((p: any) => ({ ...p, paymentEndDate: e.target.value }))}
-              />
-              <p className="text-xs text-gray-400 mt-1">Se vazio, gera 12 meses</p>
-            </div>
-          </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <Label>Meses já pagos</Label>
-              <Input
-                type="number"
-                min="0"
-                value={formData.paidMonths}
-                onChange={(e) => setFormData((p: any) => ({ ...p, paidMonths: e.target.value }))}
-                placeholder="Ex: 3"
-              />
-              <p className="text-xs text-gray-400 mt-1">Primeiros meses marcados como pagos</p>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>Data de Inicio *</Label>
+                <Input
+                  type="date"
+                  value={formData.paymentStartDate}
+                  onChange={(e) => setFormData((p: any) => ({ ...p, paymentStartDate: e.target.value }))}
+                />
+              </div>
+              <div>
+                <Label>Data de Termino</Label>
+                <Input
+                  type="date"
+                  value={formData.paymentEndDate}
+                  onChange={(e) => setFormData((p: any) => ({ ...p, paymentEndDate: e.target.value }))}
+                />
+                <p className="text-xs text-gray-400 mt-1">Se vazio, gera 12 meses</p>
+              </div>
             </div>
-            <div>
-              <Label>Observações</Label>
-              <Input
-                value={formData.paymentNotes}
-                onChange={(e) => setFormData((p: any) => ({ ...p, paymentNotes: e.target.value }))}
-                placeholder="Ex: Mensalidade estágio"
-              />
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>Meses ja pagos</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  value={formData.paidMonths}
+                  onChange={(e) => setFormData((p: any) => ({ ...p, paidMonths: e.target.value }))}
+                  placeholder="Ex: 3"
+                />
+                <p className="text-xs text-gray-400 mt-1">Primeiros meses marcados como pagos</p>
+              </div>
+              <div>
+                <Label>Observacoes</Label>
+                <Input
+                  value={formData.paymentNotes}
+                  onChange={(e) => setFormData((p: any) => ({ ...p, paymentNotes: e.target.value }))}
+                  placeholder="Ex: Mensalidade estagio"
+                />
+              </div>
             </div>
           </div>
         </div>

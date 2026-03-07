@@ -854,6 +854,7 @@ function ConfigureContractButton({
   onConfigured: () => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [step, setStep] = useState<'configure' | 'review'>('configure');
   const [durationMonths, setDurationMonths] = useState('12');
   const [monthlyFee, setMonthlyFee] = useState(
     hiringProcess.calculated_fee ? String(hiringProcess.calculated_fee / 100) : '150'
@@ -863,6 +864,8 @@ function ConfigureContractButton({
     hiringProcess.monthly_salary ? String(hiringProcess.monthly_salary / 100) : ''
   );
   const [selectedTemplateIds, setSelectedTemplateIds] = useState<string[]>([]);
+  const [manualFields, setManualFields] = useState<Record<string, string>>({});
+  const [placeholderData, setPlaceholderData] = useState<any>(null);
 
   // Map hiring type to template category
   const categoryMap: Record<string, string> = {
@@ -894,23 +897,48 @@ function ConfigureContractButton({
     );
   };
 
+  // Scan templates for placeholders
+  const scanMutation = trpc.hiring.getTemplatePlaceholders.useMutation({
+    onSuccess: (data) => {
+      setPlaceholderData(data);
+      setStep('review');
+    },
+    onError: (err) => toast.error(err.message || 'Erro ao analisar documentos'),
+  });
+
   const mutation = trpc.hiring.configureAndSendContract.useMutation({
     onSuccess: () => {
       toast.success('Contrato configurado e enviado!');
       setOpen(false);
+      setStep('configure');
+      setManualFields({});
+      setPlaceholderData(null);
       onConfigured();
     },
     onError: (err) => toast.error(err.message || 'Erro ao configurar contrato'),
   });
 
-  const handleSubmit = () => {
+  const handleNextToReview = () => {
     if (selectedTemplateIds.length === 0) {
       toast.error('Selecione pelo menos um documento');
       return;
     }
+    // Scan templates for placeholder fields
+    scanMutation.mutate({
+      hiringProcessId: hiringProcess.id,
+      selectedTemplateIds,
+    });
+  };
 
+  const handleSubmit = () => {
     const feeInCents = Math.round(parseFloat(monthlyFee || '0') * 100);
     const salaryInCents = monthlySalary ? Math.round(parseFloat(monthlySalary) * 100) : undefined;
+
+    // Only include non-empty manual fields
+    const filledManualFields: Record<string, string> = {};
+    for (const [key, value] of Object.entries(manualFields)) {
+      if (value.trim()) filledManualFields[key] = value.trim();
+    }
 
     mutation.mutate({
       hiringProcessId: hiringProcess.id,
@@ -919,8 +947,24 @@ function ConfigureContractButton({
       paymentDay: parseInt(paymentDay),
       monthlySalary: salaryInCents,
       selectedTemplateIds,
+      manualFields: Object.keys(filledManualFields).length > 0 ? filledManualFields : undefined,
     });
   };
+
+  const handleClose = () => {
+    setOpen(false);
+    setStep('configure');
+    setManualFields({});
+    setPlaceholderData(null);
+  };
+
+  // Count total missing fields across all templates
+  const totalMissing = placeholderData?.templates?.reduce(
+    (acc: number, t: any) => acc + t.missing.length, 0
+  ) || 0;
+  const totalMissingFilled = placeholderData?.templates?.reduce(
+    (acc: number, t: any) => acc + t.missing.filter((m: any) => manualFields[m.key]?.trim()).length, 0
+  ) || 0;
 
   return (
     <>
@@ -933,154 +977,277 @@ function ConfigureContractButton({
         Configurar e enviar contrato
       </Button>
 
-      <Dialog open={open} onOpenChange={setOpen}>
+      <Dialog open={open} onOpenChange={handleClose}>
         <DialogContent className="max-w-lg" onClick={(e) => e.stopPropagation()}>
-          <DialogHeader>
-            <DialogTitle>Configurar Contrato</DialogTitle>
-            <DialogDescription>
-              Configure os termos do contrato de estágio para {hiringProcess.candidate?.full_name}
-            </DialogDescription>
-          </DialogHeader>
+          {step === 'configure' ? (
+            <>
+              <DialogHeader>
+                <DialogTitle>Configurar Contrato</DialogTitle>
+                <DialogDescription>
+                  Configure os termos do contrato de estágio para {hiringProcess.candidate?.full_name}
+                </DialogDescription>
+              </DialogHeader>
 
-          <div className="space-y-4 py-2 max-h-[60vh] overflow-y-auto">
-            {/* Document selection */}
-            <div className="space-y-2">
-              <Label className="flex items-center gap-1.5">
-                <FileText className="w-4 h-4" />
-                Documentos do contrato
-              </Label>
-              {templatesLoading ? (
-                <div className="flex items-center gap-2 py-3 text-sm text-slate-500">
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Carregando documentos...
+              <div className="space-y-4 py-2 max-h-[60vh] overflow-y-auto">
+                {/* Document selection */}
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-1.5">
+                    <FileText className="w-4 h-4" />
+                    Documentos do contrato
+                  </Label>
+                  {templatesLoading ? (
+                    <div className="flex items-center gap-2 py-3 text-sm text-slate-500">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Carregando documentos...
+                    </div>
+                  ) : templates && templates.length > 0 ? (
+                    <div className="space-y-1.5">
+                      {templates.map((template: any) => (
+                        <label
+                          key={template.id}
+                          className={`flex items-center gap-3 p-2.5 rounded-lg border cursor-pointer transition-colors ${
+                            selectedTemplateIds.includes(template.id)
+                              ? 'border-purple-300 bg-purple-50'
+                              : 'border-slate-200 hover:border-slate-300'
+                          }`}
+                        >
+                          <Checkbox
+                            checked={selectedTemplateIds.includes(template.id)}
+                            onCheckedChange={() => toggleTemplate(template.id)}
+                          />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-[#0A2342] truncate">{template.name}</p>
+                          </div>
+                          <a
+                            href={template.file_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            className="text-slate-400 hover:text-purple-600 transition-colors shrink-0"
+                          >
+                            <ExternalLink className="w-3.5 h-3.5" />
+                          </a>
+                        </label>
+                      ))}
+                      <p className="text-xs text-slate-500">
+                        {selectedTemplateIds.length} de {templates.length} documento{templates.length !== 1 ? 's' : ''} selecionado{selectedTemplateIds.length !== 1 ? 's' : ''}
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="p-3 rounded-lg border border-amber-200 bg-amber-50 text-sm text-amber-700">
+                      Nenhum documento cadastrado para este tipo de contrato.
+                      Cadastre documentos nas configurações da agência.
+                    </div>
+                  )}
                 </div>
-              ) : templates && templates.length > 0 ? (
+
                 <div className="space-y-1.5">
-                  {templates.map((template: any) => (
-                    <label
-                      key={template.id}
-                      className={`flex items-center gap-3 p-2.5 rounded-lg border cursor-pointer transition-colors ${
-                        selectedTemplateIds.includes(template.id)
-                          ? 'border-purple-300 bg-purple-50'
-                          : 'border-slate-200 hover:border-slate-300'
-                      }`}
-                    >
-                      <Checkbox
-                        checked={selectedTemplateIds.includes(template.id)}
-                        onCheckedChange={() => toggleTemplate(template.id)}
-                      />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-[#0A2342] truncate">{template.name}</p>
-                      </div>
-                      <a
-                        href={template.file_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        onClick={(e) => e.stopPropagation()}
-                        className="text-slate-400 hover:text-purple-600 transition-colors shrink-0"
-                      >
-                        <ExternalLink className="w-3.5 h-3.5" />
-                      </a>
-                    </label>
-                  ))}
+                  <Label>Duração do contrato</Label>
+                  <Select value={durationMonths} onValueChange={setDurationMonths}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="3">3 meses</SelectItem>
+                      <SelectItem value="6">6 meses</SelectItem>
+                      <SelectItem value="12">1 ano</SelectItem>
+                      <SelectItem value="24">2 anos</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label>Salário mensal do estagiário (R$)</Label>
+                  <Input
+                    type="number"
+                    placeholder="Ex: 1200.00"
+                    value={monthlySalary}
+                    onChange={(e) => setMonthlySalary(e.target.value)}
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label>Taxa mensal da agência (R$)</Label>
+                  <Input
+                    type="number"
+                    placeholder="Ex: 150.00"
+                    value={monthlyFee}
+                    onChange={(e) => setMonthlyFee(e.target.value)}
+                  />
                   <p className="text-xs text-slate-500">
-                    {selectedTemplateIds.length} de {templates.length} documento{templates.length !== 1 ? 's' : ''} selecionado{selectedTemplateIds.length !== 1 ? 's' : ''}
+                    Valor que a empresa pagará mensalmente à agência
                   </p>
                 </div>
-              ) : (
-                <div className="p-3 rounded-lg border border-amber-200 bg-amber-50 text-sm text-amber-700">
-                  Nenhum documento cadastrado para este tipo de contrato.
-                  Cadastre documentos nas configurações da agência.
+
+                <div className="space-y-1.5">
+                  <Label>Dia do pagamento</Label>
+                  <Select value={paymentDay} onValueChange={setPaymentDay}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Array.from({ length: 28 }, (_, i) => i + 1).map((day) => (
+                        <SelectItem key={day} value={String(day)}>
+                          Dia {day}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-slate-500">
+                    Dia do mês em que a empresa deve pagar
+                  </p>
                 </div>
-              )}
-            </div>
 
-            <div className="space-y-1.5">
-              <Label>Duração do contrato</Label>
-              <Select value={durationMonths} onValueChange={setDurationMonths}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="3">3 meses</SelectItem>
-                  <SelectItem value="6">6 meses</SelectItem>
-                  <SelectItem value="12">1 ano</SelectItem>
-                  <SelectItem value="24">2 anos</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+                {/* Summary */}
+                <div className="bg-slate-50 rounded-lg p-3 text-sm space-y-1">
+                  <p className="font-medium text-[#0A2342]">Resumo</p>
+                  <p className="text-slate-600">
+                    {durationMonths} meses × R$ {monthlyFee || '0'} = R$ {(parseInt(durationMonths || '0') * parseFloat(monthlyFee || '0')).toFixed(2)} total
+                  </p>
+                  <p className="text-slate-500 text-xs">
+                    Pagamento todo dia {paymentDay} do mês
+                  </p>
+                </div>
+              </div>
 
-            <div className="space-y-1.5">
-              <Label>Salário mensal do estagiário (R$)</Label>
-              <Input
-                type="number"
-                placeholder="Ex: 1200.00"
-                value={monthlySalary}
-                onChange={(e) => setMonthlySalary(e.target.value)}
-              />
-            </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={handleClose}>
+                  Cancelar
+                </Button>
+                <Button
+                  onClick={handleNextToReview}
+                  disabled={scanMutation.isPending || !monthlyFee || selectedTemplateIds.length === 0}
+                  className="bg-purple-600 hover:bg-purple-700"
+                >
+                  {scanMutation.isPending ? (
+                    <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                  ) : (
+                    <FileText className="w-4 h-4 mr-2" />
+                  )}
+                  {scanMutation.isPending ? 'Analisando...' : 'Revisar campos'}
+                </Button>
+              </DialogFooter>
+            </>
+          ) : (
+            <>
+              <DialogHeader>
+                <DialogTitle>Revisar Campos do Contrato</DialogTitle>
+                <DialogDescription>
+                  Verifique os campos preenchidos automaticamente e preencha os campos pendentes
+                </DialogDescription>
+              </DialogHeader>
 
-            <div className="space-y-1.5">
-              <Label>Taxa mensal da agência (R$)</Label>
-              <Input
-                type="number"
-                placeholder="Ex: 150.00"
-                value={monthlyFee}
-                onChange={(e) => setMonthlyFee(e.target.value)}
-              />
-              <p className="text-xs text-slate-500">
-                Valor que a empresa pagará mensalmente à agência
-              </p>
-            </div>
+              <div className="space-y-4 py-2 max-h-[60vh] overflow-y-auto">
+                {placeholderData?.templates?.map((tmpl: any) => {
+                  const hasPlaceholders = Object.keys(tmpl.autoFilled).length > 0 || tmpl.missing.length > 0;
+                  if (!hasPlaceholders) return null;
 
-            <div className="space-y-1.5">
-              <Label>Dia do pagamento</Label>
-              <Select value={paymentDay} onValueChange={setPaymentDay}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {Array.from({ length: 28 }, (_, i) => i + 1).map((day) => (
-                    <SelectItem key={day} value={String(day)}>
-                      Dia {day}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-slate-500">
-                Dia do mês em que a empresa deve pagar
-              </p>
-            </div>
+                  return (
+                    <div key={tmpl.templateId} className="border rounded-lg overflow-hidden">
+                      <div className="bg-slate-50 px-3 py-2 border-b">
+                        <p className="text-sm font-medium text-[#0A2342] flex items-center gap-1.5">
+                          <FileText className="w-3.5 h-3.5" />
+                          {tmpl.templateName}
+                        </p>
+                      </div>
+                      <div className="p-3 space-y-3">
+                        {/* Auto-filled fields */}
+                        {Object.keys(tmpl.autoFilled).length > 0 && (
+                          <div className="space-y-1.5">
+                            <p className="text-xs font-medium text-emerald-700 flex items-center gap-1">
+                              <CheckCircle className="w-3 h-3" />
+                              Preenchidos automaticamente
+                            </p>
+                            <div className="flex flex-wrap gap-1.5">
+                              {Object.entries(tmpl.autoFilled).map(([key, value]: [string, any]) => (
+                                <span
+                                  key={key}
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                  title={`${placeholderData.allPlaceholderLabels[key] || key}: ${value}`}
+                                >
+                                  {placeholderData.allPlaceholderLabels[key] || key}: <span className="font-medium truncate max-w-[150px]">{value}</span>
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
 
-            {/* Summary */}
-            <div className="bg-slate-50 rounded-lg p-3 text-sm space-y-1">
-              <p className="font-medium text-[#0A2342]">Resumo</p>
-              <p className="text-slate-600">
-                {durationMonths} meses × R$ {monthlyFee || '0'} = R$ {(parseInt(durationMonths || '0') * parseFloat(monthlyFee || '0')).toFixed(2)} total
-              </p>
-              <p className="text-slate-500 text-xs">
-                Pagamento todo dia {paymentDay} do mês
-              </p>
-            </div>
-          </div>
+                        {/* Missing fields */}
+                        {tmpl.missing.length > 0 && (
+                          <div className="space-y-2">
+                            <p className="text-xs font-medium text-amber-700 flex items-center gap-1">
+                              <AlertTriangle className="w-3 h-3" />
+                              Preencher manualmente ({tmpl.missing.filter((m: any) => manualFields[m.key]?.trim()).length}/{tmpl.missing.length})
+                            </p>
+                            <div className="space-y-2">
+                              {tmpl.missing.map((field: any) => (
+                                <div key={field.key} className="space-y-0.5">
+                                  <Label className="text-xs text-slate-600">{field.label}</Label>
+                                  <Input
+                                    placeholder={field.label}
+                                    value={manualFields[field.key] || ''}
+                                    onChange={(e) =>
+                                      setManualFields((prev) => ({ ...prev, [field.key]: e.target.value }))
+                                    }
+                                    className="h-8 text-sm"
+                                  />
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
 
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setOpen(false)}>
-              Cancelar
-            </Button>
-            <Button
-              onClick={handleSubmit}
-              disabled={mutation.isPending || !monthlyFee || selectedTemplateIds.length === 0}
-              className="bg-purple-600 hover:bg-purple-700"
-            >
-              {mutation.isPending ? (
-                <Loader2 className="w-4 h-4 animate-spin mr-2" />
-              ) : (
-                <Send className="w-4 h-4 mr-2" />
-              )}
-              Enviar contrato
-            </Button>
-          </DialogFooter>
+                {/* Templates with no placeholders */}
+                {placeholderData?.templates?.every(
+                  (t: any) => Object.keys(t.autoFilled).length === 0 && t.missing.length === 0
+                ) && (
+                  <div className="p-4 rounded-lg bg-slate-50 text-center text-sm text-slate-500">
+                    Nenhum campo de preenchimento encontrado nos documentos selecionados.
+                    Os documentos serão enviados como estão.
+                  </div>
+                )}
+
+                {/* Summary */}
+                <div className="bg-slate-50 rounded-lg p-3 text-sm space-y-1">
+                  <p className="font-medium text-[#0A2342]">Resumo do contrato</p>
+                  <p className="text-slate-600">
+                    {durationMonths} meses × R$ {monthlyFee || '0'} = R$ {(parseInt(durationMonths || '0') * parseFloat(monthlyFee || '0')).toFixed(2)} total
+                  </p>
+                  <p className="text-slate-500 text-xs">
+                    Pagamento todo dia {paymentDay} do mês
+                  </p>
+                  {totalMissing > 0 && (
+                    <p className="text-xs text-amber-600">
+                      {totalMissingFilled}/{totalMissing} campo{totalMissing !== 1 ? 's' : ''} pendente{totalMissing !== 1 ? 's' : ''} preenchido{totalMissingFilled !== 1 ? 's' : ''}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setStep('configure')}>
+                  <ArrowLeft className="w-4 h-4 mr-1" />
+                  Voltar
+                </Button>
+                <Button
+                  onClick={handleSubmit}
+                  disabled={mutation.isPending}
+                  className="bg-purple-600 hover:bg-purple-700"
+                >
+                  {mutation.isPending ? (
+                    <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                  ) : (
+                    <Send className="w-4 h-4 mr-2" />
+                  )}
+                  Enviar contrato
+                </Button>
+              </DialogFooter>
+            </>
+          )}
         </DialogContent>
       </Dialog>
     </>

@@ -37,12 +37,15 @@ export async function createUserProfile(profile: {
   role: "company" | "candidate";
   agency_id: string | null;
 }): Promise<{ error: any }> {
-  const { error } = await supabaseAdmin.from("users").insert({
+  const { error } = await supabaseAdmin.from("users").upsert({
     id: profile.id,
     email: profile.email,
     name: profile.name,
     role: profile.role,
     agency_id: profile.agency_id,
+  }, {
+    onConflict: 'id',
+    ignoreDuplicates: false
   });
 
   return { error };

@@ -818,6 +818,70 @@ export const agencyRouter = router({
     }),
 
   // ============================================
+  // AI PAYMENT INSTRUCTION PARSING
+  // ============================================
+
+  parsePaymentInstruction: agencyProcedure
+    .input(z.object({
+      instruction: z.string().min(3),
+    }))
+    .mutation(async ({ input }) => {
+      const { invokeLLM } = await import("../_core/llm");
+
+      const today = new Date();
+      const currentYear = today.getFullYear();
+      const currentMonth = today.getMonth() + 1;
+
+      const result = await invokeLLM({
+        messages: [
+          {
+            role: "system",
+            content: `Voce e um assistente que extrai informacoes de pagamento a partir de instrucoes em linguagem natural.
+Hoje e ${today.toISOString().split('T')[0]} (ano ${currentYear}, mes ${currentMonth}).
+
+Extraia os seguintes campos do texto do usuario:
+- monthlyAmount: valor mensal em reais (numero decimal, ex: 250.00)
+- startDate: data de inicio no formato YYYY-MM-DD
+- endDate: data de termino no formato YYYY-MM-DD (opcional)
+- paymentDay: dia do mes para vencimento (1-31, opcional)
+- paidMonths: numero de meses ja pagos (opcional, default 0)
+- notes: observacoes adicionais (opcional)
+
+Regras:
+- Se o usuario diz "comecando em marco" sem ano, use ${currentYear} (ou ${currentYear + 1} se marco ja passou)
+- Se o usuario diz "por 12 meses", calcule endDate a partir de startDate
+- Se o usuario diz "dia 10", paymentDay = 10
+- Retorne APENAS JSON valido, sem markdown ou texto extra`
+          },
+          {
+            role: "user",
+            content: input.instruction,
+          },
+        ],
+        responseFormat: { type: "json_object" },
+      });
+
+      const content = result.choices?.[0]?.message?.content;
+      if (!content) {
+        throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'AI nao retornou resposta' });
+      }
+
+      try {
+        const parsed = JSON.parse(typeof content === 'string' ? content : JSON.stringify(content));
+        return {
+          monthlyAmount: parsed.monthlyAmount || null,
+          startDate: parsed.startDate || null,
+          endDate: parsed.endDate || null,
+          paymentDay: parsed.paymentDay || null,
+          paidMonths: parsed.paidMonths || 0,
+          notes: parsed.notes || null,
+        };
+      } catch {
+        throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Falha ao processar resposta da IA' });
+      }
+    }),
+
+  // ============================================
   // COMPANY PAYMENT SCHEDULE (agency creates payments for a company)
   // ============================================
 

@@ -309,7 +309,8 @@ export async function getPaymentsByAgencyId(agencyId: string) {
       companies!inner(id, company_name, agency_id),
       contracts(
         id, contract_number,
-        candidate:candidates(id, full_name)
+        candidate:candidates(id, full_name),
+        job:jobs(id, title)
       )
     `
     )
