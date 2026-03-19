@@ -91,6 +91,15 @@ export interface Database {
           contract_signed_at: string | null
           summary: string | null
           summary_generated_at: string | null
+          cep: string | null
+          complement: string | null
+          neighborhood: string | null
+          contact_person: string | null
+          contact_phone: string | null
+          landline_phone: string | null
+          mobile_phone: string | null
+          employee_count: string | null
+          social_media: string | null
           created_at: string
           updated_at: string
         }
@@ -125,6 +134,15 @@ export interface Database {
           contract_signed_at?: string | null
           summary?: string | null
           summary_generated_at?: string | null
+          cep?: string | null
+          complement?: string | null
+          neighborhood?: string | null
+          contact_person?: string | null
+          contact_phone?: string | null
+          landline_phone?: string | null
+          mobile_phone?: string | null
+          employee_count?: string | null
+          social_media?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -159,6 +177,15 @@ export interface Database {
           contract_signed_at?: string | null
           summary?: string | null
           summary_generated_at?: string | null
+          cep?: string | null
+          complement?: string | null
+          neighborhood?: string | null
+          contact_person?: string | null
+          contact_phone?: string | null
+          landline_phone?: string | null
+          mobile_phone?: string | null
+          employee_count?: string | null
+          social_media?: string | null
           created_at?: string
           updated_at?: string
         }

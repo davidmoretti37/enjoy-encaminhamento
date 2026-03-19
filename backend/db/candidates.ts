@@ -57,7 +57,8 @@ export async function getCandidatesByIds(ids: string[]): Promise<Candidate[]> {
 }
 
 export async function getAllCandidates(): Promise<Candidate[]> {
-  const { data, error } = await supabase
+  // Use admin client to bypass RLS (called from admin-only routes)
+  const { data, error } = await supabaseAdmin
     .from("candidates")
     .select("*")
     .order("created_at", { ascending: false });
@@ -80,7 +81,8 @@ export async function searchCandidates(filters: {
   availableForCLT?: boolean;
   status?: string;
 }): Promise<Candidate[]> {
-  let query = supabase.from("candidates").select("*");
+  // Use admin client to bypass RLS (called from admin/company-only routes)
+  let query = supabaseAdmin.from("candidates").select("*");
 
   if (filters.educationLevel) {
     query = query.eq("education_level", filters.educationLevel);
