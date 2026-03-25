@@ -130,7 +130,7 @@ export async function createJobForOnboarding(
   data: {
     title: string;
     description: string;
-    contract_type: "estagio" | "clt" | "menor-aprendiz";
+    contract_type: "estagio" | "clt" | "menor-aprendiz" | "pj";
     work_type: "presencial" | "remoto" | "hibrido";
     salary?: number | null;
     salary_min?: number | null;
@@ -226,7 +226,7 @@ export async function createJobFromCompanyForm(
     }
   }
 
-  const contractTypeMap: Record<string, "estagio" | "clt" | "menor-aprendiz"> = {
+  const contractTypeMap: Record<string, "estagio" | "clt" | "menor-aprendiz" | "pj"> = {
     clt: "clt",
     estagio: "estagio",
     jovem_aprendiz: "menor-aprendiz",

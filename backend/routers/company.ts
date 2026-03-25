@@ -909,4 +909,19 @@ export const companyRouter = router({
         similarity: r.similarity,
       }));
     }),
+
+  // Get agency booking info for company to schedule meetings
+  getAgencyBookingInfo: companyProcedure.query(async ({ ctx }) => {
+    const company = await db.getCompanyByUserId(ctx.user.id);
+    if (!company || !company.agency_id) {
+      throw new TRPCError({ code: 'NOT_FOUND', message: 'Agência não encontrada' });
+    }
+
+    const agency = await db.getAgencyById(company.agency_id);
+    if (!agency) {
+      throw new TRPCError({ code: 'NOT_FOUND', message: 'Agência não encontrada' });
+    }
+
+    return { adminId: agency.user_id, agencyName: agency.name };
+  }),
 });

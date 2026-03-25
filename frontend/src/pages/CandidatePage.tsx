@@ -47,6 +47,15 @@ import DashboardLayout from "@/components/DashboardLayout";
 import ImportCandidatesModal from "@/components/ImportCandidatesModal";
 import { useState } from "react";
 import { toast } from "sonner";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 
 // Mini progress indicator for batch workflow
 function BatchProgressIndicator({ status }: { status: string }) {
@@ -370,6 +379,38 @@ export default function CandidatePage() {
     onError: (error) => {
       toast.error(`Erro: ${error.message}`);
     },
+  });
+
+  // Meeting scheduling state & mutation (Feature 1)
+  const [schedulingBatch, setSchedulingBatch] = useState<any>(null);
+  const [meetingDate, setMeetingDate] = useState('');
+  const [meetingTime, setMeetingTime] = useState('');
+  const [meetingLink, setMeetingLink] = useState('');
+  const [meetingNotes, setMeetingNotes] = useState('');
+
+  const scheduleMeeting = trpc.batch.scheduleBatchMeeting.useMutation({
+    onSuccess: () => {
+      toast.success('Reunião agendada com sucesso');
+      setSchedulingBatch(null);
+      setMeetingDate('');
+      setMeetingTime('');
+      setMeetingLink('');
+      setMeetingNotes('');
+      refetchBatches();
+    },
+    onError: (err) => toast.error(err.message || 'Erro ao agendar reunião'),
+  });
+
+  // Complete batch state & mutation (Feature 2)
+  const [completingBatch, setCompletingBatch] = useState<any>(null);
+
+  const completeBatch = trpc.batch.completeBatch.useMutation({
+    onSuccess: () => {
+      toast.success('Processo marcado como concluído');
+      setCompletingBatch(null);
+      refetchBatches();
+    },
+    onError: (err) => toast.error(err.message || 'Erro ao concluir processo'),
   });
 
   const isLoading = candidatesLoading;
@@ -927,7 +968,7 @@ export default function CandidatePage() {
                                 className="bg-green-600 hover:bg-green-700"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  toast.info('Funcionalidade em desenvolvimento');
+                                  setSchedulingBatch(batch);
                                 }}
                               >
                                 <Calendar className="h-3.5 w-3.5 mr-1.5" />
@@ -940,7 +981,7 @@ export default function CandidatePage() {
                                 className="bg-emerald-600 hover:bg-emerald-700"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  toast.info('Funcionalidade em desenvolvimento');
+                                  setCompletingBatch(batch);
                                 }}
                               >
                                 <CheckCircle className="h-3.5 w-3.5 mr-1.5" />
@@ -991,6 +1032,138 @@ export default function CandidatePage() {
           }}
         />
       )}
+
+      {/* Schedule Meeting Modal (Feature 1) */}
+      <Dialog open={!!schedulingBatch} onOpenChange={(open) => {
+        if (!open) {
+          setSchedulingBatch(null);
+          setMeetingDate('');
+          setMeetingTime('');
+          setMeetingLink('');
+          setMeetingNotes('');
+        }
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Agendar Reunião — {schedulingBatch?.company?.company_name}</DialogTitle>
+            <DialogDescription>
+              Agende uma reunião para revisar os candidatos da vaga "{schedulingBatch?.job?.title}"
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="meeting-date">Data *</Label>
+                <Input
+                  id="meeting-date"
+                  type="date"
+                  value={meetingDate}
+                  onChange={(e) => setMeetingDate(e.target.value)}
+                  min={new Date().toISOString().split('T')[0]}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="meeting-time">Horário *</Label>
+                <Input
+                  id="meeting-time"
+                  type="time"
+                  value={meetingTime}
+                  onChange={(e) => setMeetingTime(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="meeting-link">Link da reunião (opcional)</Label>
+              <Input
+                id="meeting-link"
+                type="url"
+                placeholder="https://meet.google.com/..."
+                value={meetingLink}
+                onChange={(e) => setMeetingLink(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="meeting-notes">Observações (opcional)</Label>
+              <textarea
+                id="meeting-notes"
+                className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                placeholder="Notas sobre a reunião..."
+                value={meetingNotes}
+                onChange={(e) => setMeetingNotes(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {
+              setSchedulingBatch(null);
+              setMeetingDate('');
+              setMeetingTime('');
+              setMeetingLink('');
+              setMeetingNotes('');
+            }}>
+              Cancelar
+            </Button>
+            <Button
+              className="bg-green-600 hover:bg-green-700"
+              disabled={!meetingDate || !meetingTime || scheduleMeeting.isPending}
+              onClick={() => {
+                if (meetingLink && !/^https?:\/\/.+/.test(meetingLink)) {
+                  toast.error('Link da reunião inválido');
+                  return;
+                }
+                const scheduledAt = new Date(`${meetingDate}T${meetingTime}:00-03:00`).toISOString();
+                scheduleMeeting.mutate({
+                  batchId: schedulingBatch!.id,
+                  scheduledAt,
+                  ...(meetingLink ? { meetingLink } : {}),
+                  ...(meetingNotes ? { notes: meetingNotes } : {}),
+                });
+              }}
+            >
+              {scheduleMeeting.isPending ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Calendar className="h-4 w-4 mr-2" />
+              )}
+              Agendar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Complete Batch Confirmation Dialog (Feature 2) */}
+      <Dialog open={!!completingBatch} onOpenChange={(open) => {
+        if (!open) setCompletingBatch(null);
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Confirmar Conclusão</DialogTitle>
+            <DialogDescription>
+              Confirmar conclusão do processo seletivo para {completingBatch?.company?.company_name}?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCompletingBatch(null)}>
+              Cancelar
+            </Button>
+            <Button
+              className="bg-emerald-600 hover:bg-emerald-700"
+              disabled={completeBatch.isPending}
+              onClick={() => {
+                completeBatch.mutate({ batchId: completingBatch!.id });
+              }}
+            >
+              {completeBatch.isPending ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <CheckCircle className="h-4 w-4 mr-2" />
+              )}
+              Confirmar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       </ContentTransition>
     </DashboardLayout>
   );

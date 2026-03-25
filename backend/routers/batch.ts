@@ -191,6 +191,51 @@ export const batchRouter = router({
     }),
 
   /**
+   * Complete a batch (mark meeting as done)
+   */
+  completeBatch: agencyProcedure
+    .input(z.object({
+      batchId: z.string().uuid(),
+      notes: z.string().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const agency = await db.getAgencyForUserContext(ctx.user.id, ctx.user.role);
+      if (!agency) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Agency not found" });
+      }
+
+      const batch = await batchDb.getBatchById(input.batchId);
+      if (!batch || (batch.agency_id !== agency.id && ctx.user.role !== "admin")) {
+        throw new TRPCError({ code: "FORBIDDEN" });
+      }
+
+      if (batch.status !== "meeting_scheduled") {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Somente processos com reunião agendada podem ser concluídos",
+        });
+      }
+
+      await batchDb.updateBatch(input.batchId, {
+        status: "completed",
+        meeting_completed_at: new Date().toISOString(),
+        ...(input.notes ? { meeting_notes: input.notes } : {}),
+      });
+
+      // Notify company
+      await db.createNotification({
+        user_id: batch.company.user_id,
+        title: "Processo concluído",
+        message: `O processo seletivo para a vaga "${batch.job.title}" foi concluído`,
+        type: "info",
+        related_to_type: "batch",
+        related_to_id: input.batchId,
+      });
+
+      return { success: true };
+    }),
+
+  /**
    * Get all batches for agency
    */
   getAgencyBatches: agencyProcedure

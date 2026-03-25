@@ -16,6 +16,7 @@ import Autoplay from "embla-carousel-autoplay";
 import { trpc } from "@/lib/trpc";
 import {
   Calendar,
+  CalendarDays,
   Users,
   UserCheck,
   DollarSign,
@@ -34,6 +35,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { statusToStep } from "@/components/JobProgressBar";
+import { toast } from "sonner";
 
 export default function CompanyPortalDashboard() {
   const { user, loading: authLoading } = useAuth();
@@ -64,6 +66,10 @@ export default function CompanyPortalDashboard() {
     { enabled: !!user && user.role === 'company' }
   );
   const { data: jobs, isLoading: jobsLoading } = trpc.company.getJobs.useQuery(
+    undefined,
+    { enabled: !!user && user.role === 'company' }
+  );
+  const { data: bookingInfo } = trpc.company.getAgencyBookingInfo.useQuery(
     undefined,
     { enabled: !!user && user.role === 'company' }
   );
@@ -427,7 +433,7 @@ export default function CompanyPortalDashboard() {
         </div>
 
         {/* Quick Navigation Guide */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 py-6">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 py-6">
           {[
             {
               icon: UserCheck,
@@ -453,13 +459,28 @@ export default function CompanyPortalDashboard() {
               description: 'Gerencie faturas e pagamentos',
               href: '/company/payments',
             },
+            {
+              icon: CalendarDays,
+              title: 'Solicitar Reunião',
+              description: 'Agende uma reunião com sua agência',
+              href: bookingInfo?.adminId
+                ? `/book/${bookingInfo.adminId}?email=${encodeURIComponent(user.email || '')}`
+                : null,
+            },
           ].map((item) => {
             const Icon = item.icon;
             return (
               <button
                 key={item.title}
-                onClick={() => setLocation(item.href)}
-                className="flex flex-col items-center text-center p-4 rounded-xl bg-gray-50 hover:bg-gray-100 transition-colors group"
+                onClick={() => {
+                  if (item.href) {
+                    setLocation(item.href);
+                  } else if (item.title === 'Solicitar Reunião') {
+                    toast.error('Não foi possível carregar informações da agência');
+                  }
+                }}
+                disabled={item.title === 'Solicitar Reunião' && !bookingInfo}
+                className="flex flex-col items-center text-center p-4 rounded-xl bg-gray-50 hover:bg-gray-100 transition-colors group disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <div className="p-3 rounded-xl bg-white shadow-sm mb-3 group-hover:shadow transition-shadow">
                   <Icon className="h-6 w-6 text-gray-700" />
