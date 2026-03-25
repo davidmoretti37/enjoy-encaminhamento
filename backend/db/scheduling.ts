@@ -553,12 +553,14 @@ export async function createAdminAvailability(input: {
   return data;
 }
 
-export async function deleteAdminAvailability(id: string, adminId: string): Promise<void> {
-  const { error } = await supabaseAdmin
+export async function deleteAdminAvailability(id: string, adminId: string, agencyId?: string): Promise<void> {
+  let query = supabaseAdmin
     .from("admin_availability")
     .delete()
     .eq("id", id)
     .eq("admin_id", adminId);
+  if (agencyId) query = query.eq("agency_id", agencyId);
+  const { error } = await query;
 
   if (error) {
     console.error("Error deleting admin availability:", error);
@@ -613,8 +615,9 @@ export async function getBlockedSlots(
   agencyId?: string
 ): Promise<any[]> {
   const [year, month, day] = date.split("-").map(Number);
-  const dateObj = new Date(year, month - 1, day);
-  const dayOfWeek = dateObj.getDay();
+  // Use Date.UTC so getUTCDay() is deterministic regardless of server timezone
+  const dateObj = new Date(Date.UTC(year, month - 1, day));
+  const dayOfWeek = dateObj.getUTCDay();
 
   let query = supabaseAdmin
     .from("admin_availability")
@@ -1105,8 +1108,9 @@ export async function getAvailableSlots(
   agencyId?: string
 ): Promise<{ start: string; end: string; blocked?: boolean }[]> {
   const [year, month, day] = date.split("-").map(Number);
-  const dateObj = new Date(year, month - 1, day);
-  const dayOfWeek = dateObj.getDay();
+  // Use Date.UTC so getUTCDay() is deterministic regardless of server timezone
+  const dateObj = new Date(Date.UTC(year, month - 1, day));
+  const dayOfWeek = dateObj.getUTCDay();
 
   const settings = await getAdminSettings(adminId, agencyId);
   const SLOT_DURATION = settings?.meeting_duration_minutes || 30;
@@ -1154,6 +1158,15 @@ export async function getAvailableSlots(
 
   const slots: { start: string; end: string; blocked?: boolean }[] = [];
 
+  // Brazil standard time is UTC-3 (no DST since 2019)
+  const BRT_OFFSET = "-03:00";
+
+  // Helper: build a correct UTC timestamp from a local BRT time
+  function brtToIso(h: number, m: number): string {
+    const iso = `${date}T${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:00${BRT_OFFSET}`;
+    return new Date(iso).toISOString();
+  }
+
   for (const avail of availability || []) {
     const [startHour, startMin] = avail.start_time.split(":").map(Number);
     const [endHour, endMin] = avail.end_time.split(":").map(Number);
@@ -1162,23 +1175,20 @@ export async function getAvailableSlots(
     const endTime = endHour * 60 + endMin;
 
     while (currentTime + SLOT_DURATION <= endTime) {
-      const slotStart = new Date(year, month - 1, day);
-      slotStart.setHours(Math.floor(currentTime / 60), currentTime % 60, 0, 0);
+      const slotH = Math.floor(currentTime / 60);
+      const slotM = currentTime % 60;
+      const endH = Math.floor((currentTime + SLOT_DURATION) / 60);
+      const endM = (currentTime + SLOT_DURATION) % 60;
 
-      const slotEnd = new Date(year, month - 1, day);
-      slotEnd.setHours(
-        Math.floor((currentTime + SLOT_DURATION) / 60),
-        (currentTime + SLOT_DURATION) % 60,
-        0,
-        0
-      );
+      const slotStartIso = brtToIso(slotH, slotM);
+      const slotEndIso = brtToIso(endH, endM);
+      const slotStartMs = new Date(slotStartIso).getTime();
+      const slotEndMs = new Date(slotEndIso).getTime();
 
       const isBooked = (meetings || []).some((meeting) => {
-        const meetingStart = new Date(meeting.scheduled_at);
-        const meetingEnd = new Date(
-          meetingStart.getTime() + (meeting.duration_minutes || SLOT_DURATION) * 60000
-        );
-        return slotStart < meetingEnd && slotEnd > meetingStart;
+        const meetingStart = new Date(meeting.scheduled_at).getTime();
+        const meetingEnd = meetingStart + (meeting.duration_minutes || SLOT_DURATION) * 60000;
+        return slotStartMs < meetingEnd && slotEndMs > meetingStart;
       });
 
       const isBlocked = (blockedSlots || []).some((block) => {
@@ -1192,8 +1202,8 @@ export async function getAvailableSlots(
       });
 
       slots.push({
-        start: slotStart.toISOString(),
-        end: slotEnd.toISOString(),
+        start: slotStartIso,
+        end: slotEndIso,
         blocked: isBlocked || isBooked || undefined,
       });
 
@@ -1201,14 +1211,17 @@ export async function getAvailableSlots(
     }
   }
 
-  const now = new Date();
-  const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  // Use BRT "now" for same-day filtering
+  // Brazil abolished DST in 2019, so UTC-3 is permanent (no seasonal offset)
+  const nowUtc = Date.now();
+  const nowBrt = new Date(nowUtc - 3 * 3600000);
+  const todayStr = `${nowBrt.getUTCFullYear()}-${String(nowBrt.getUTCMonth() + 1).padStart(2, "0")}-${String(nowBrt.getUTCDate()).padStart(2, "0")}`;
   const isToday = date === todayStr;
 
   if (isToday) {
     const bufferMinutes = SLOT_DURATION;
-    const minTime = new Date(now.getTime() + bufferMinutes * 60000);
-    return slots.filter((slot) => new Date(slot.start) >= minTime);
+    const minTime = nowUtc + bufferMinutes * 60000;
+    return slots.filter((slot) => new Date(slot.start).getTime() >= minTime);
   }
 
   return slots;
@@ -1220,8 +1233,9 @@ export async function getAllSlotsForDate(
   agencyId?: string
 ): Promise<{ start: string; end: string; blocked?: boolean }[]> {
   const [year, month, day] = date.split("-").map(Number);
-  const dateObj = new Date(year, month - 1, day);
-  const dayOfWeek = dateObj.getDay();
+  // Use Date.UTC so getUTCDay() is deterministic regardless of server timezone
+  const dateObj = new Date(Date.UTC(year, month - 1, day));
+  const dayOfWeek = dateObj.getUTCDay();
 
   const settings = await getAdminSettings(adminId, agencyId);
   const SLOT_DURATION = settings?.meeting_duration_minutes || 30;
@@ -1251,6 +1265,14 @@ export async function getAllSlotsForDate(
 
   const slots: { start: string; end: string; blocked?: boolean }[] = [];
 
+  // Brazil standard time is UTC-3 (no DST since 2019)
+  const BRT_OFFSET = "-03:00";
+
+  function brtToIso(h: number, m: number): string {
+    const iso = `${date}T${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:00${BRT_OFFSET}`;
+    return new Date(iso).toISOString();
+  }
+
   for (const avail of availability || []) {
     const [startHour, startMin] = avail.start_time.split(":").map(Number);
     const [endHour, endMin] = avail.end_time.split(":").map(Number);
@@ -1259,16 +1281,13 @@ export async function getAllSlotsForDate(
     const endTime = endHour * 60 + endMin;
 
     while (currentTime + SLOT_DURATION <= endTime) {
-      const slotStart = new Date(year, month - 1, day);
-      slotStart.setHours(Math.floor(currentTime / 60), currentTime % 60, 0, 0);
+      const slotH = Math.floor(currentTime / 60);
+      const slotM = currentTime % 60;
+      const endH = Math.floor((currentTime + SLOT_DURATION) / 60);
+      const endM = (currentTime + SLOT_DURATION) % 60;
 
-      const slotEnd = new Date(year, month - 1, day);
-      slotEnd.setHours(
-        Math.floor((currentTime + SLOT_DURATION) / 60),
-        (currentTime + SLOT_DURATION) % 60,
-        0,
-        0
-      );
+      const slotStartIso = brtToIso(slotH, slotM);
+      const slotEndIso = brtToIso(endH, endM);
 
       const isBlocked = (blockedSlots || []).some((block) => {
         const [blockStartH, blockStartM] = block.start_time.split(":").map(Number);
@@ -1281,8 +1300,8 @@ export async function getAllSlotsForDate(
       });
 
       slots.push({
-        start: slotStart.toISOString(),
-        end: slotEnd.toISOString(),
+        start: slotStartIso,
+        end: slotEndIso,
         blocked: isBlocked || undefined,
       });
 

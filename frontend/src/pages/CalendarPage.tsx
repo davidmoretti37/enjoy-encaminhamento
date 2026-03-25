@@ -127,22 +127,26 @@ export default function CalendarPage() {
   const loadingMeetings = isAffiliate ? affiliateMeetingsQuery.isLoading : agencyMeetingsQuery.isLoading;
   const refetchMeetings = isAffiliate ? affiliateMeetingsQuery.refetch : agencyMeetingsQuery.refetch;
 
-  // Settings queries
-  const { data: availability, refetch: refetchAvailability } = trpc.outreach.getAvailability.useQuery(undefined, {
-    enabled: !!user?.id,
-  });
-  const { data: adminSettings, refetch: refetchSettings } = trpc.outreach.getAdminSettings.useQuery(undefined, {
-    enabled: !!user?.id,
-    onSuccess: (data) => {
-      if (data?.meeting_duration_minutes) {
-        setMeetingDuration(data.meeting_duration_minutes);
-      }
-    },
-  });
+  // Settings queries — pass agencyId so agency-role users get their scoped data
+  const { data: availability, refetch: refetchAvailability } = trpc.outreach.getAvailability.useQuery(
+    { agencyId: currentAgency?.id },
+    { enabled: !!user?.id }
+  );
+  const { data: adminSettings, refetch: refetchSettings } = trpc.outreach.getAdminSettings.useQuery(
+    { agencyId: currentAgency?.id },
+    {
+      enabled: !!user?.id,
+      onSuccess: (data) => {
+        if (data?.meeting_duration_minutes) {
+          setMeetingDuration(data.meeting_duration_minutes);
+        }
+      },
+    }
+  );
 
   // Get slots for the blocker section in settings modal
   const { data: blockerSlots, refetch: refetchBlockerSlots } = trpc.outreach.getAllSlotsForDate.useQuery(
-    { date: format(blockerSelectedDates[0] || new Date(), 'yyyy-MM-dd') },
+    { date: format(blockerSelectedDates[0] || new Date(), 'yyyy-MM-dd'), agencyId: currentAgency?.id },
     {
       enabled: !!user?.id && settingsModalOpen && blockerSelectedDates.length > 0,
       staleTime: 0,
@@ -348,7 +352,7 @@ export default function CalendarPage() {
   };
 
   const handleSaveSettings = () => {
-    saveSettingsMutation.mutate({ meeting_duration_minutes: meetingDuration });
+    saveSettingsMutation.mutate({ agencyId: currentAgency?.id, meeting_duration_minutes: meetingDuration });
   };
 
   // Handler for blocking/unblocking from blocker modal - applies to ALL selected dates
@@ -1005,6 +1009,7 @@ export default function CalendarPage() {
                               setSavingDay(day.value);
                               if (checked) {
                                 saveAvailabilityMutation.mutate({
+                                  agencyId: currentAgency?.id,
                                   dayOfWeek: day.value,
                                   startTime: "09:00",
                                   endTime: "17:00",
@@ -1028,6 +1033,7 @@ export default function CalendarPage() {
                               setSavingDay(day.value);
                               await deleteAvailabilityMutation.mutateAsync({ id: dayAvailability.id });
                               saveAvailabilityMutation.mutate({
+                                agencyId: currentAgency?.id,
                                 dayOfWeek: day.value,
                                 startTime: e.target.value,
                                 endTime: dayAvailability.end_time?.slice(0, 5) || "17:00",
@@ -1047,6 +1053,7 @@ export default function CalendarPage() {
                               setSavingDay(day.value);
                               await deleteAvailabilityMutation.mutateAsync({ id: dayAvailability.id });
                               saveAvailabilityMutation.mutate({
+                                agencyId: currentAgency?.id,
                                 dayOfWeek: day.value,
                                 startTime: dayAvailability.start_time?.slice(0, 5) || "09:00",
                                 endTime: e.target.value,

@@ -427,6 +427,11 @@ export const hiringRouter = router({
             // Build template data for DOCX filling
             const agency = company?.agency_id ? await db.getAgencyById(company.agency_id) : null;
             const templateData = buildHiringTemplateData({
+              // NOTE: companies table has TWO address columns:
+              // - postal_code: original column from migration 006
+              // - cep: added in migration 094 for BR-format postal codes (digits only)
+              // This reads `company.cep` — confirm this column exists and is populated.
+              // If postal_code and cep serve the same purpose, consolidate in a future migration.
               company: company ? {
                 company_name: company.company_name,
                 business_name: company.business_name,
@@ -1141,6 +1146,11 @@ export const hiringRouter = router({
       const agency = company?.agency_id ? await db.getAgencyById(company.agency_id) : null;
 
       // Build auto-filled data from available records
+      // NOTE: companies table has TWO address columns:
+      // - postal_code: original column from migration 006
+      // - cep: added in migration 094 for BR-format postal codes (digits only)
+      // This reads `company.cep` — confirm this column exists and is populated.
+      // If postal_code and cep serve the same purpose, consolidate in a future migration.
       const autoData = buildHiringTemplateData({
         company: company ? {
           company_name: company.company_name,

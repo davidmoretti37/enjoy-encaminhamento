@@ -28,6 +28,7 @@ const EMPLOYMENT_TYPES = [
   { value: "clt", label: "CLT" },
   { value: "estagio", label: "Estágio" },
   { value: "jovem_aprendiz", label: "Jovem Aprendiz" },
+  { value: "pj", label: "PJ" },
 ];
 
 const URGENCY_OPTIONS = [

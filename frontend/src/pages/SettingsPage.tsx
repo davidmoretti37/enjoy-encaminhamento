@@ -23,6 +23,7 @@ import {
   Link,
   Copy,
   Check,
+  Lock,
 } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { toast } from "sonner";
@@ -139,6 +140,41 @@ export default function SettingsPage() {
       pix_key_type: (pixKeyType as any) || "cnpj",
       payment_instructions: paymentInstructions,
     });
+  };
+
+  // Password change state
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+
+  const changePasswordMutation = trpc.auth.changePassword.useMutation({
+    onSuccess: () => {
+      toast.success('Senha alterada com sucesso');
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+      setPasswordError(null);
+    },
+    onError: (err: any) => {
+      toast.error(err.message || 'Erro ao alterar senha');
+    },
+  });
+
+  const handleChangePassword = (e: React.FormEvent) => {
+    e.preventDefault();
+    setPasswordError(null);
+
+    if (newPassword.length < 8) {
+      setPasswordError('Nova senha deve ter pelo menos 8 caracteres');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPasswordError('As senhas não coincidem');
+      return;
+    }
+
+    changePasswordMutation.mutate({ currentPassword, newPassword });
   };
 
   if (!user || !user.role || !["super_admin", "admin", "agency"].includes(user.role)) {
@@ -446,6 +482,69 @@ export default function SettingsPage() {
         {canManageDocs && user && (
           <PublicLinksCard userId={user.id} />
         )}
+
+        {/* Password Change Section */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Lock className="h-5 w-5" />
+              Alterar Senha
+            </CardTitle>
+            <CardDescription>Atualize sua senha de acesso</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleChangePassword} className="space-y-4 max-w-md">
+              <div>
+                <label className="text-sm font-medium text-gray-700 mb-1 block">Senha atual</label>
+                <input
+                  type="password"
+                  value={currentPassword}
+                  onChange={(e) => setCurrentPassword(e.target.value)}
+                  required
+                  className="w-full px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-gray-700 mb-1 block">Nova senha</label>
+                <input
+                  type="password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  required
+                  className="w-full px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+                <p className="text-xs text-muted-foreground mt-1">Mínimo de 8 caracteres</p>
+              </div>
+              <div>
+                <label className="text-sm font-medium text-gray-700 mb-1 block">Confirmar nova senha</label>
+                <input
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  required
+                  className="w-full px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+              </div>
+
+              {passwordError && (
+                <p className="text-sm text-red-600">{passwordError}</p>
+              )}
+
+              <Button
+                type="submit"
+                disabled={changePasswordMutation.isPending}
+                className="gap-2"
+              >
+                {changePasswordMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Lock className="h-4 w-4" />
+                )}
+                Alterar Senha
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
 
         {/* Logout Section */}
         <Card>

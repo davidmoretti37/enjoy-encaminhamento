@@ -15,7 +15,7 @@ export const contractRouter = router({
       candidateId: z.string().uuid(),
       jobId: z.string().uuid(),
       applicationId: z.string().uuid(),
-      contractType: z.enum(["estagio", "clt", "menor-aprendiz"]),
+      contractType: z.enum(["estagio", "clt", "menor-aprendiz", "pj"]),
       contractNumber: z.string(),
       monthlySalary: z.number(),
       monthlyFee: z.number(),
@@ -464,7 +464,37 @@ export const contractRouter = router({
       if (ctx.user.role === 'company') {
         const company = await db.getCompanyByUserId(ctx.user.id);
         if (!company) return [];
-        return await db.getSignedDocuments({ companyId: company.id, ...input });
+
+        // Get documents from signed_documents table
+        const signedDocs = await db.getSignedDocuments({ companyId: company.id, ...input });
+
+        // Also get contracts uploaded by agency to scheduled_meetings
+        const { supabaseAdmin } = await import("../supabase");
+        const { data: meetingContracts, error: meetingError } = await supabaseAdmin
+          .from('scheduled_meetings')
+          .select('id, contract_pdf_url, contract_signed_at, company_name, updated_at')
+          .eq('company_id', company.id)
+          .not('contract_pdf_url', 'is', null)
+          .order('contract_signed_at', { ascending: false })
+          .limit(100);
+
+        if (meetingError) {
+          console.error('[Contract] Error fetching meeting contracts:', meetingError);
+          return signedDocs;
+        }
+
+        // Normalize meeting contracts to match signed_documents shape
+        const normalizedMeetingDocs = (meetingContracts ?? []).map((m: any) => ({
+          id: `meeting-${m.id}`,
+          category: 'contrato_inicial',
+          signed_at: m.contract_signed_at || m.updated_at,
+          signer_name: m.company_name || 'Empresa',
+          signer_cpf: '',
+          signed_pdf_url: m.contract_pdf_url,
+          template: { name: 'Contrato Assinado', file_url: m.contract_pdf_url, category: 'contrato_inicial' },
+        }));
+
+        return [...signedDocs, ...normalizedMeetingDocs];
       }
 
       if (ctx.user.role === 'agency') {

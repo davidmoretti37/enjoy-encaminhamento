@@ -313,6 +313,8 @@ export default function Login() {
                     </div>
                   </div>
 
+                  {/* Agency field is required only in agency-context signup flows.
+                     Candidates who sign up independently may have agency_id = NULL. */}
                   <div className="space-y-2">
                     <Label>Região</Label>
                     <Select value={signupAgencyId} onValueChange={setSignupAgencyId}>

@@ -14,6 +14,20 @@ import { escapeHtml } from "../_core/htmlEscape";
 import { passwordSchema } from "../_core/passwordSchema";
 import { generateCompanySummary } from "../services/ai/summarizer";
 
+// Resolve agencyId based on user role: agency users look up via agencies.user_id,
+// admin users look up via admin_agency_context switcher
+async function resolveAgencyId(userId: string, role: string, inputAgencyId?: string | null): Promise<string | undefined> {
+  if (inputAgencyId) return inputAgencyId;
+  if (role === "agency") {
+    const agency = await db.getAgencyByUserId(userId);
+    return agency?.id;
+  }
+  if (role === "admin" || role === "super_admin") {
+    return (await db.getAdminAgencyContext(userId)) || undefined;
+  }
+  return undefined;
+}
+
 export const outreachRouter = router({
   // Send outreach email (available to agencies and admins)
   sendEmail: agencyProcedure
@@ -102,7 +116,7 @@ export const outreachRouter = router({
         .optional()
     )
     .query(async ({ ctx, input }) => {
-      const agencyId = input?.agencyId || (await db.getAdminAgencyContext(ctx.user.id)) || undefined;
+      const agencyId = await resolveAgencyId(ctx.user.id, ctx.user.role, input?.agencyId);
       return await db.getAdminAvailability(ctx.user.id, agencyId);
     }),
 
@@ -120,7 +134,7 @@ export const outreachRouter = router({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const agencyId = input.agencyId || (await db.getAdminAgencyContext(ctx.user.id)) || undefined;
+      const agencyId = await resolveAgencyId(ctx.user.id, ctx.user.role, input.agencyId);
       return await db.createAdminAvailability({
         adminId: ctx.user.id,
         agencyId,
@@ -130,9 +144,10 @@ export const outreachRouter = router({
 
   // Delete availability (agencies and admins can access)
   deleteAvailability: agencyProcedure
-    .input(z.object({ id: z.string().uuid() }))
+    .input(z.object({ id: z.string().uuid(), agencyId: z.string().uuid().optional() }))
     .mutation(async ({ ctx, input }) => {
-      await db.deleteAdminAvailability(input.id, ctx.user.id);
+      const agencyId = await resolveAgencyId(ctx.user.id, ctx.user.role, input.agencyId);
+      await db.deleteAdminAvailability(input.id, ctx.user.id, agencyId);
       return { success: true };
     }),
 
@@ -146,7 +161,7 @@ export const outreachRouter = router({
         .optional()
     )
     .query(async ({ ctx, input }) => {
-      const agencyId = input?.agencyId || (await db.getAdminAgencyContext(ctx.user.id)) || undefined;
+      const agencyId = await resolveAgencyId(ctx.user.id, ctx.user.role, input?.agencyId);
       const settings = await db.getAdminSettings(ctx.user.id, agencyId);
       return settings || { meeting_duration_minutes: 30 };
     }),
@@ -160,7 +175,7 @@ export const outreachRouter = router({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const agencyId = input.agencyId || (await db.getAdminAgencyContext(ctx.user.id)) || undefined;
+      const agencyId = await resolveAgencyId(ctx.user.id, ctx.user.role, input.agencyId);
       await db.saveAdminSettings(
         ctx.user.id,
         { meeting_duration_minutes: input.meeting_duration_minutes },
@@ -170,15 +185,16 @@ export const outreachRouter = router({
     }),
 
   // Get blocked slots for a specific date
-  getBlockedSlots: adminProcedure
-    .input(z.object({ date: z.string() }))
+  getBlockedSlots: agencyProcedure
+    .input(z.object({ date: z.string(), agencyId: z.string().uuid().optional() }))
     .query(async ({ ctx, input }) => {
-      const agencyId = await db.getAdminAgencyContext(ctx.user.id);
-      return await db.getBlockedSlots(ctx.user.id, input.date, agencyId || undefined);
+      const agencyId = await resolveAgencyId(ctx.user.id, ctx.user.role, input.agencyId);
+      if (!agencyId) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Could not resolve agency context' });
+      return await db.getBlockedSlots(ctx.user.id, input.date, agencyId);
     }),
 
   // Get ALL slots for a date (for admin blocking UI - includes past times)
-  getAllSlotsForDate: adminProcedure
+  getAllSlotsForDate: agencyProcedure
     .input(
       z.object({
         date: z.string(),
@@ -186,40 +202,44 @@ export const outreachRouter = router({
       })
     )
     .query(async ({ ctx, input }) => {
-      const agencyId = input.agencyId || (await db.getAdminAgencyContext(ctx.user.id)) || undefined;
+      const agencyId = await resolveAgencyId(ctx.user.id, ctx.user.role, input.agencyId);
       return await db.getAllSlotsForDate(ctx.user.id, input.date, agencyId);
     }),
 
   // Block a time slot
-  blockTimeSlot: adminProcedure
+  blockTimeSlot: agencyProcedure
     .input(
       z.object({
         startTime: z.string(),
         endTime: z.string(),
         specificDate: z.string().optional(),
         dayOfWeek: z.number().min(0).max(6).optional(),
+        agencyId: z.string().uuid().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const agencyId = await db.getAdminAgencyContext(ctx.user.id);
+      const { agencyId: inputAgencyId, ...rest } = input;
+      const agencyId = await resolveAgencyId(ctx.user.id, ctx.user.role, inputAgencyId);
+      if (!agencyId) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Could not resolve agency context' });
       return await db.blockTimeSlot({
         adminId: ctx.user.id,
-        agencyId: agencyId || undefined,
-        ...input,
+        agencyId,
+        ...rest,
       });
     }),
 
   // Unblock a time slot
-  unblockTimeSlot: adminProcedure
-    .input(z.object({ id: z.string().uuid() }))
+  unblockTimeSlot: agencyProcedure
+    .input(z.object({ id: z.string().uuid(), agencyId: z.string().uuid().optional() }))
     .mutation(async ({ ctx, input }) => {
-      const agencyId = await db.getAdminAgencyContext(ctx.user.id);
-      await db.unblockTimeSlot(input.id, ctx.user.id, agencyId || undefined);
+      const agencyId = await resolveAgencyId(ctx.user.id, ctx.user.role, input.agencyId);
+      if (!agencyId) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Could not resolve agency context' });
+      await db.unblockTimeSlot(input.id, ctx.user.id, agencyId);
       return { success: true };
     }),
 
   // Get scheduled meetings
-  getMeetings: adminProcedure
+  getMeetings: agencyProcedure
     .input(
       z
         .object({
@@ -232,7 +252,7 @@ export const outreachRouter = router({
       const agencyId =
         input?.agencyId === null
           ? undefined
-          : input?.agencyId || (await db.getAdminAgencyContext(ctx.user.id)) || undefined;
+          : await resolveAgencyId(ctx.user.id, ctx.user.role, input?.agencyId);
       return await db.getScheduledMeetings(ctx.user.id, input?.status, agencyId);
     }),
 

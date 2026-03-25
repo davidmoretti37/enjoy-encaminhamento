@@ -369,6 +369,11 @@ export async function createCompanyWithUser(input: {
     };
   }
 
+  // NOTE: companies table has TWO address columns:
+  // - postal_code: original column from migration 006
+  // - cep: added in migration 094 for BR-format postal codes (digits only)
+  // hiring.ts reads `company.cep` — confirm this column exists and is populated.
+  // If postal_code and cep serve the same purpose, consolidate in a future migration.
   const companyData: any = {
     user_id: userId,
     company_name: input.companyName,
@@ -386,8 +391,10 @@ export async function createCompanyWithUser(input: {
   // contact_name and employee_count don't exist on companies table — stored in company_forms
   if (input.businessName) companyData.business_name = input.businessName;
   if (input.website) companyData.website = input.website;
-  if (input.cep) companyData.postal_code = input.cep;
+  if (input.cep) companyData.postal_code = input.cep; // maps frontend "cep" to DB "postal_code" column
   if (input.contractSignedAt) companyData.contract_signed_at = input.contractSignedAt;
+
+  console.log('[createCompanyWithUser] inserting company fields:', Object.keys(companyData));
 
   const { data: companyResult, error: companyError } = await supabaseAdmin
     .from("companies")
@@ -520,11 +527,12 @@ function parseSalary(salaryStr?: string): number | null {
 }
 
 // Map contract type variations to valid enum values
-function normalizeContractType(type?: string): 'estagio' | 'clt' | 'menor-aprendiz' {
+function normalizeContractType(type?: string): 'estagio' | 'clt' | 'menor-aprendiz' | 'pj' {
   if (!type) return 'estagio';
   const lower = type.toLowerCase().trim();
   if (lower.includes('clt')) return 'clt';
   if (lower.includes('aprendiz') || lower.includes('menor')) return 'menor-aprendiz';
+  if (lower === 'pj' || lower.includes('pessoa jurídica') || lower.includes('pessoa juridica')) return 'pj';
   return 'estagio';
 }
 
@@ -775,6 +783,29 @@ export async function bulkCreateCompanies(
 /**
  * Get company's jobs with their matching status and match count
  */
+export async function getCompanyUsers(companyId: string) {
+  // Get the company to find the owner user_id
+  const { data: company, error: companyError } = await supabaseAdmin
+    .from("companies")
+    .select("user_id")
+    .eq("id", companyId)
+    .single();
+
+  if (companyError || !company?.user_id) {
+    if (companyError) throw companyError;
+    return [];
+  }
+
+  // Return the owner user (currently 1-to-1 relationship; no company_users table exists yet)
+  const { data, error } = await supabaseAdmin
+    .from("users")
+    .select("id, name, email, role, created_at")
+    .eq("id", company.user_id);
+
+  if (error) throw error;
+  return (data ?? []).map(u => ({ ...u, isOwner: true }));
+}
+
 export async function getCompanyJobsWithStatus(
   companyId: string
 ): Promise<Array<{

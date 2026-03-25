@@ -167,7 +167,7 @@ export default function CompanyJobs() {
       jobId: editingJob.id,
       title: editFormData.title || undefined,
       description: editFormData.description || undefined,
-      contract_type: (editFormData.contract_type as 'estagio' | 'clt' | 'menor-aprendiz') || undefined,
+      contract_type: (editFormData.contract_type as 'estagio' | 'clt' | 'menor-aprendiz' | 'pj') || undefined,
       salary_min: editFormData.salary ? parseFloat(editFormData.salary) : undefined,
       salary_max: editFormData.salary ? parseFloat(editFormData.salary) : undefined,
       work_schedule: editFormData.work_schedule || undefined,
@@ -197,6 +197,7 @@ export default function CompanyJobs() {
     estagio: 'Estágio',
     clt: 'CLT',
     'menor-aprendiz': 'Menor Aprendiz',
+    pj: 'PJ',
   };
 
   const handleSubmit = () => {
@@ -208,7 +209,7 @@ export default function CompanyJobs() {
     createJobMutation.mutate({
       title: formData.title,
       description: formData.description,
-      contract_type: formData.contract_type as 'estagio' | 'clt' | 'menor-aprendiz',
+      contract_type: formData.contract_type as 'estagio' | 'clt' | 'menor-aprendiz' | 'pj',
       salary_min: formData.salary ? parseFloat(formData.salary) : undefined,
       salary_max: formData.salary ? parseFloat(formData.salary) : undefined,
       work_schedule: formData.work_schedule || undefined,
@@ -257,6 +258,7 @@ export default function CompanyJobs() {
                         <SelectItem value="estagio">Estágio</SelectItem>
                         <SelectItem value="clt">CLT</SelectItem>
                         <SelectItem value="menor-aprendiz">Menor Aprendiz</SelectItem>
+                        <SelectItem value="pj">PJ</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -342,6 +344,7 @@ export default function CompanyJobs() {
                       <SelectItem value="estagio">Estágio</SelectItem>
                       <SelectItem value="clt">CLT</SelectItem>
                       <SelectItem value="menor-aprendiz">Menor Aprendiz</SelectItem>
+                      <SelectItem value="pj">PJ</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>

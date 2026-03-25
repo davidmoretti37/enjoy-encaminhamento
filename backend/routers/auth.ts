@@ -4,7 +4,8 @@ import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { COOKIE_NAME } from "../shared/const";
 import { getSessionCookieOptions } from "../_core/cookies";
-import { publicProcedure, router } from "../_core/trpc";
+import { publicProcedure, protectedProcedure, router } from "../_core/trpc";
+import { supabase, supabaseAdmin } from "../supabase";
 import * as db from "../db";
 
 export const authRouter = router({
@@ -49,6 +50,41 @@ export const authRouter = router({
         throw new TRPCError({
           code: "INTERNAL_SERVER_ERROR",
           message: "Failed to create user profile",
+        });
+      }
+
+      return { success: true };
+    }),
+
+  changePassword: protectedProcedure
+    .input(z.object({
+      currentPassword: z.string().min(1, 'Senha atual é obrigatória'),
+      newPassword: z.string().min(8, 'Senha deve ter pelo menos 8 caracteres'),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      // Re-authenticate with current password to verify identity
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: ctx.user.email,
+        password: input.currentPassword,
+      });
+
+      if (signInError) {
+        throw new TRPCError({
+          code: 'UNAUTHORIZED',
+          message: 'Senha atual incorreta',
+        });
+      }
+
+      // Update password using admin API (after verification)
+      const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
+        ctx.user.id,
+        { password: input.newPassword }
+      );
+
+      if (updateError) {
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Erro ao atualizar senha',
         });
       }
 

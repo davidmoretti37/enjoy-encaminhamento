@@ -233,7 +233,14 @@ export async function getApplicationsByAgencyId(agencyId: string) {
     return [];
   }
 
-  return data || [];
+  const results = data || [];
+
+  if (results.length === 0) {
+    console.warn('[getApplicationsByAgencyId] No applications found for agencyId:', agencyId,
+      '— check for candidates with null agency_id');
+  }
+
+  return results;
 }
 
 export async function getCompaniesByAgencyId(agencyId: string) {

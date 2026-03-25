@@ -25,6 +25,7 @@ import {
   AlertCircle,
   Briefcase,
   BarChart,
+  Lock,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useLocation, useSearch } from "wouter";
@@ -123,6 +124,41 @@ export default function CompanySettingsScreen() {
     return hiringProcesses.filter((hp: any) => hp.status === "active");
   }, [hiringProcesses]);
 
+  // Password change state
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+
+  const changePasswordMutation = trpc.auth.changePassword.useMutation({
+    onSuccess: () => {
+      toast.success('Senha alterada com sucesso');
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+      setPasswordError(null);
+    },
+    onError: (err) => {
+      toast.error(err.message || 'Erro ao alterar senha');
+    },
+  });
+
+  const handleChangePassword = (e: React.FormEvent) => {
+    e.preventDefault();
+    setPasswordError(null);
+
+    if (newPassword.length < 8) {
+      setPasswordError('Nova senha deve ter pelo menos 8 caracteres');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPasswordError('As senhas não coincidem');
+      return;
+    }
+
+    changePasswordMutation.mutate({ currentPassword, newPassword });
+  };
+
   // Section titles for the header
   const sectionTitles: Record<string, string> = {
     company: "Empresa",
@@ -130,6 +166,7 @@ export default function CompanySettingsScreen() {
     notifications: "Notificações",
     documents: "Documentos",
     employees: "Funcionários Ativos",
+    security: "Segurança",
   };
 
   return (
@@ -454,6 +491,69 @@ export default function CompanySettingsScreen() {
               </>
             )}
           </div>
+        )}
+
+        {/* Security Tab */}
+        {activeTab === "security" && (
+          <CardEntrance>
+            <div className="bg-white rounded-xl border-2 border-slate-200 shadow-sm p-6">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-10 h-10 rounded-lg bg-[#FF6B35]/20 flex items-center justify-center">
+                  <Lock className="w-5 h-5 text-[#FF6B35]" />
+                </div>
+                <div>
+                  <h3 className="text-[#0A2342] font-semibold">Alterar Senha</h3>
+                  <p className="text-slate-600 text-sm">Atualize sua senha de acesso</p>
+                </div>
+              </div>
+
+              <form onSubmit={handleChangePassword} className="space-y-4 max-w-md">
+                <div>
+                  <Label htmlFor="current_password">Senha atual</Label>
+                  <Input
+                    id="current_password"
+                    type="password"
+                    value={currentPassword}
+                    onChange={(e) => setCurrentPassword(e.target.value)}
+                    required
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="new_password">Nova senha</Label>
+                  <Input
+                    id="new_password"
+                    type="password"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    required
+                  />
+                  <p className="text-xs text-slate-500 mt-1">Mínimo de 8 caracteres</p>
+                </div>
+                <div>
+                  <Label htmlFor="confirm_password">Confirmar nova senha</Label>
+                  <Input
+                    id="confirm_password"
+                    type="password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    required
+                  />
+                </div>
+
+                {passwordError && (
+                  <p className="text-sm text-red-600">{passwordError}</p>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={changePasswordMutation.isPending}
+                  className="px-6 py-2.5 rounded-full bg-gradient-to-r from-[#1B4D7A] to-[#FF6B35] text-white font-medium shadow-lg shadow-[#FF6B35]/25 hover:shadow-[#FF6B35]/40 hover:scale-105 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {changePasswordMutation.isPending ? 'Alterando...' : 'Alterar Senha'}
+                </button>
+              </form>
+            </div>
+          </CardEntrance>
         )}
 
       </div>

@@ -246,7 +246,7 @@ function EmpresaPortalContent() {
     createJobMutation.mutate({
       title: formData.title,
       description: formData.description,
-      contract_type: formData.contract_type as 'estagio' | 'clt' | 'menor-aprendiz',
+      contract_type: formData.contract_type as 'estagio' | 'clt' | 'menor-aprendiz' | 'pj',
       salary_min: formData.salary ? parseFloat(formData.salary) : undefined,
       salary_max: formData.salary ? parseFloat(formData.salary) : undefined,
       work_schedule: formData.work_schedule || undefined,

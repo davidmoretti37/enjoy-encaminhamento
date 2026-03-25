@@ -107,6 +107,113 @@ function getRecommendationLabel(rec: string | null) {
   return map[rec] || { label: rec, className: 'bg-gray-100 text-gray-600' };
 }
 
+// Application status labels (Portuguese)
+const applicationStatusConfig: Record<string, { label: string; color: string }> = {
+  applied: { label: 'Candidatou-se', color: 'bg-blue-100 text-blue-800' },
+  screening: { label: 'Em análise', color: 'bg-yellow-100 text-yellow-800' },
+  'interview-scheduled': { label: 'Entrevista agendada', color: 'bg-purple-100 text-purple-800' },
+  interviewed: { label: 'Entrevistado', color: 'bg-indigo-100 text-indigo-800' },
+  selected: { label: 'Selecionado', color: 'bg-green-100 text-green-800' },
+  rejected: { label: 'Não selecionado', color: 'bg-red-100 text-red-800' },
+  withdrawn: { label: 'Desistiu', color: 'bg-gray-100 text-gray-800' },
+};
+
+// Component to show direct applicants for a job
+function DirectApplicantsList({ jobId }: { jobId: string }) {
+  const utils = trpc.useUtils();
+  const { data: applications, isLoading } = trpc.application.getByJob.useQuery(
+    { jobId },
+    { enabled: !!jobId }
+  );
+  const updateStatusMutation = trpc.application.updateStatus.useMutation({
+    onSuccess: () => {
+      utils.application.getByJob.invalidate({ jobId });
+      toast.success('Status atualizado com sucesso');
+    },
+    onError: (error) => {
+      toast.error(`Erro ao atualizar status: ${error.message}`);
+    },
+  });
+
+  if (isLoading) {
+    return (
+      <Card className="mt-3">
+        <CardContent className="p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <UserPlus className="h-4 w-4 text-blue-500" />
+            <h4 className="text-sm font-medium text-gray-700">Candidatos que se Candidataram</h4>
+          </div>
+          <div className="text-sm text-muted-foreground">Carregando...</div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (!applications || applications.length === 0) return null;
+
+  return (
+    <Card className="mt-3">
+      <CardContent className="p-4">
+        <div className="flex items-center gap-2 mb-3">
+          <UserPlus className="h-4 w-4 text-blue-500" />
+          <h4 className="text-sm font-medium text-gray-700">
+            Candidatos que se Candidataram ({applications.length})
+          </h4>
+        </div>
+        <div className="space-y-2">
+          {applications.map((app: any) => {
+            const candidate = app.candidates;
+            const statusCfg = applicationStatusConfig[app.status] || { label: app.status, color: 'bg-gray-100 text-gray-600' };
+            return (
+              <div key={app.id} className="flex items-center justify-between p-3 rounded-lg border bg-white">
+                <div className="flex items-center gap-3">
+                  <div className="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-semibold text-sm">
+                    {candidate?.full_name?.[0]?.toUpperCase() || '?'}
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium">{candidate?.full_name || 'Candidato'}</p>
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      {candidate?.city && <span>{candidate.city}</span>}
+                      {app.applied_at && (
+                        <span>
+                          {format(new Date(app.applied_at), "dd/MM/yyyy", { locale: ptBR })}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                <Select
+                  value={app.status}
+                  onValueChange={(value) => {
+                    updateStatusMutation.mutate({ id: app.id, status: value as any });
+                  }}
+                >
+                  <SelectTrigger className="w-[160px] h-7 text-xs">
+                    <SelectValue>
+                      <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs ${statusCfg.color}`}>
+                        {statusCfg.label}
+                      </span>
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(applicationStatusConfig).map(([key, cfg]) => (
+                      <SelectItem key={key} value={key}>
+                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs ${cfg.color}`}>
+                          {cfg.label}
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            );
+          })}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 // Component to show matched candidates for a job
 function MatchedCandidatesList({ jobId }: { jobId: string }) {
   const [minScore, setMinScore] = useState(0);
@@ -711,7 +818,7 @@ export default function AgencyJobDescriptions() {
       companyId: companyId || '',
       title: formData.title,
       description: formData.description,
-      contractType: formData.contract_type as 'estagio' | 'clt' | 'menor-aprendiz',
+      contractType: formData.contract_type as 'estagio' | 'clt' | 'menor-aprendiz' | 'pj',
       workType: formData.work_type as 'presencial' | 'remoto' | 'hibrido',
       workSchedule: formData.work_schedule || undefined,
       salaryMin: formData.salary ? parseFloat(formData.salary) : undefined,
@@ -770,7 +877,7 @@ export default function AgencyJobDescriptions() {
       jobId: editingJob.id,
       title: editFormData.title,
       description: editFormData.description,
-      contractType: editFormData.contract_type as 'estagio' | 'clt' | 'menor-aprendiz' || undefined,
+      contractType: editFormData.contract_type as 'estagio' | 'clt' | 'menor-aprendiz' | 'pj' || undefined,
       workType: editFormData.work_type as 'presencial' | 'remoto' | 'hibrido',
       workSchedule: editFormData.work_schedule || undefined,
       salaryMin: editFormData.salary ? parseFloat(editFormData.salary) : undefined,
@@ -796,7 +903,8 @@ export default function AgencyJobDescriptions() {
   const contractTypeLabels: Record<string, string> = {
     estagio: 'Estágio',
     clt: 'CLT',
-    'menor-aprendiz': 'Jovem Aprendiz',
+    'menor-aprendiz': 'Menor Aprendiz',
+    pj: 'PJ',
   };
 
   return (
@@ -861,7 +969,8 @@ export default function AgencyJobDescriptions() {
                     <SelectContent>
                       <SelectItem value="estagio">Estágio</SelectItem>
                       <SelectItem value="clt">CLT</SelectItem>
-                      <SelectItem value="menor-aprendiz">Jovem Aprendiz</SelectItem>
+                      <SelectItem value="menor-aprendiz">Menor Aprendiz</SelectItem>
+                      <SelectItem value="pj">PJ</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -1084,6 +1193,9 @@ export default function AgencyJobDescriptions() {
                   </CardContent>
                 </Card>
 
+                {/* Direct applicants */}
+                <DirectApplicantsList jobId={job.id} />
+
                 {/* AI Matching Status & Candidates - Outside the job card */}
                 <MatchingStatusCard jobId={job.id} />
                 <MatchedCandidatesList jobId={job.id} />
@@ -1196,7 +1308,8 @@ export default function AgencyJobDescriptions() {
                     <SelectContent>
                       <SelectItem value="estagio">Estágio</SelectItem>
                       <SelectItem value="clt">CLT</SelectItem>
-                      <SelectItem value="menor-aprendiz">Jovem Aprendiz</SelectItem>
+                      <SelectItem value="menor-aprendiz">Menor Aprendiz</SelectItem>
+                      <SelectItem value="pj">PJ</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>

@@ -1,7 +1,7 @@
 // @ts-nocheck
 // Application router - job application management
 import { z } from "zod";
-import { router } from "../_core/trpc";
+import { router, protectedProcedure } from "../_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { companyProcedure, candidateProcedure } from "./procedures";
 import * as db from "../db";
@@ -64,8 +64,8 @@ export const applicationRouter = router({
     }));
   }),
 
-  // Get applications by job (company only)
-  getByJob: companyProcedure
+  // Get applications by job (company, agency, or admin)
+  getByJob: protectedProcedure
     .input(z.object({ jobId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
       const job = await db.getJobById(input.jobId);
@@ -73,12 +73,30 @@ export const applicationRouter = router({
         throw new TRPCError({ code: 'NOT_FOUND' });
       }
 
-      const company = await db.getCompanyByUserId(ctx.user.id);
-      if (job.companyId !== company?.id && ctx.user.role !== 'admin') {
-        throw new TRPCError({ code: 'FORBIDDEN' });
+      // Admin/super_admin: full access
+      if (ctx.user.role === 'admin' || ctx.user.role === 'super_admin') {
+        return await db.getApplicationsByJobId(input.jobId);
       }
 
-      return await db.getApplicationsByJobId(input.jobId);
+      // Company: verify they own the job
+      if (ctx.user.role === 'company') {
+        const company = await db.getCompanyByUserId(ctx.user.id);
+        if (job.companyId !== company?.id) {
+          throw new TRPCError({ code: 'FORBIDDEN' });
+        }
+        return await db.getApplicationsByJobId(input.jobId);
+      }
+
+      // Agency: verify the job belongs to their agency
+      if (ctx.user.role === 'agency') {
+        const agency = await db.getAgencyByUserId(ctx.user.id);
+        if (!agency || job.agency_id !== agency.id) {
+          throw new TRPCError({ code: 'FORBIDDEN' });
+        }
+        return await db.getApplicationsByJobId(input.jobId);
+      }
+
+      throw new TRPCError({ code: 'FORBIDDEN' });
     }),
 
   // Candidate marks they joined the agency meeting (records timestamp, does NOT change status)
@@ -106,15 +124,33 @@ export const applicationRouter = router({
       return { success: true };
     }),
 
-  // Update application status
-  updateStatus: companyProcedure
+  // Update application status (company, agency, or admin)
+  updateStatus: protectedProcedure
     .input(z.object({
       id: z.string().uuid(),
       status: z.enum(["applied", "screening", "interview-scheduled", "interviewed", "selected", "rejected", "withdrawn"]),
       companyNotes: z.string().optional(),
       rejectionReason: z.string().optional(),
     }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
+      // Verify access: admin always, company owns the job, agency owns the job
+      if (ctx.user.role !== 'admin' && ctx.user.role !== 'super_admin') {
+        const application = await db.getApplicationById(input.id);
+        if (!application) throw new TRPCError({ code: 'NOT_FOUND' });
+        const job = await db.getJobById(application.job_id);
+        if (!job) throw new TRPCError({ code: 'NOT_FOUND' });
+
+        if (ctx.user.role === 'company') {
+          const company = await db.getCompanyByUserId(ctx.user.id);
+          if (job.companyId !== company?.id) throw new TRPCError({ code: 'FORBIDDEN' });
+        } else if (ctx.user.role === 'agency') {
+          const agency = await db.getAgencyByUserId(ctx.user.id);
+          if (!agency || job.agency_id !== agency.id) throw new TRPCError({ code: 'FORBIDDEN' });
+        } else {
+          throw new TRPCError({ code: 'FORBIDDEN' });
+        }
+      }
+
       const { id, ...data } = input;
       await db.updateApplication(id, data);
       return { success: true };

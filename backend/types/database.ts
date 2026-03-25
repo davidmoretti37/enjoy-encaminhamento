@@ -78,7 +78,7 @@ export interface Database {
           description: string | null
           logo: string | null
           notes: string | null
-          contract_type: 'estagio' | 'clt' | 'menor-aprendiz' | null
+          contract_type: 'estagio' | 'clt' | 'menor-aprendiz' | 'pj' | null
           work_type: 'presencial' | 'remoto' | 'hibrido' | null
           location: string | null
           status: 'pending' | 'active' | 'suspended' | 'rejected'
@@ -121,7 +121,7 @@ export interface Database {
           description?: string | null
           logo?: string | null
           notes?: string | null
-          contract_type?: 'estagio' | 'clt' | 'menor-aprendiz' | null
+          contract_type?: 'estagio' | 'clt' | 'menor-aprendiz' | 'pj' | null
           work_type?: 'presencial' | 'remoto' | 'hibrido' | null
           location?: string | null
           status?: 'pending' | 'active' | 'suspended' | 'rejected'
@@ -164,7 +164,7 @@ export interface Database {
           description?: string | null
           logo?: string | null
           notes?: string | null
-          contract_type?: 'estagio' | 'clt' | 'menor-aprendiz' | null
+          contract_type?: 'estagio' | 'clt' | 'menor-aprendiz' | 'pj' | null
           work_type?: 'presencial' | 'remoto' | 'hibrido' | null
           location?: string | null
           status?: 'pending' | 'active' | 'suspended' | 'rejected'
@@ -456,7 +456,7 @@ export interface Database {
           company_id: string
           title: string
           description: string
-          contract_type: 'estagio' | 'clt' | 'menor-aprendiz'
+          contract_type: 'estagio' | 'clt' | 'menor-aprendiz' | 'pj'
           work_type: 'presencial' | 'remoto' | 'hibrido'
           location: string | null
           salary: number | null
@@ -484,7 +484,7 @@ export interface Database {
           company_id: string
           title: string
           description: string
-          contract_type: 'estagio' | 'clt' | 'menor-aprendiz'
+          contract_type: 'estagio' | 'clt' | 'menor-aprendiz' | 'pj'
           work_type: 'presencial' | 'remoto' | 'hibrido'
           location?: string | null
           salary?: number | null
@@ -512,7 +512,7 @@ export interface Database {
           company_id?: string
           title?: string
           description?: string
-          contract_type?: 'estagio' | 'clt' | 'menor-aprendiz'
+          contract_type?: 'estagio' | 'clt' | 'menor-aprendiz' | 'pj'
           work_type?: 'presencial' | 'remoto' | 'hibrido'
           location?: string | null
           salary?: number | null
@@ -593,7 +593,7 @@ export interface Database {
           candidate_id: string
           job_id: string
           application_id: string
-          contract_type: 'estagio' | 'clt' | 'menor-aprendiz'
+          contract_type: 'estagio' | 'clt' | 'menor-aprendiz' | 'pj'
           contract_number: string
           monthly_salary: number
           monthly_fee: number
@@ -616,7 +616,7 @@ export interface Database {
           candidate_id: string
           job_id: string
           application_id: string
-          contract_type: 'estagio' | 'clt' | 'menor-aprendiz'
+          contract_type: 'estagio' | 'clt' | 'menor-aprendiz' | 'pj'
           contract_number: string
           monthly_salary: number
           monthly_fee: number
@@ -639,7 +639,7 @@ export interface Database {
           candidate_id?: string
           job_id?: string
           application_id?: string
-          contract_type?: 'estagio' | 'clt' | 'menor-aprendiz'
+          contract_type?: 'estagio' | 'clt' | 'menor-aprendiz' | 'pj'
           contract_number?: string
           monthly_salary?: number
           monthly_fee?: number

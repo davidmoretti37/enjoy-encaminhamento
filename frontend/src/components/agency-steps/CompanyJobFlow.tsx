@@ -2240,7 +2240,7 @@ export default function CompanyJobFlow() {
       companyId: selectedCompanyId || '',
       title: formData.title,
       description: formData.description,
-      contractType: formData.contract_type as 'estagio' | 'clt' | 'menor-aprendiz',
+      contractType: formData.contract_type as 'estagio' | 'clt' | 'menor-aprendiz' | 'pj',
       workType: formData.work_type as 'presencial' | 'remoto' | 'hibrido',
       workSchedule: formData.work_schedule || undefined,
       salaryMin: formData.salary ? parseFloat(formData.salary) : undefined,

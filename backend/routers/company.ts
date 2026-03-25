@@ -96,7 +96,7 @@ export const companyRouter = router({
       compensation: z.string().min(1),
       mainActivities: z.string().min(1),
       requiredSkills: z.string().min(1),
-      employmentType: z.string().optional(),
+      employmentType: z.enum(['clt', 'estagio', 'jovem_aprendiz', 'menor-aprendiz', 'pj']).optional(),
       urgency: z.string().optional(),
       ageRange: z.string().optional(),
       educationLevel: z.string().min(1),
@@ -165,7 +165,7 @@ export const companyRouter = router({
           website: input.website,
           employee_count: input.employeeCount,
           social_media: input.socialMedia,
-          cep: input.cep,
+          postal_code: input.cep,
           address: input.address,
           complement: input.complement,
           neighborhood: input.neighborhood,
@@ -251,14 +251,18 @@ export const companyRouter = router({
       const description = `${input.mainActivities}\n\nRequisitos: ${input.requiredSkills}${input.notes ? `\n\nObservações: ${input.notes}` : ''}`;
 
       // Map employment type to contract_type enum
-      const contractTypeMap: Record<string, 'estagio' | 'clt' | 'menor-aprendiz'> = {
+      const contractTypeMap: Record<string, 'estagio' | 'clt' | 'menor-aprendiz' | 'pj'> = {
         'clt': 'clt',
         'estagio': 'estagio',
         'jovem_aprendiz': 'menor-aprendiz',
-        'pj': 'clt', // fallback
-        'temporario': 'clt', // fallback
+        'menor-aprendiz': 'menor-aprendiz',
+        'pj': 'pj',
       };
-      const contractType = contractTypeMap[input.employmentType || 'clt'] || 'clt';
+      const mappedType = contractTypeMap[input.employmentType || 'clt'];
+      if (!mappedType) {
+        console.warn('Unknown contract type submitted:', input.employmentType);
+      }
+      const contractType = mappedType || 'clt';
 
       // Parse salary from compensation string (e.g., "R$ 2.000,00" -> 2000)
       const salaryMatch = input.compensation?.match(/[\d.,]+/);
@@ -471,7 +475,7 @@ export const companyRouter = router({
     .input(z.object({
       title: z.string().min(1),
       description: z.string().min(1),
-      contract_type: z.enum(['estagio', 'clt', 'menor-aprendiz']),
+      contract_type: z.enum(['estagio', 'clt', 'menor-aprendiz', 'pj']),
       salary_min: z.number().optional(),
       salary_max: z.number().optional(),
       work_schedule: z.string().optional(),
@@ -512,7 +516,7 @@ export const companyRouter = router({
       jobId: z.string().uuid(),
       title: z.string().min(1).optional(),
       description: z.string().min(1).optional(),
-      contract_type: z.enum(['estagio', 'clt', 'menor-aprendiz']).optional(),
+      contract_type: z.enum(['estagio', 'clt', 'menor-aprendiz', 'pj']).optional(),
       work_schedule: z.string().optional(),
       salary_min: z.number().optional(),
       salary_max: z.number().optional(),
@@ -826,8 +830,7 @@ export const companyRouter = router({
   getUsers: companyProcedure.query(async ({ ctx }) => {
     const company = await db.getCompanyByUserId(ctx.user.id);
     if (!company) return [];
-    // TODO: implement getCompanyUsers
-    return [];
+    return await db.getCompanyUsers(company.id);
   }),
 
   getNotificationPrefs: companyProcedure.query(async ({ ctx }) => {
