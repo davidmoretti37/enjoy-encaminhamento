@@ -1,7 +1,7 @@
 // @ts-nocheck
 // Company invitation router - invite imported companies to access the platform
 import { z } from "zod";
-import { router, publicProcedure } from "../_core/trpc";
+import { router, publicProcedure, protectedProcedure } from "../_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { agencyProcedure } from "./procedures";
 import { sendEmail } from "./email";
@@ -178,51 +178,132 @@ export const companyInvitationRouter = router({
     }),
 
   // Validate invitation token (public)
-  validateToken: publicProcedure
-    .input(z.object({ token: z.string().uuid() }))
+  validate: publicProcedure
+    .input(z.object({ token: z.string() }))
     .query(async ({ input }) => {
-      const invitation = await db.getCompanyInvitationByToken(input.token);
+      const { data: row } = await supabaseAdmin
+        .from("company_invitations")
+        .select("*")
+        .eq("token", input.token)
+        .is("accepted_at", null)
+        .gt("expires_at", new Date().toISOString())
+        .single();
+
+      if (!row) {
+        return { valid: false as const };
+      }
+
+      return {
+        valid: true as const,
+        email: row.email,
+        companyName: row.company_name,
+        role: row.role,
+      };
+    }),
+
+  // Accept invitation (authenticated user)
+  accept: protectedProcedure
+    .input(z.object({ token: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const { data: invitation } = await supabaseAdmin
+        .from("company_invitations")
+        .select("*")
+        .eq("token", input.token)
+        .single();
 
       if (!invitation) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Invitation not found" });
       }
-
-      if (invitation.status !== "pending") {
-        throw new TRPCError({
-          code: "BAD_REQUEST",
-          message: invitation.status === "accepted"
-            ? "This invitation has already been used"
-            : "This invitation is no longer valid"
-        });
+      if (invitation.accepted_at) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Invitation already accepted" });
       }
-
       if (new Date(invitation.expires_at) < new Date()) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "This invitation has expired" });
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Invitation expired" });
       }
 
-      // Get jobs for preview
-      const jobs = await db.getJobsForCompany(invitation.company_id);
+      const { error: acceptError } = await supabaseAdmin
+        .from("company_invitations")
+        .update({ accepted_at: new Date().toISOString() })
+        .eq("token", input.token);
 
-      return {
-        companyName: invitation.companies?.company_name,
-        email: invitation.email,
-        jobs: jobs.map(j => ({ title: j.title, contractType: j.contract_type })),
-        expiresAt: invitation.expires_at,
-      };
+      if (acceptError) {
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to accept invitation" });
+      }
+
+      const { error: userUpdateError } = await supabaseAdmin
+        .from("users")
+        .update({ company_id: invitation.company_id })
+        .eq("id", ctx.user.id);
+
+      if (userUpdateError) {
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to update user profile" });
+      }
+
+      return { success: true };
     }),
 
   // Accept invitation and create account (public)
-  acceptInvitation: publicProcedure
+  acceptWithPassword: publicProcedure
     .input(z.object({
-      token: z.string().uuid(),
-      password: passwordSchema,
+      token: z.string(),
+      password: z.string().min(8),
+      name: z.string(),
     }))
     .mutation(async ({ input }) => {
-      const result = await db.acceptCompanyInvitation(input.token, input.password);
-      return {
-        success: true,
-        companyId: result.company.id,
-      };
+      const { data: invitation } = await supabaseAdmin
+        .from("company_invitations")
+        .select("*")
+        .eq("token", input.token)
+        .single();
+
+      if (!invitation || invitation.accepted_at || new Date(invitation.expires_at) < new Date()) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid or expired invitation" });
+      }
+
+      const { data: newUser, error: authError } = await supabaseAdmin.auth.admin.createUser({
+        email: invitation.email,
+        password: input.password,
+        email_confirm: true,
+      });
+
+      if (authError || !newUser?.user) {
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: authError?.message || "Failed to create user" });
+      }
+
+      const { error: insertError } = await supabaseAdmin
+        .from("users")
+        .insert({
+          id: newUser.user.id,
+          email: invitation.email,
+          name: input.name,
+          role: invitation.role,
+          company_id: invitation.company_id,
+        });
+
+      if (insertError) {
+        // Roll back: delete the auth user we just created
+        await supabaseAdmin.auth.admin.deleteUser(newUser.user.id);
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to create user profile",
+        });
+      }
+
+      const { error: acceptError } = await supabaseAdmin
+        .from("company_invitations")
+        .update({ accepted_at: new Date().toISOString() })
+        .eq("token", input.token);
+
+      if (acceptError) {
+        // Roll back: delete the auth user we just created
+        await supabaseAdmin.auth.admin.deleteUser(newUser.user.id);
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to mark invitation as accepted",
+        });
+      }
+
+      return { success: true, email: invitation.email };
     }),
 
   // Get invitation status for a company (agency only)

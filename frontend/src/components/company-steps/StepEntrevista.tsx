@@ -270,7 +270,7 @@ function ReceivedState({
             location_state: interview.location_state,
           }
         : null,
-      matchScore: c.match_score || c.ai_match_score,
+      matchScore: c.match_score || c.composite_score,
       batchId: c.batchId,
       applicationId: c.application_id
         || interview?.participants?.find(

@@ -67,21 +67,22 @@ export async function signUp(
     throw error;
   }
 
-  // After successful signup, create user profile via backend API (bypasses RLS)
+  // After successful signup, create user profile via backend API
+  // Role and agency_id are derived server-side from invitations — never sent from client
   if (data.user) {
     try {
+      const session = data.session;
       const response = await fetch(`${API_URL}/api/trpc/auth.createProfile`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          ...(session?.access_token
+            ? { Authorization: `Bearer ${session.access_token}` }
+            : {}),
         },
         body: JSON.stringify({
           json: {
-            userId: data.user.id,
-            email: data.user.email,
             name: metadata?.name,
-            role: metadata?.role || "candidate",
-            agency_id: metadata?.agency_id || null,
           },
         }),
       });

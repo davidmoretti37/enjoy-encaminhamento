@@ -4,14 +4,12 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
 import {
   Loader2,
   Building2,
   CheckCircle,
   XCircle,
   Lock,
-  Briefcase,
   Eye,
   EyeOff,
 } from "lucide-react";
@@ -28,13 +26,14 @@ export default function CompanyInviteAccept() {
   const [step, setStep] = useState<Step>('validating');
   const [errorMessage, setErrorMessage] = useState("");
 
-  // Password
+  // Form fields
+  const [name, setName] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
 
   // Validate invitation
-  const { data: invitation, isLoading: validating, error: validationError } = trpc.companyInvitation.validateToken.useQuery(
+  const { data: invitation, isLoading: validating } = trpc.companyInvitation.validate.useQuery(
     { token: token || "" },
     {
       enabled: !!token,
@@ -47,20 +46,17 @@ export default function CompanyInviteAccept() {
   useEffect(() => {
     if (validating) return;
 
-    if (validationError) {
-      const message = (validationError as any)?.message || "Convite não encontrado ou expirado";
-      setErrorMessage(message);
+    if (!invitation || !invitation.valid) {
+      setErrorMessage("Convite não encontrado ou expirado");
       setStep('error');
       return;
     }
 
-    if (invitation) {
-      setStep('create-password');
-    }
-  }, [invitation, validating, validationError]);
+    setStep('create-password');
+  }, [invitation, validating]);
 
   // Accept invitation mutation
-  const acceptMutation = trpc.companyInvitation.acceptInvitation.useMutation({
+  const acceptMutation = trpc.companyInvitation.acceptWithPassword.useMutation({
     onSuccess: () => {
       setStep('success');
       toast.success("Conta criada com sucesso!");
@@ -74,8 +70,8 @@ export default function CompanyInviteAccept() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (password.length < 6) {
-      toast.error("A senha deve ter pelo menos 6 caracteres");
+    if (password.length < 8) {
+      toast.error("A senha deve ter pelo menos 8 caracteres");
       return;
     }
 
@@ -88,6 +84,7 @@ export default function CompanyInviteAccept() {
     acceptMutation.mutate({
       token: token!,
       password,
+      name,
     });
   };
 
@@ -171,28 +168,12 @@ export default function CompanyInviteAccept() {
 
         <CardContent>
           {/* Company Info Preview */}
-          {invitation && (
+          {invitation && invitation.valid && (
             <div className="mb-6 p-4 bg-muted/50 rounded-lg">
               <div className="flex items-center gap-3 mb-3">
                 <Building2 className="h-5 w-5 text-muted-foreground" />
                 <span className="font-semibold">{invitation.companyName}</span>
               </div>
-
-              {invitation.jobs && invitation.jobs.length > 0 && (
-                <div className="space-y-2">
-                  <p className="text-sm text-muted-foreground flex items-center gap-2">
-                    <Briefcase className="h-4 w-4" />
-                    Vagas cadastradas:
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    {invitation.jobs.map((job, idx) => (
-                      <Badge key={idx} variant="secondary">
-                        {job.title}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-              )}
 
               <p className="text-sm text-muted-foreground mt-3">
                 Email: {invitation.email}
@@ -203,18 +184,30 @@ export default function CompanyInviteAccept() {
           {/* Password Form */}
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
+              <Label htmlFor="name">Nome</Label>
+              <Input
+                id="name"
+                type="text"
+                placeholder="Seu nome completo"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+              />
+            </div>
+
+            <div className="space-y-2">
               <Label htmlFor="password">Senha</Label>
               <div className="relative">
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
                   id="password"
                   type={showPassword ? "text" : "password"}
-                  placeholder="Mínimo 6 caracteres"
+                  placeholder="Mínimo 8 caracteres"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className="pl-10 pr-10"
                   required
-                  minLength={6}
+                  minLength={8}
                 />
                 <button
                   type="button"
@@ -248,7 +241,7 @@ export default function CompanyInviteAccept() {
             <Button
               type="submit"
               className="w-full"
-              disabled={step === 'submitting' || password.length < 6 || password !== confirmPassword}
+              disabled={step === 'submitting' || !name || password.length < 8 || password !== confirmPassword}
             >
               {step === 'submitting' ? (
                 <>

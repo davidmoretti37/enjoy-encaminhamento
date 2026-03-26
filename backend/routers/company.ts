@@ -18,8 +18,8 @@ export const companyRouter = router({
       return { completed: true, pendingContractSigning: false };
     }
     const company = await db.getCompanyByUserId(ctx.user.id);
-    // Company onboarding is complete if company profile exists with required fields
-    const completed = !!(company && company.cnpj && company.company_name);
+    // Company onboarding is complete if explicitly marked or has required fields
+    const completed = !!(company && (company.onboarding_completed || (company.cnpj && company.company_name)));
     const pendingContractSigning = company?.pending_contract_signing === true;
     return { completed, company, pendingContractSigning };
   }),
@@ -151,31 +151,8 @@ export const companyRouter = router({
       // Get primary email from emails array
       const primaryEmail = input.emails?.find(e => e.isPrimary)?.email || input.emails?.[0]?.email || ctx.user.email || '';
 
-      if (company) {
-        // Update existing company - also set agency linking if not already set
-        await db.updateCompany(company.id, {
-          cnpj: input.cnpj,
-          company_name: input.legalName,
-          business_name: input.businessName,
-          contact_person: input.contactPerson,
-          contact_phone: primaryPhone,
-          email: primaryEmail,
-          landline_phone: input.landlinePhone,
-          mobile_phone: input.mobilePhone,
-          website: input.website,
-          employee_count: input.employeeCount,
-          social_media: input.socialMedia,
-          postal_code: input.cep,
-          address: input.address,
-          complement: input.complement,
-          neighborhood: input.neighborhood,
-          city: input.city,
-          state: input.state,
-          agency_id: agencyId,
-          affiliate_id: agencyData?.affiliate_id || null,
-        });
-      } else {
-        // Create new company - use snake_case column names to match database schema
+      // If company doesn't exist yet, create it first (needed for RPC)
+      if (!company) {
         const companyId = await db.createCompany({
           user_id: ctx.user.id,
           company_name: input.legalName,
@@ -197,15 +174,97 @@ export const companyRouter = router({
         throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Failed to create company' });
       }
 
-      // Save multiple phone numbers to company_phone_numbers table
+      // Map form fields for the atomic transaction
+      const description = `${input.mainActivities}\n\nRequisitos: ${input.requiredSkills}${input.notes ? `\n\nObservações: ${input.notes}` : ''}`;
+
+      const contractTypeMap: Record<string, 'estagio' | 'clt' | 'menor-aprendiz' | 'pj'> = {
+        'clt': 'clt',
+        'estagio': 'estagio',
+        'jovem_aprendiz': 'menor-aprendiz',
+        'menor-aprendiz': 'menor-aprendiz',
+        'pj': 'pj',
+      };
+      const mappedType = contractTypeMap[input.employmentType || 'clt'];
+      if (!mappedType) {
+        console.warn('Unknown contract type submitted:', input.employmentType);
+      }
+      const contractType = mappedType || 'clt';
+
+      const salaryMatch = input.compensation?.match(/[\d.,]+/);
+      const salary = salaryMatch ? parseFloat(salaryMatch[0].replace(/\./g, '').replace(',', '.')) : null;
+
+      const educationMap: Record<string, 'fundamental' | 'medio' | 'superior' | 'pos-graduacao'> = {
+        'fundamental_incompleto': 'fundamental',
+        'fundamental_completo': 'fundamental',
+        'medio_incompleto': 'medio',
+        'medio_completo': 'medio',
+        'tecnico': 'medio',
+        'superior_incompleto': 'superior',
+        'superior_completo': 'superior',
+        'pos_graduacao': 'pos-graduacao',
+        'mestrado': 'pos-graduacao',
+        'doutorado': 'pos-graduacao',
+      };
+
+      const location = input.city && input.state
+        ? `${input.city}, ${input.state}`
+        : input.city || input.state || null;
+
+      // Execute atomic onboarding transaction via RPC:
+      // Updates company + inserts job + saves signature + marks onboarding complete
+      // If any step fails, Postgres rolls back everything — no partial state
+      const { data: jobId, error: rpcError } = await supabaseAdmin.rpc('complete_company_onboarding', {
+        p_company_id: company.id,
+        p_cnpj: input.cnpj,
+        p_company_name: input.legalName,
+        p_business_name: input.businessName || null,
+        p_contact_person: input.contactPerson || null,
+        p_contact_phone: primaryPhone || null,
+        p_email: primaryEmail || null,
+        p_landline_phone: input.landlinePhone || null,
+        p_mobile_phone: input.mobilePhone || null,
+        p_website: input.website || null,
+        p_employee_count: input.employeeCount || null,
+        p_social_media: input.socialMedia || null,
+        p_postal_code: input.cep || null,
+        p_address: input.address || null,
+        p_complement: input.complement || null,
+        p_neighborhood: input.neighborhood || null,
+        p_city: input.city || null,
+        p_state: input.state || null,
+        p_agency_id: agencyId || null,
+        p_affiliate_id: agencyData?.affiliate_id || null,
+        p_job_title: input.jobTitle,
+        p_job_description: description,
+        p_job_contract_type: contractType,
+        p_job_work_type: 'presencial',
+        p_job_salary: salary ? Math.round(salary) : null,
+        p_job_salary_min: salary,
+        p_job_salary_max: salary,
+        p_job_benefits: JSON.stringify(input.benefits || []),
+        p_job_min_education: educationMap[input.educationLevel] || null,
+        p_job_required_skills: JSON.stringify(input.requiredSkills ? [input.requiredSkills] : []),
+        p_job_requirements: input.requiredSkills || null,
+        p_job_work_schedule: input.workSchedule || null,
+        p_job_location: location,
+        p_job_openings: input.positionsCount ? parseInt(input.positionsCount) : 1,
+        p_contract_signature: input.contractSignature || null,
+        p_contract_signer_name: input.contractSignerName || null,
+        p_contract_signer_cpf: input.contractSignerCpf || null,
+      });
+
+      if (rpcError) {
+        console.error('[Company] Onboarding transaction failed:', rpcError);
+        throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: rpcError.message });
+      }
+
+      // Save supplementary data outside the transaction (non-critical)
       if (input.phoneNumbers && input.phoneNumbers.length > 0) {
-        // Delete existing phone numbers for this company
         await supabaseAdmin
           .from('company_phone_numbers')
           .delete()
           .eq('company_id', company.id);
 
-        // Insert new phone numbers
         const phoneRecords = input.phoneNumbers
           .filter(p => p.number.trim())
           .map(p => ({
@@ -221,15 +280,12 @@ export const companyRouter = router({
         }
       }
 
-      // Save multiple emails to company_emails table
       if (input.emails && input.emails.length > 0) {
-        // Delete existing emails for this company
         await supabaseAdmin
           .from('company_emails')
           .delete()
           .eq('company_id', company.id);
 
-        // Insert new emails
         const emailRecords = input.emails
           .filter(e => e.email.trim())
           .map(e => ({
@@ -244,77 +300,6 @@ export const companyRouter = router({
             .from('company_emails')
             .insert(emailRecords);
         }
-      }
-
-      // Create the job request - map form fields to database columns
-      // Build description from main activities and requirements
-      const description = `${input.mainActivities}\n\nRequisitos: ${input.requiredSkills}${input.notes ? `\n\nObservações: ${input.notes}` : ''}`;
-
-      // Map employment type to contract_type enum
-      const contractTypeMap: Record<string, 'estagio' | 'clt' | 'menor-aprendiz' | 'pj'> = {
-        'clt': 'clt',
-        'estagio': 'estagio',
-        'jovem_aprendiz': 'menor-aprendiz',
-        'menor-aprendiz': 'menor-aprendiz',
-        'pj': 'pj',
-      };
-      const mappedType = contractTypeMap[input.employmentType || 'clt'];
-      if (!mappedType) {
-        console.warn('Unknown contract type submitted:', input.employmentType);
-      }
-      const contractType = mappedType || 'clt';
-
-      // Parse salary from compensation string (e.g., "R$ 2.000,00" -> 2000)
-      const salaryMatch = input.compensation?.match(/[\d.,]+/);
-      const salary = salaryMatch ? parseFloat(salaryMatch[0].replace(/\./g, '').replace(',', '.')) : null;
-
-      // Map education level to database enum
-      const educationMap: Record<string, 'fundamental' | 'medio' | 'superior' | 'pos-graduacao'> = {
-        'fundamental_incompleto': 'fundamental',
-        'fundamental_completo': 'fundamental',
-        'medio_incompleto': 'medio',
-        'medio_completo': 'medio',
-        'tecnico': 'medio',
-        'superior_incompleto': 'superior',
-        'superior_completo': 'superior',
-        'pos_graduacao': 'pos-graduacao',
-        'mestrado': 'pos-graduacao',
-        'doutorado': 'pos-graduacao',
-      };
-
-      // Build location from city and state
-      const location = input.city && input.state
-        ? `${input.city}, ${input.state}`
-        : input.city || input.state || null;
-
-      const jobId = await db.createJobForOnboarding(company.id, {
-        title: input.jobTitle,
-        description,
-        contract_type: contractType,
-        work_type: 'presencial', // Default to presencial
-        salary: salary ? Math.round(salary) : null, // Store in reais
-        salary_min: salary, // Store in reais
-        salary_max: salary, // Same as min if single value provided
-        benefits: input.benefits || [],
-        min_education_level: educationMap[input.educationLevel] || null,
-        required_skills: input.requiredSkills ? [input.requiredSkills] : [],
-        requirements: input.requiredSkills || null,
-        work_schedule: input.workSchedule,
-        location,
-        openings: input.positionsCount ? parseInt(input.positionsCount) : 1,
-        status: 'open',
-        published_at: new Date().toISOString(),
-        agency_id: agencyId,
-      });
-
-      // Save contract signature if provided
-      if (input.contractSignature && input.contractSignerName && input.contractSignerCpf) {
-        await db.updateCompany(company.id, {
-          contract_signature: input.contractSignature,
-          contract_signer_name: input.contractSignerName,
-          contract_signer_cpf: input.contractSignerCpf,
-          contract_signed_at: new Date().toISOString(),
-        });
       }
 
       // Generate company summary in background (fire and forget)

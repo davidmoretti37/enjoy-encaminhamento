@@ -65,8 +65,29 @@ export const contractRouter = router({
       status: z.enum(["pending-signature", "active", "suspended", "terminated", "completed"]).optional(),
       terminationReason: z.string().optional(),
     }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
       const { id, ...data } = input;
+
+      // Ownership check — verify the contract belongs to the requesting user
+      const contract = await db.getContractWithDetails(id);
+      if (!contract) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Contrato não encontrado' });
+      }
+
+      if (ctx.user.role === 'agency') {
+        const agency = await db.getAgencyByUserId(ctx.user.id);
+        if (!agency || contract.companies?.agency_id !== agency.id) {
+          throw new TRPCError({ code: 'FORBIDDEN', message: 'Acesso negado' });
+        }
+      } else if (ctx.user.role === 'company') {
+        const company = await db.getCompanyByUserId(ctx.user.id);
+        if (!company || contract.company_id !== company.id) {
+          throw new TRPCError({ code: 'FORBIDDEN', message: 'Acesso negado' });
+        }
+      } else if (ctx.user.role !== 'admin') {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Acesso negado' });
+      }
+
       await db.updateContract(id, data);
 
       // Generate payment schedule when contract is activated

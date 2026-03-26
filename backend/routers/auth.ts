@@ -25,24 +25,61 @@ export const authRouter = router({
   }),
 
   // Create user profile after signup - called from frontend after Supabase auth signup
-  createProfile: publicProcedure
+  createProfile: protectedProcedure
     .input(
       z.object({
-        userId: z.string().uuid(),
-        email: z.string().email(),
         name: z.string().optional(),
-        role: z.enum(["company", "candidate"]),
-        agency_id: z.string().uuid().optional().nullable(),
       })
     )
-    .mutation(async ({ input }) => {
-      // Use admin client to bypass RLS
+    .mutation(async ({ ctx, input }) => {
+      // Idempotent: if profile already exists, return it
+      const existingUser = await db.getUserById(ctx.user.id);
+      if (existingUser) {
+        return { success: true, existing: true };
+      }
+
+      // Derive role and agency_id from invitation — never from client input
+      let role: "company" | "candidate" = "candidate";
+      let agencyId: string | null = null;
+
+      // Check for pending company invitation by email
+      const { data: invitation } = await supabaseAdmin
+        .from("company_invitations")
+        .select("*, companies(id, agency_id)")
+        .eq("email", ctx.user.email)
+        .eq("status", "pending")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (invitation?.companies) {
+        role = "company";
+        agencyId = (invitation.companies as any).agency_id || null;
+      }
+
+      // Check for agency invitation if no company invitation found
+      if (!invitation) {
+        const { data: agencyInvitation } = await supabaseAdmin
+          .from("agency_invitations")
+          .select("*")
+          .eq("email", ctx.user.email)
+          .eq("status", "pending")
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (agencyInvitation) {
+          role = "candidate"; // Agency invitations create agency users via a separate flow
+          agencyId = agencyInvitation.agency_id || null;
+        }
+      }
+
       const { error } = await db.createUserProfile({
-        id: input.userId,
-        email: input.email,
+        id: ctx.user.id,
+        email: ctx.user.email,
         name: input.name || null,
-        role: input.role,
-        agency_id: input.agency_id || null,
+        role,
+        agency_id: agencyId,
       });
 
       if (error) {
@@ -53,7 +90,7 @@ export const authRouter = router({
         });
       }
 
-      return { success: true };
+      return { success: true, existing: false };
     }),
 
   changePassword: protectedProcedure

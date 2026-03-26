@@ -542,7 +542,6 @@ export interface Database {
           job_id: string
           candidate_id: string
           status: 'applied' | 'screening' | 'interview-scheduled' | 'interviewed' | 'selected' | 'rejected' | 'withdrawn'
-          ai_match_score: number | null
           ai_match_reason: string | null
           company_notes: string | null
           rejection_reason: string | null
@@ -558,7 +557,6 @@ export interface Database {
           job_id: string
           candidate_id: string
           status?: 'applied' | 'screening' | 'interview-scheduled' | 'interviewed' | 'selected' | 'rejected' | 'withdrawn'
-          ai_match_score?: number | null
           ai_match_reason?: string | null
           company_notes?: string | null
           rejection_reason?: string | null
@@ -574,7 +572,6 @@ export interface Database {
           job_id?: string
           candidate_id?: string
           status?: 'applied' | 'screening' | 'interview-scheduled' | 'interviewed' | 'selected' | 'rejected' | 'withdrawn'
-          ai_match_score?: number | null
           ai_match_reason?: string | null
           company_notes?: string | null
           rejection_reason?: string | null
