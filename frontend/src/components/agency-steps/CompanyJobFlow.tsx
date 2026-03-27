@@ -519,25 +519,89 @@ function MatchedCandidatesList({ jobId, onGroupCreated }: { jobId: string; onGro
                     </div>
                   )}
 
-                  {/* AI Explanation */}
-                  {match.explanationSummary && (
-                    <div className="bg-orange-50 rounded-lg p-3">
-                      <p className="text-xs font-medium text-orange-800 mb-1 flex items-center gap-1">
-                        <Bot className="h-3.5 w-3.5" />
-                        Análise IA
-                      </p>
-                      <p className="text-sm text-orange-900">{match.explanationSummary}</p>
+                  {/* DISC Profile Visualization */}
+                  {match.candidateProfile?.disc && (match.candidateProfile.disc.dominante != null) && (
+                    <div className="bg-slate-50 rounded-lg p-3">
+                      <p className="text-xs font-medium text-slate-600 uppercase tracking-wide mb-2">Perfil DISC</p>
+                      <div className="grid grid-cols-4 gap-2">
+                        {[
+                          { label: 'D', name: 'Dominante', value: match.candidateProfile.disc.dominante, color: 'bg-red-400' },
+                          { label: 'I', name: 'Influente', value: match.candidateProfile.disc.influente, color: 'bg-yellow-400' },
+                          { label: 'S', name: 'Estável', value: match.candidateProfile.disc.estavel, color: 'bg-green-400' },
+                          { label: 'C', name: 'Conforme', value: match.candidateProfile.disc.conforme, color: 'bg-blue-400' },
+                        ].map(d => (
+                          <div key={d.label} className="text-center">
+                            <div className="text-xs text-gray-500 mb-1">{d.label}</div>
+                            <div className="h-16 bg-gray-100 rounded relative flex items-end justify-center overflow-hidden">
+                              <div className={`${d.color} w-full rounded-t transition-all`} style={{ height: `${d.value || 0}%` }} />
+                            </div>
+                            <div className="text-xs font-semibold mt-1">{d.value || 0}%</div>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   )}
 
-                  {/* LLM Reasoning */}
-                  {match.llm?.reasoning && (
-                    <div className="bg-purple-50 rounded-lg p-3">
-                      <p className="text-xs font-medium text-purple-800 mb-1">Raciocínio Detalhado</p>
-                      <p className="text-sm text-purple-900">{match.llm.reasoning}</p>
-                      {match.llm.confidence && (
-                        <p className="text-xs text-purple-600 mt-1">Confiança: {Math.round(match.llm.confidence)}%</p>
+                  {/* PDP Competencies */}
+                  {match.candidateProfile?.pdpCompetencies?.length > 0 && (
+                    <div>
+                      <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Competências PDP</p>
+                      <div className="flex flex-wrap gap-1">
+                        {match.candidateProfile.pdpCompetencies.map((c: string) => (
+                          <span key={c} className="px-2 py-0.5 text-xs bg-indigo-50 text-indigo-700 rounded-full border border-indigo-100 font-medium">
+                            {c}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Deep AI Analysis */}
+                  {match.discAnalysis && (
+                    <div className="bg-gradient-to-br from-purple-50 to-indigo-50 rounded-lg p-4 space-y-3 border border-purple-100">
+                      <p className="text-xs font-semibold text-purple-800 uppercase tracking-wide flex items-center gap-1.5">
+                        <Bot className="h-3.5 w-3.5" /> Análise Profunda da IA
+                      </p>
+
+                      {match.discAnalysis && (
+                        <div>
+                          <p className="text-xs font-medium text-purple-700 mb-0.5">Perfil Comportamental (DISC)</p>
+                          <p className="text-sm text-gray-800 leading-relaxed">{match.discAnalysis}</p>
+                        </div>
                       )}
+
+                      {match.competencyAnalysis && (
+                        <div>
+                          <p className="text-xs font-medium text-indigo-700 mb-0.5">Competências</p>
+                          <p className="text-sm text-gray-800 leading-relaxed">{match.competencyAnalysis}</p>
+                        </div>
+                      )}
+
+                      {match.companyFitNotes && (
+                        <div>
+                          <p className="text-xs font-medium text-emerald-700 mb-0.5">Fit com a Empresa</p>
+                          <p className="text-sm text-gray-800 leading-relaxed">{match.companyFitNotes}</p>
+                        </div>
+                      )}
+
+                      {match.llm?.reasoning && (
+                        <div className="pt-2 border-t border-purple-200">
+                          <p className="text-sm text-gray-700 italic">{match.llm.reasoning}</p>
+                          {match.llm.confidence && (
+                            <p className="text-xs text-purple-500 mt-1">Confiança da análise: {Math.round(match.llm.confidence)}%</p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Fallback: simple explanation if no deep analysis */}
+                  {!match.discAnalysis && match.explanationSummary && (
+                    <div className="bg-orange-50 rounded-lg p-3">
+                      <p className="text-xs font-medium text-orange-800 mb-1 flex items-center gap-1">
+                        <Bot className="h-3.5 w-3.5" /> Análise IA
+                      </p>
+                      <p className="text-sm text-orange-900">{match.explanationSummary}</p>
                     </div>
                   )}
 
@@ -584,7 +648,7 @@ function MatchedCandidatesList({ jobId, onGroupCreated }: { jobId: string; onGro
                         <FactorBar label="Educação" value={match.matchFactors.education} />
                         <FactorBar label="Contrato" value={match.matchFactors.contract} />
                         <FactorBar label="Personalidade" value={match.matchFactors.personality} />
-                        <FactorBar label="Histórico" value={match.matchFactors.history} />
+                        <FactorBar label="Competências" value={match.matchFactors.competency} />
                         <FactorBar label="Bidirecional" value={match.matchFactors.bidirectional} />
                       </div>
                     </div>
