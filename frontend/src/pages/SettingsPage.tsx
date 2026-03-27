@@ -547,24 +547,21 @@ export default function SettingsPage() {
         </Card>
 
         {/* Logout Section */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <LogOut className="h-5 w-5" />
-              Sessão
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Button
-              variant="destructive"
-              onClick={logout}
-              className="gap-2"
-            >
-              <LogOut className="h-4 w-4" />
-              Sair da conta
-            </Button>
-          </CardContent>
-        </Card>
+        <div className="flex items-center justify-between rounded-lg border bg-card p-4">
+          <div className="flex items-center gap-2">
+            <LogOut className="h-4 w-4 text-muted-foreground" />
+            <span className="text-sm text-muted-foreground">Encerre sua sessão atual</span>
+          </div>
+          <Button
+            variant="destructive"
+            size="sm"
+            onClick={logout}
+            className="gap-2"
+          >
+            <LogOut className="h-3.5 w-3.5" />
+            Sair da conta
+          </Button>
+        </div>
 
         {/* Document Template Delete Confirmation */}
         <AlertDialog open={!!docDeleteConfirm} onOpenChange={(open) => !open && setDocDeleteConfirm(null)}>

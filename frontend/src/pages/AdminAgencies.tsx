@@ -48,11 +48,11 @@ export default function AdminAgencies() {
       const body = encodeURIComponent(
         `Olá!\n\nVocê foi convidado(a) por ${data.affiliateName} para cadastrar sua agência em nossa plataforma de recrutamento.\n\n${inviteNotes ? `Mensagem: ${inviteNotes}\n\n` : ''}Clique no link abaixo para completar seu cadastro:\n${inviteLink}\n\nEste link é válido por 7 dias e é exclusivo para ${inviteEmail}.`
       );
-      const gmailUrl = `https://mail.google.com/mail/?view=cm&to=${encodeURIComponent(inviteEmail)}&su=${subject}&body=${body}`;
-      window.open(gmailUrl, '_blank');
-
-      navigator.clipboard.writeText(inviteLink);
-      toast.success('Convite criado! Gmail aberto para envio. Link também copiado.', { duration: 8000 });
+      window.open(
+        `https://mail.google.com/mail/?view=cm&to=${encodeURIComponent(inviteEmail)}&su=${subject}&body=${body}`,
+        '_blank'
+      );
+      toast.success('Convite criado! Abrindo Gmail para envio.');
       setIsInviteDialogOpen(false);
       setInviteEmail("");
       setInviteNotes("");

@@ -274,6 +274,8 @@ export const jobRouter = router({
         };
       } catch (error: any) {
         console.error('[Job.triggerMatchingForAgency] Error:', error);
+        const { failProgress } = await import('../services/matching/progress');
+        failProgress(input.jobId, error.message || 'Erro desconhecido');
         throw new TRPCError({
           code: 'INTERNAL_SERVER_ERROR',
           message: error.message || 'Erro ao iniciar busca de candidatos',
@@ -326,7 +328,7 @@ export const jobRouter = router({
 
   // Get matching progress/status for a job (admin/agency access)
   getMatchingProgress: protectedProcedure
-    .input(z.object({ jobId: z.string().uuid() }))
+    .input(z.object({ jobId: z.string().uuid(), since: z.number().optional() }))
     .query(async ({ ctx, input }) => {
       if (ctx.user.role !== 'admin' && ctx.user.role !== 'agency') {
         throw new TRPCError({
@@ -335,7 +337,20 @@ export const jobRouter = router({
         });
       }
 
-      // Check if matches exist for this job
+      // Check in-memory progress first (active pipeline)
+      const { getProgress } = await import('../services/matching/progress');
+      const liveProgress = getProgress(input.jobId);
+
+      if (liveProgress) {
+        return {
+          status: liveProgress.status as string,
+          matchesFound: 0,
+          percentComplete: liveProgress.percentComplete,
+          messages: liveProgress.messages,
+        };
+      }
+
+      // Check if matches exist for this job (pipeline already finished)
       const { count, error } = await supabaseAdmin
         .from('job_matches')
         .select('*', { count: 'exact', head: true })
@@ -350,6 +365,7 @@ export const jobRouter = router({
           status: 'completed',
           matchesFound: count,
           percentComplete: 100,
+          messages: [],
         };
       }
 
@@ -357,6 +373,7 @@ export const jobRouter = router({
         status: 'not_started',
         matchesFound: 0,
         percentComplete: 0,
+        messages: [],
       };
     }),
 
@@ -401,7 +418,12 @@ export const jobRouter = router({
               strengths,
               concerns,
               weight_profile,
-              candidates(id, full_name, email, phone, city, state, education_level, skills, experience, summary, available_for_clt, available_for_internship, available_for_apprentice)
+              disc_analysis,
+              competency_analysis,
+              company_fit_notes,
+              full_analysis,
+              competency_score,
+              candidates(id, full_name, email, phone, city, state, education_level, skills, experience, summary, available_for_clt, available_for_internship, available_for_apprentice, disc_dominante, disc_influente, disc_estavel, disc_conforme, pdp_top_10_competencies)
             `)
             .eq('job_id', input.jobId)
             .gte('composite_score', input.minScore)
@@ -441,6 +463,13 @@ export const jobRouter = router({
             availableForClt: m.candidates?.available_for_clt,
             availableForInternship: m.candidates?.available_for_internship,
             availableForApprentice: m.candidates?.available_for_apprentice,
+            disc: {
+              dominante: m.candidates?.disc_dominante,
+              influente: m.candidates?.disc_influente,
+              estavel: m.candidates?.disc_estavel,
+              conforme: m.candidates?.disc_conforme,
+            },
+            pdpCompetencies: m.candidates?.pdp_top_10_competencies || [],
           },
           compositeScore: m.composite_score,
           matchFactors: {
@@ -453,6 +482,7 @@ export const jobRouter = router({
             personality: m.personality_score,
             history: m.history_score,
             bidirectional: m.bidirectional_score,
+            competency: m.competency_score,
           },
           llm: m.llm_refined_score ? {
             refinedScore: m.llm_refined_score,
@@ -463,6 +493,10 @@ export const jobRouter = router({
           explanationSummary: m.explanation_summary,
           strengths: m.strengths || [],
           concerns: m.concerns || [],
+          discAnalysis: m.disc_analysis,
+          competencyAnalysis: m.competency_analysis,
+          companyFitNotes: m.company_fit_notes,
+          fullAnalysis: m.full_analysis,
         })),
         pagination: {
           totalMatches: data?.length || 0,

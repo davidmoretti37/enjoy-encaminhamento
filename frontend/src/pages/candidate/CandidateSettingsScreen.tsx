@@ -32,10 +32,14 @@ import { useLocation, useSearch } from "wouter";
 import { motion } from "framer-motion";
 
 const EDUCATION_LEVELS = [
-  { value: 'fundamental', label: 'Fundamental' },
-  { value: 'medio', label: 'Médio' },
-  { value: 'superior', label: 'Superior' },
-  { value: 'pos-graduacao', label: 'Pós-Graduação' },
+  { value: 'fundamental_incompleto', label: 'Fundamental Incompleto' },
+  { value: 'fundamental_completo', label: 'Fundamental Completo' },
+  { value: 'medio_incompleto', label: 'Médio Incompleto' },
+  { value: 'medio_completo', label: 'Médio Completo' },
+  { value: 'tecnico', label: 'Técnico' },
+  { value: 'superior_incompleto', label: 'Superior Incompleto' },
+  { value: 'superior_completo', label: 'Superior Completo' },
+  { value: 'pos_graduacao', label: 'Pós-Graduação' },
   { value: 'mestrado', label: 'Mestrado' },
   { value: 'doutorado', label: 'Doutorado' },
 ];
@@ -447,6 +451,265 @@ export default function CandidateSettingsScreen() {
               </div>
             </CardEntrance>
 
+            {/* Education */}
+            <CardEntrance delay={0.2}>
+              <div className="bg-white rounded-xl border-2 border-slate-200 shadow-sm p-6">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-10 h-10 rounded-lg bg-[#FF6B35]/20 flex items-center justify-center">
+                    <GraduationCap className="w-5 h-5 text-[#FF6B35]" />
+                  </div>
+                  <h3 className="text-[#0A2342] font-semibold">Formação Acadêmica</h3>
+                </div>
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Nível de Escolaridade</Label>
+                    <Select
+                      value={formData.education_level}
+                      onValueChange={(v) => handleInputChange('education_level', v)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {EDUCATION_LEVELS.map(level => (
+                          <SelectItem key={level.value} value={level.value}>
+                            {level.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="institution_personal">Instituição</Label>
+                    <Input
+                      id="institution_personal"
+                      value={formData.institution}
+                      onChange={(e) => handleInputChange('institution', e.target.value)}
+                      placeholder="Nome da escola/universidade"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="course_personal">Curso</Label>
+                    <Input
+                      id="course_personal"
+                      value={formData.course}
+                      onChange={(e) => handleInputChange('course', e.target.value)}
+                      placeholder="Nome do curso"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2 mt-6">
+                    <input
+                      type="checkbox"
+                      id="currently_studying_personal"
+                      checked={formData.currently_studying}
+                      onChange={(e) => handleInputChange('currently_studying', e.target.checked)}
+                      className="rounded"
+                    />
+                    <Label htmlFor="currently_studying_personal">Cursando atualmente</Label>
+                  </div>
+                </div>
+              </div>
+            </CardEntrance>
+
+            {/* Skills */}
+            <CardEntrance delay={0.3}>
+              <div className="bg-white rounded-xl border-2 border-slate-200 shadow-sm p-6">
+                <h3 className="text-[#0A2342] font-semibold mb-4">Habilidades</h3>
+                <div className="flex flex-wrap gap-2 mb-4">
+                  {formData.skills.map((skill, i) => (
+                    <span key={i} className="px-3 py-1.5 rounded-full bg-[#FF6B35]/10 text-[#FF6B35] text-sm font-medium flex items-center gap-2">
+                      {skill}
+                      <button onClick={() => removeSkill(skill)}>
+                        <X className="w-3 h-3" />
+                      </button>
+                    </span>
+                  ))}
+                  {formData.skills.length === 0 && (
+                    <p className="text-slate-500 text-sm">Nenhuma habilidade adicionada</p>
+                  )}
+                </div>
+                <div className="flex gap-2">
+                  <Input
+                    value={newSkill}
+                    onChange={(e) => setNewSkill(e.target.value)}
+                    placeholder="Adicionar habilidade"
+                    onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addSkill())}
+                  />
+                  <button
+                    onClick={addSkill}
+                    className="px-4 py-2 rounded-lg bg-white border-2 border-slate-200 hover:border-[#FF6B35]/50 transition-all"
+                  >
+                    <Plus className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            </CardEntrance>
+
+            {/* Languages */}
+            <CardEntrance delay={0.4}>
+              <div className="bg-white rounded-xl border-2 border-slate-200 shadow-sm p-6">
+                <h3 className="text-[#0A2342] font-semibold mb-4">Idiomas</h3>
+                <div className="flex flex-wrap gap-2 mb-4">
+                  {formData.languages.map((lang, i) => (
+                    <span key={i} className="px-3 py-1.5 rounded-full bg-blue-500/10 text-blue-600 text-sm font-medium flex items-center gap-2">
+                      {lang}
+                      <button onClick={() => removeLanguage(lang)}>
+                        <X className="w-3 h-3" />
+                      </button>
+                    </span>
+                  ))}
+                  {formData.languages.length === 0 && (
+                    <p className="text-slate-500 text-sm">Nenhum idioma adicionado</p>
+                  )}
+                </div>
+                <div className="flex gap-2">
+                  <Input
+                    value={newLanguage}
+                    onChange={(e) => setNewLanguage(e.target.value)}
+                    placeholder="Adicionar idioma (ex: Inglês - Intermediário)"
+                    onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addLanguage())}
+                  />
+                  <button
+                    onClick={addLanguage}
+                    className="px-4 py-2 rounded-lg bg-white border-2 border-slate-200 hover:border-[#FF6B35]/50 transition-all"
+                  >
+                    <Plus className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            </CardEntrance>
+
+            {/* Experience */}
+            <CardEntrance delay={0.5}>
+              <div className="bg-white rounded-xl border-2 border-slate-200 shadow-sm p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-[#1B4D7A]/20 flex items-center justify-center">
+                      <Briefcase className="w-5 h-5 text-[#1B4D7A]" />
+                    </div>
+                    <h3 className="text-[#0A2342] font-semibold">Experiência Profissional</h3>
+                  </div>
+                  <button
+                    onClick={openAddExperience}
+                    className="px-4 py-2 rounded-lg bg-white border-2 border-slate-200 hover:border-[#FF6B35]/50 transition-all flex items-center gap-2 text-sm"
+                  >
+                    <Plus className="w-4 h-4" /> Adicionar
+                  </button>
+                </div>
+                {experiences.length === 0 ? (
+                  <p className="text-slate-500 text-sm">Nenhuma experiência adicionada</p>
+                ) : (
+                  <div className="space-y-3">
+                    {experiences.map((exp, i) => (
+                      <div key={i} className="p-4 border border-slate-200 rounded-lg flex justify-between items-start">
+                        <div>
+                          <p className="font-medium text-[#0A2342]">{exp.role}</p>
+                          <p className="text-sm text-slate-600">{exp.company}</p>
+                          <p className="text-xs text-slate-400 mt-1">
+                            {exp.start_date}{exp.current ? ' - Atual' : exp.end_date ? ` - ${exp.end_date}` : ''}
+                          </p>
+                          {exp.description && <p className="text-sm text-slate-500 mt-2">{exp.description}</p>}
+                        </div>
+                        <div className="flex gap-2">
+                          <button onClick={() => openEditExperience(exp, i)} className="text-slate-400 hover:text-[#FF6B35]">
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                          <button onClick={() => deleteExperience(i)} className="text-slate-400 hover:text-red-500">
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </CardEntrance>
+
+            {/* Preferences */}
+            <CardEntrance delay={0.6}>
+              <div className="bg-white rounded-xl border-2 border-slate-200 shadow-sm p-6">
+                <h3 className="text-[#0A2342] font-semibold mb-4">Preferências de Trabalho</h3>
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Tipo de Trabalho Preferido</Label>
+                    <Select
+                      value={formData.preferred_work_type}
+                      onValueChange={(v) => handleInputChange('preferred_work_type', v)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="presencial">Presencial</SelectItem>
+                        <SelectItem value="remoto">Remoto</SelectItem>
+                        <SelectItem value="hibrido">Híbrido</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-3 mt-2">
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        id="avail_clt"
+                        checked={formData.available_for_clt}
+                        onChange={(e) => handleInputChange('available_for_clt', e.target.checked)}
+                        className="rounded"
+                      />
+                      <Label htmlFor="avail_clt">Disponível para CLT</Label>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        id="avail_internship"
+                        checked={formData.available_for_internship}
+                        onChange={(e) => handleInputChange('available_for_internship', e.target.checked)}
+                        className="rounded"
+                      />
+                      <Label htmlFor="avail_internship">Disponível para Estágio</Label>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        id="avail_apprentice"
+                        checked={formData.available_for_apprentice}
+                        onChange={(e) => handleInputChange('available_for_apprentice', e.target.checked)}
+                        className="rounded"
+                      />
+                      <Label htmlFor="avail_apprentice">Disponível para Jovem Aprendiz</Label>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </CardEntrance>
+
+            {/* AI Summary */}
+            {formData.summary && (
+              <CardEntrance delay={0.7}>
+                <div className="bg-white rounded-xl border-2 border-slate-200 shadow-sm p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-lg bg-purple-500/20 flex items-center justify-center">
+                        <Sparkles className="w-5 h-5 text-purple-600" />
+                      </div>
+                      <h3 className="text-[#0A2342] font-semibold">Resumo do Perfil (IA)</h3>
+                    </div>
+                    <button
+                      onClick={() => regenerateSummaryMutation.mutate()}
+                      disabled={regenerateSummaryMutation.isPending}
+                      className="px-3 py-1.5 rounded-lg bg-white border border-slate-200 hover:border-purple-300 transition-all flex items-center gap-2 text-sm text-slate-600"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${regenerateSummaryMutation.isPending ? 'animate-spin' : ''}`} />
+                      Regenerar
+                    </button>
+                  </div>
+                  <p className="text-slate-600 text-sm leading-relaxed">{formData.summary}</p>
+                </div>
+              </CardEntrance>
+            )}
+
+            {/* DISC & PDP Assessments */}
+            {profile && <CandidateAssessmentsTab profile={profile} />}
+
             {/* Save Button */}
             <div className="flex justify-end">
               <button
@@ -810,29 +1073,6 @@ export default function CandidateSettingsScreen() {
           <CandidateDocumentsTab />
         )}
 
-        {/* Logout Section (always visible at bottom) */}
-        <CardEntrance delay={0.3}>
-          <div className="bg-white rounded-xl border-2 border-red-200 shadow-sm p-6">
-            <div className="flex items-start justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-red-500/20 flex items-center justify-center">
-                  <LogOut className="w-5 h-5 text-red-600" />
-                </div>
-                <div>
-                  <h3 className="text-[#0A2342] font-semibold">Sessão</h3>
-                  <p className="text-slate-600 text-sm">Encerre sua sessão atual</p>
-                </div>
-              </div>
-              <button
-                onClick={logout}
-                className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-red-600 text-white font-medium hover:bg-red-700 transition-all"
-              >
-                <LogOut className="w-4 h-4" />
-                Sair da conta
-              </button>
-            </div>
-          </div>
-        </CardEntrance>
       </div>
 
       {/* Experience Dialog */}
@@ -1005,7 +1245,7 @@ function CandidateAssessmentsTab({ profile }: { profile: any }) {
       {hasPdp && (
         <CardEntrance delay={0.1}>
           <div className="bg-white rounded-xl border-2 border-slate-200 shadow-sm p-6">
-            <div className="flex items-center gap-3 mb-5">
+            <div className="flex items-center gap-3 mb-6">
               <div className="w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center">
                 <GraduationCap className="w-5 h-5 text-blue-600" />
               </div>
@@ -1019,79 +1259,103 @@ function CandidateAssessmentsTab({ profile }: { profile: any }) {
               </div>
             </div>
 
-            {/* Competencies */}
-            {profile.pdp_competencies?.length > 0 && (
-              <div className="mb-4">
-                <h4 className="text-sm font-medium text-slate-600 mb-2">Competências</h4>
-                <div className="flex flex-wrap gap-2">
-                  {profile.pdp_competencies.map((comp: string, i: number) => (
-                    <span key={i} className="px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200 text-xs font-medium">
-                      {comp}
-                    </span>
-                  ))}
+            <div className="space-y-5">
+              {/* Competencies */}
+              {profile.pdp_competencies?.length > 0 && (
+                <div className="bg-blue-50/50 rounded-lg p-4 border border-blue-100">
+                  <h4 className="text-sm font-semibold text-[#0A2342] mb-3 flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-blue-500" />
+                    Competências Principais
+                  </h4>
+                  <div className="flex flex-wrap gap-2">
+                    {profile.pdp_competencies.map((comp: string, i: number) => (
+                      <span key={i} className="px-3 py-1.5 rounded-lg bg-white text-blue-700 border border-blue-200 text-sm font-medium shadow-sm">
+                        {comp}
+                      </span>
+                    ))}
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
 
-            {/* Intrapersonal Skills */}
-            {profile.pdp_intrapersonal && Object.keys(profile.pdp_intrapersonal).length > 0 && (
-              <div className="mb-4">
-                <h4 className="text-sm font-medium text-slate-600 mb-2">Habilidades Intrapessoais</h4>
-                <div className="flex flex-wrap gap-2">
-                  {Object.entries(profile.pdp_intrapersonal).map(([key, values]: [string, any]) => (
-                    Array.isArray(values) ? values.map((v: string, i: number) => (
-                      <span key={`${key}-${i}`} className="px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-medium">
-                        {v}
-                      </span>
-                    )) : (
-                      <span key={key} className="px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-medium">
-                        {key}: {String(values)}
-                      </span>
-                    )
-                  ))}
+              {/* Intrapersonal Skills */}
+              {profile.pdp_intrapersonal && Object.keys(profile.pdp_intrapersonal).length > 0 && (
+                <div className="bg-emerald-50/50 rounded-lg p-4 border border-emerald-100">
+                  <h4 className="text-sm font-semibold text-[#0A2342] mb-3 flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                    Habilidades Intrapessoais
+                  </h4>
+                  <div className="space-y-2">
+                    {Object.entries(profile.pdp_intrapersonal).map(([key, values]: [string, any]) => (
+                      <div key={key} className="bg-white rounded-lg p-3 border border-emerald-100">
+                        {Array.isArray(values) ? (
+                          <ul className="space-y-1">
+                            {values.map((v: string, i: number) => (
+                              <li key={i} className="text-sm text-slate-700 flex items-start gap-2">
+                                <span className="text-emerald-500 mt-1 shrink-0">•</span>
+                                {v}
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <p className="text-sm text-slate-700">{String(values)}</p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
 
-            {/* Interpersonal Skills */}
-            {profile.pdp_interpersonal && Object.keys(profile.pdp_interpersonal).length > 0 && (
-              <div className="mb-4">
-                <h4 className="text-sm font-medium text-slate-600 mb-2">Habilidades Interpessoais</h4>
-                <div className="flex flex-wrap gap-2">
-                  {Object.entries(profile.pdp_interpersonal).map(([key, values]: [string, any]) => (
-                    Array.isArray(values) ? values.map((v: string, i: number) => (
-                      <span key={`${key}-${i}`} className="px-2.5 py-1 rounded-full bg-orange-50 text-orange-700 border border-orange-200 text-xs font-medium">
-                        {v}
-                      </span>
-                    )) : (
-                      <span key={key} className="px-2.5 py-1 rounded-full bg-orange-50 text-orange-700 border border-orange-200 text-xs font-medium">
-                        {key}: {String(values)}
-                      </span>
-                    )
-                  ))}
+              {/* Interpersonal Skills */}
+              {profile.pdp_interpersonal && Object.keys(profile.pdp_interpersonal).length > 0 && (
+                <div className="bg-orange-50/50 rounded-lg p-4 border border-orange-100">
+                  <h4 className="text-sm font-semibold text-[#0A2342] mb-3 flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-orange-500" />
+                    Habilidades Interpessoais
+                  </h4>
+                  <div className="space-y-2">
+                    {Object.entries(profile.pdp_interpersonal).map(([key, values]: [string, any]) => (
+                      <div key={key} className="bg-white rounded-lg p-3 border border-orange-100">
+                        {Array.isArray(values) ? (
+                          <ul className="space-y-1">
+                            {values.map((v: string, i: number) => (
+                              <li key={i} className="text-sm text-slate-700 flex items-start gap-2">
+                                <span className="text-orange-500 mt-1 shrink-0">•</span>
+                                {v}
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <p className="text-sm text-slate-700">{String(values)}</p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
 
-            {/* Skills */}
-            {profile.pdp_skills && Object.keys(profile.pdp_skills).length > 0 && (
-              <div>
-                <h4 className="text-sm font-medium text-slate-600 mb-2">Habilidades Técnicas</h4>
-                <div className="flex flex-wrap gap-2">
-                  {Object.entries(profile.pdp_skills).map(([key, values]: [string, any]) => (
-                    Array.isArray(values) ? values.map((v: string, i: number) => (
-                      <span key={`${key}-${i}`} className="px-2.5 py-1 rounded-full bg-violet-50 text-violet-700 border border-violet-200 text-xs font-medium">
-                        {v}
-                      </span>
-                    )) : (
-                      <span key={key} className="px-2.5 py-1 rounded-full bg-violet-50 text-violet-700 border border-violet-200 text-xs font-medium">
-                        {key}: {String(values)}
-                      </span>
-                    )
-                  ))}
+              {/* Technical Skills */}
+              {profile.pdp_skills && Object.keys(profile.pdp_skills).length > 0 && (
+                <div className="bg-violet-50/50 rounded-lg p-4 border border-violet-100">
+                  <h4 className="text-sm font-semibold text-[#0A2342] mb-3 flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-violet-500" />
+                    Habilidades Técnicas
+                  </h4>
+                  <div className="flex flex-wrap gap-2">
+                    {Object.entries(profile.pdp_skills).map(([key, values]: [string, any]) => (
+                      Array.isArray(values) ? values.map((v: string, i: number) => (
+                        <span key={`${key}-${i}`} className="px-3 py-1.5 rounded-lg bg-white text-violet-700 border border-violet-200 text-sm font-medium shadow-sm">
+                          {v}
+                        </span>
+                      )) : (
+                        <span key={key} className="px-3 py-1.5 rounded-lg bg-white text-violet-700 border border-violet-200 text-sm font-medium shadow-sm">
+                          {String(values)}
+                        </span>
+                      )
+                    ))}
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
         </CardEntrance>
       )}

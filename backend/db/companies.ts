@@ -796,14 +796,64 @@ export async function getCompanyUsers(companyId: string) {
     return [];
   }
 
-  // Return the owner user (currently 1-to-1 relationship; no company_users table exists yet)
-  const { data, error } = await supabaseAdmin
+  // Get owner user
+  const { data: ownerData, error: ownerError } = await supabaseAdmin
     .from("users")
     .select("id, name, email, role, created_at")
     .eq("id", company.user_id);
 
-  if (error) throw error;
-  return (data ?? []).map(u => ({ ...u, isOwner: true }));
+  if (ownerError) throw ownerError;
+  const owners = (ownerData ?? []).map(u => ({ ...u, isOwner: true }));
+
+  // Get all invited users (accepted + pending)
+  const { data: invitations } = await supabaseAdmin
+    .from("company_user_invitations")
+    .select("email, name, role, status, accepted_at")
+    .eq("company_id", companyId)
+    .in("status", ["accepted", "pending"]);
+
+  if (invitations && invitations.length > 0) {
+    const acceptedEmails = invitations.filter(i => i.status === 'accepted').map(i => i.email);
+    const pendingInvites = invitations.filter(i => i.status === 'pending');
+
+    // Get users from users table for accepted invites
+    const matchedEmails = new Set<string>();
+    if (acceptedEmails.length > 0) {
+      const { data: invitedUsers } = await supabaseAdmin
+        .from("users")
+        .select("id, name, email, role, created_at")
+        .in("email", acceptedEmails);
+
+      if (invitedUsers) {
+        const ownerIds = new Set(owners.map(o => o.id));
+        for (const u of invitedUsers) {
+          if (ownerIds.has(u.id)) continue;
+          const inv = invitations.find(i => i.email === u.email);
+          owners.push({ ...u, isOwner: false, companyRole: inv?.role || 'member' });
+          matchedEmails.add(u.email);
+        }
+      }
+    }
+
+    // Add all invitations not yet matched (pending OR accepted without user profile)
+    for (const inv of invitations) {
+      if (matchedEmails.has(inv.email)) continue;
+      const ownerEmails = new Set(owners.map(o => o.email));
+      if (ownerEmails.has(inv.email)) continue;
+      owners.push({
+        id: `invite-${inv.email}`,
+        name: inv.name || inv.email,
+        email: inv.email,
+        role: 'company',
+        created_at: null,
+        isOwner: false,
+        companyRole: inv.role || 'member',
+        isPending: inv.status === 'pending',
+      });
+    }
+  }
+
+  return owners;
 }
 
 export async function getCompanyJobsWithStatus(

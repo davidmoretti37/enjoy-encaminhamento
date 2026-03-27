@@ -3,7 +3,7 @@ import { useAgencyContext } from "@/contexts/AgencyContext";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Building2, Users, FileText, DollarSign, FileCheck, User, Plus } from "lucide-react";
+import { Building2, Users, FileText, DollarSign, FileCheck, User, Plus, CheckCircle2, Clock, AlertCircle, ArrowRight } from "lucide-react";
 import { useState } from "react";
 import { useLocation } from "wouter";
 import CompanyDocumentsModal from "@/components/CompanyDocumentsModal";
@@ -11,6 +11,10 @@ import AddCompanyModal from "@/components/AddCompanyModal";
 import { CandidateCardModal } from "@/components/candidate-card/CandidateCard";
 import { Input } from "@/components/ui/input";
 import { Search, X } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { trpc } from "@/lib/trpc";
+import { format } from "date-fns";
+import { ptBR } from "date-fns/locale";
 
 export default function ManagementTab() {
   const { managementFilter, setManagementFilter, companies, candidates, isLoading, refreshData } = useAgencyFunnel();
@@ -18,6 +22,8 @@ export default function ManagementTab() {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedEntity, setSelectedEntity] = useState<any>(null);
   const [documentsModalOpen, setDocumentsModalOpen] = useState(false);
+  const [paymentsModalOpen, setPaymentsModalOpen] = useState(false);
+  const [paymentsEntity, setPaymentsEntity] = useState<any>(null);
   const [showAddCompanyModal, setShowAddCompanyModal] = useState(false);
   const [selectedCandidate, setSelectedCandidate] = useState<any>(null);
 
@@ -45,6 +51,11 @@ export default function ManagementTab() {
   const handleDocumentsClick = (entity: any) => {
     setSelectedEntity(entity);
     setDocumentsModalOpen(true);
+  };
+
+  const handlePaymentsClick = (entity: any) => {
+    setPaymentsEntity(entity);
+    setPaymentsModalOpen(true);
   };
 
   if (isLoading) {
@@ -145,6 +156,7 @@ export default function ManagementTab() {
         <CompanyList
           companies={filteredCompanies}
           onDocumentsClick={handleDocumentsClick}
+          onPaymentsClick={handlePaymentsClick}
           searchTerm={searchTerm}
           isAllAgenciesMode={isAllAgenciesMode}
           availableAgencies={availableAgencies}
@@ -167,6 +179,16 @@ export default function ManagementTab() {
         onClose={() => {
           setDocumentsModalOpen(false);
           setSelectedEntity(null);
+        }}
+      />
+
+      {/* Payments Modal */}
+      <CompanyPaymentsModal
+        company={paymentsEntity}
+        open={paymentsModalOpen}
+        onClose={() => {
+          setPaymentsModalOpen(false);
+          setPaymentsEntity(null);
         }}
       />
 
@@ -198,7 +220,7 @@ export default function ManagementTab() {
   );
 }
 
-function CompanyRow({ company, onDocumentsClick }: { company: any; onDocumentsClick: (entity: any) => void }) {
+function CompanyRow({ company, onDocumentsClick, onPaymentsClick }: { company: any; onDocumentsClick: (entity: any) => void; onPaymentsClick: (entity: any) => void }) {
   const [, setLocation] = useLocation();
 
   return (
@@ -234,18 +256,7 @@ function CompanyRow({ company, onDocumentsClick }: { company: any; onDocumentsCl
             variant="outline"
             size="sm"
             className="text-gray-600 border-gray-300 hover:bg-gray-50 hover:border-orange-300"
-            disabled
-            title="Em desenvolvimento"
-          >
-            <FileCheck className="h-4 w-4 mr-1.5" />
-            Contratos
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            className="text-gray-600 border-gray-300 hover:bg-gray-50 hover:border-orange-300"
-            disabled
-            title="Em desenvolvimento"
+            onClick={() => onPaymentsClick(company)}
           >
             <DollarSign className="h-4 w-4 mr-1.5" />
             Pagamentos
@@ -256,7 +267,7 @@ function CompanyRow({ company, onDocumentsClick }: { company: any; onDocumentsCl
   );
 }
 
-function CompanyList({ companies, onDocumentsClick, searchTerm, isAllAgenciesMode, availableAgencies }: { companies: any[]; onDocumentsClick: (entity: any) => void; searchTerm: string; isAllAgenciesMode: boolean; availableAgencies: { id: string; name: string; city: string | null }[] }) {
+function CompanyList({ companies, onDocumentsClick, onPaymentsClick, searchTerm, isAllAgenciesMode, availableAgencies }: { companies: any[]; onDocumentsClick: (entity: any) => void; onPaymentsClick: (entity: any) => void; searchTerm: string; isAllAgenciesMode: boolean; availableAgencies: { id: string; name: string; city: string | null }[] }) {
   if (!isAllAgenciesMode && companies.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-center">
@@ -288,7 +299,7 @@ function CompanyList({ companies, onDocumentsClick, searchTerm, isAllAgenciesMod
               {agencyCompanies.length > 0 ? (
                 <div className="space-y-2 mt-2">
                   {agencyCompanies.map((company: any) => (
-                    <CompanyRow key={company.id} company={company} onDocumentsClick={onDocumentsClick} />
+                    <CompanyRow key={company.id} company={company} onDocumentsClick={onDocumentsClick} onPaymentsClick={onPaymentsClick} />
                   ))}
                 </div>
               ) : (
@@ -304,7 +315,7 @@ function CompanyList({ companies, onDocumentsClick, searchTerm, isAllAgenciesMod
   return (
     <div className="space-y-2">
       {companies.map((company: any) => (
-        <CompanyRow key={company.id} company={company} onDocumentsClick={onDocumentsClick} />
+        <CompanyRow key={company.id} company={company} onDocumentsClick={onDocumentsClick} onPaymentsClick={onPaymentsClick} />
       ))}
     </div>
   );
@@ -420,5 +431,125 @@ function CandidateList({ candidates, onDocumentsClick, onProfileClick, searchTer
         <CandidateRow key={candidate.id} candidate={candidate} onProfileClick={onProfileClick} />
       ))}
     </div>
+  );
+}
+
+function CompanyPaymentsModal({ company, open, onClose }: { company: any; open: boolean; onClose: () => void }) {
+  const { data: paymentsData, isLoading } = trpc.agency.getPaymentsGroupedByCompany.useQuery(
+    undefined,
+    { enabled: open }
+  );
+
+  if (!company) return null;
+
+  const companyPayments = paymentsData?.find(
+    (g: any) => g.companyId === company.id || g.companyName === company.company_name
+  );
+
+  const payments = companyPayments?.payments || [];
+  const hasPayments = payments.length > 0;
+
+  const statusConfig: Record<string, { label: string; icon: any; color: string }> = {
+    paid: { label: "Pago", icon: CheckCircle2, color: "text-green-600 bg-green-50" },
+    pending: { label: "Pendente", icon: Clock, color: "text-amber-600 bg-amber-50" },
+    overdue: { label: "Atrasado", icon: AlertCircle, color: "text-red-600 bg-red-50" },
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <DollarSign className="h-5 w-5" />
+            Pagamentos - {company.company_name || "Empresa"}
+          </DialogTitle>
+        </DialogHeader>
+
+        {isLoading ? (
+          <div className="space-y-3 py-4">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <Skeleton key={i} className="h-12 w-full rounded-lg" />
+            ))}
+          </div>
+        ) : !hasPayments ? (
+          <div className="flex flex-col items-center justify-center py-10 text-center">
+            <div className="w-16 h-16 rounded-2xl bg-gray-100 flex items-center justify-center mb-4">
+              <DollarSign className="w-8 h-8 text-gray-400" />
+            </div>
+            <h3 className="text-lg font-semibold text-gray-800 mb-2">Nenhum pagamento ainda</h3>
+            <p className="text-sm text-gray-500 max-w-xs">
+              Os pagamentos aparecem automaticamente quando um candidato é contratado por esta empresa e o contrato é finalizado.
+            </p>
+            <div className="mt-6 flex items-center gap-2 text-xs text-gray-400">
+              <span className="px-2 py-1 bg-gray-100 rounded">Contratar candidato</span>
+              <ArrowRight className="h-3 w-3" />
+              <span className="px-2 py-1 bg-gray-100 rounded">Assinar contrato</span>
+              <ArrowRight className="h-3 w-3" />
+              <span className="px-2 py-1 bg-gray-100 rounded">Pagamentos gerados</span>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {/* Summary */}
+            <div className="grid grid-cols-3 gap-3">
+              <div className="p-3 rounded-lg bg-green-50 text-center">
+                <p className="text-xs text-green-600 font-medium">Pago</p>
+                <p className="text-lg font-bold text-green-700">
+                  R$ {((companyPayments?.totalPaid || 0) / 100).toFixed(2)}
+                </p>
+              </div>
+              <div className="p-3 rounded-lg bg-amber-50 text-center">
+                <p className="text-xs text-amber-600 font-medium">Pendente</p>
+                <p className="text-lg font-bold text-amber-700">
+                  R$ {((companyPayments?.pendingAmount || 0) / 100).toFixed(2)}
+                </p>
+              </div>
+              <div className="p-3 rounded-lg bg-red-50 text-center">
+                <p className="text-xs text-red-600 font-medium">Atrasado</p>
+                <p className="text-lg font-bold text-red-700">
+                  R$ {((companyPayments?.overdueAmount || 0) / 100).toFixed(2)}
+                </p>
+              </div>
+            </div>
+
+            {/* Payment list */}
+            <div className="space-y-2">
+              {payments.map((payment: any) => {
+                const config = statusConfig[payment.status] || statusConfig.pending;
+                const StatusIcon = config.icon;
+                return (
+                  <div key={payment.id} className="flex items-center justify-between p-3 rounded-lg border bg-white">
+                    <div className="flex items-center gap-3">
+                      <div className={`p-1.5 rounded-md ${config.color}`}>
+                        <StatusIcon className="h-4 w-4" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium">
+                          R$ {((payment.amount || 0) / 100).toFixed(2)}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          {payment.payment_type === 'monthly-fee' ? 'Taxa mensal' : payment.payment_type === 'insurance-fee' ? 'Seguro' : payment.payment_type}
+                          {payment.billing_period && ` · ${payment.billing_period}`}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <Badge className={config.color + " border-0 text-xs"}>
+                        {config.label}
+                      </Badge>
+                      {payment.due_date && (
+                        <p className="text-xs text-gray-400 mt-1">
+                          Venc: {format(new Date(payment.due_date), "dd/MM/yyyy", { locale: ptBR })}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }

@@ -2,7 +2,7 @@
 // Using Llama 3.1 70B through OpenRouter
 
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
-const GROQ_MODEL = 'meta-llama/llama-3.1-70b-instruct';
+const GROQ_MODEL = process.env.RERANKING_MODEL || process.env.LLM_MODEL || 'meta-llama/llama-3.1-70b-instruct';
 
 interface Message {
   role: 'system' | 'user' | 'assistant';

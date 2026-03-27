@@ -130,7 +130,7 @@ export default function CalendarPage() {
   // Settings queries — pass agencyId so agency-role users get their scoped data
   const { data: availability, refetch: refetchAvailability } = trpc.outreach.getAvailability.useQuery(
     { agencyId: currentAgency?.id },
-    { enabled: !!user?.id }
+    { enabled: !!user?.id, staleTime: 0 }
   );
   const { data: adminSettings, refetch: refetchSettings } = trpc.outreach.getAdminSettings.useQuery(
     { agencyId: currentAgency?.id },
@@ -968,14 +968,14 @@ export default function CalendarPage() {
         {/* Combined Settings Modal */}
         <Dialog open={settingsModalOpen} onOpenChange={setSettingsModalOpen}>
           <DialogContent className="sm:max-w-6xl w-[95vw] max-h-[80vh] mt-16 overflow-hidden flex flex-col">
-            <DialogHeader>
+            <DialogHeader className="pb-2">
               <DialogTitle>Configurações da Agenda</DialogTitle>
               <DialogDescription>
                 Gerencie suas preferências, horários e bloqueios
               </DialogDescription>
             </DialogHeader>
 
-            <div className="flex-1 overflow-y-auto space-y-6 py-4 pr-2">
+            <div className="flex-1 overflow-y-auto space-y-6 pt-2 pb-4 pr-2">
               {/* Section 1: Working Hours - Weekly Schedule (shown first so users configure hours before blocking) */}
               <div className="space-y-4">
                 <div className="flex items-center gap-2 text-sm font-semibold text-slate-700 border-b pb-2">

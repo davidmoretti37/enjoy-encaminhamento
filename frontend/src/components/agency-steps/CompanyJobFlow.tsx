@@ -5,7 +5,7 @@
  * Integrated from AgencyJobDescriptions.tsx
  */
 
-import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { useAgencyFunnel } from '@/contexts/AgencyFunnelContext';
 import { trpc } from '@/lib/trpc';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -675,14 +675,55 @@ function MatchedCandidatesList({ jobId, onGroupCreated }: { jobId: string; onGro
 }
 
 // Component to show AI matching status for a job
+function AgentMessage({ text, isLatest }: { text: string; isLatest: boolean }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10, scale: 0.95 }}
+      animate={{ opacity: isLatest ? 1 : 0.6, y: 0, scale: 1 }}
+      transition={{ duration: 0.3, ease: "easeOut" }}
+      className="flex items-start gap-2.5"
+    >
+      <div className="w-6 h-6 rounded-full bg-gradient-to-br from-[#1B4D7A] to-[#FF6B35] flex items-center justify-center flex-shrink-0 mt-0.5">
+        <Bot className="h-3.5 w-3.5 text-white" />
+      </div>
+      <div className={`px-3.5 py-2 rounded-2xl rounded-tl-sm max-w-[85%] ${isLatest ? 'bg-slate-100 text-slate-800' : 'bg-slate-50 text-slate-500'}`}>
+        <p className="text-sm leading-relaxed">{text}</p>
+      </div>
+    </motion.div>
+  );
+}
+
+function TypingIndicator() {
+  return (
+    <div className="flex items-start gap-2.5">
+      <div className="w-6 h-6 rounded-full bg-gradient-to-br from-[#1B4D7A] to-[#FF6B35] flex items-center justify-center flex-shrink-0 mt-0.5">
+        <Bot className="h-3.5 w-3.5 text-white" />
+      </div>
+      <div className="px-4 py-2.5 rounded-2xl rounded-tl-sm bg-slate-100">
+        <div className="flex gap-1">
+          {[0, 1, 2].map((i) => (
+            <motion.div
+              key={i}
+              className="w-1.5 h-1.5 rounded-full bg-slate-400"
+              animate={{ y: [0, -4, 0] }}
+              transition={{ duration: 0.6, repeat: Infinity, delay: i * 0.15 }}
+            />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function MatchingStatusCard({ jobId, autoTrigger }: { jobId: string; autoTrigger?: boolean }) {
   const utils = trpc.useUtils();
   const [hasTriggered, setHasTriggered] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
   const { data: progress, isLoading } = trpc.job.getMatchingProgress.useQuery(
     { jobId },
     { refetchInterval: (query: any) => {
       const status = query.state?.data?.status;
-      return (status === 'running' || status === 'pending') ? 3000 : false;
+      return (status === 'running' || status === 'pending' || status === 'not_started') ? 1500 : false;
     }}
   );
 
@@ -701,37 +742,62 @@ function MatchingStatusCard({ jobId, autoTrigger }: { jobId: string; autoTrigger
         setHasTriggered(true);
         triggerMatchingMutation.mutate({ jobId });
       } else if (!shouldTrigger) {
-        // Search already done — mark as triggered so we skip the loader
         setHasTriggered(true);
       }
     }
   }, [autoTrigger, hasTriggered, isLoading, progress, triggerMatchingMutation, jobId]);
 
-  // Show loader while loading, auto-triggering, or no progress yet
-  if (isLoading || (autoTrigger && !hasTriggered) || !progress || progress.status === 'not_started') {
+  // Auto-scroll to bottom when new messages arrive
+  const messages = (progress as any)?.messages || [];
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages.length]);
+
+  const isRunning = !progress || progress.status === 'not_started' || progress.status === 'running' || progress.status === 'pending';
+
+  // Loading / Running state with chat bubbles
+  if (isLoading || (autoTrigger && !hasTriggered) || isRunning) {
     return (
-      <div className="flex flex-col items-center text-center gap-5 py-8">
-        <motion.div
-          animate={{ scale: [1, 1.1, 1] }}
-          transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-          className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#1B4D7A] to-[#FF6B35] flex items-center justify-center"
-        >
-          <Bot className="h-8 w-8 text-white" />
-        </motion.div>
-        <div>
-          <p className="text-lg font-semibold text-[#0A2342]">Buscando candidatos...</p>
-          <p className="text-sm text-slate-500 mt-1">A IA está analisando perfis compatíveis com esta vaga</p>
-        </div>
-        <div className="w-full max-w-xs">
-          <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
-            <motion.div
-              className="h-full w-1/3 rounded-full"
-              style={{ background: 'linear-gradient(90deg, #1B4D7A, #FF6B35)' }}
-              animate={{ x: ['-100%', '300%'] }}
-              transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
-            />
+      <div className="flex flex-col gap-4 py-6 px-2">
+        <div className="flex items-center gap-3 mb-2">
+          <motion.div
+            animate={{ scale: [1, 1.08, 1] }}
+            transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+            className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#1B4D7A] to-[#FF6B35] flex items-center justify-center"
+          >
+            <Bot className="h-5 w-5 text-white" />
+          </motion.div>
+          <div>
+            <p className="text-sm font-semibold text-[#0A2342]">Agente de Recrutamento</p>
+            <p className="text-xs text-slate-400">Buscando candidatos...</p>
           </div>
         </div>
+
+        <div className="flex flex-col gap-3 max-h-[280px] overflow-y-auto">
+          {messages.map((msg: any, i: number) => (
+            <AgentMessage key={i} text={msg.text} isLatest={i === messages.length - 1} />
+          ))}
+          {progress?.status !== 'completed' && progress?.status !== 'failed' && <TypingIndicator />}
+          <div ref={messagesEndRef} />
+        </div>
+
+        {progress && progress.percentComplete > 0 && progress.status !== 'completed' && (
+          <div className="w-full max-w-sm mx-auto mt-2">
+            <div className="flex justify-between text-xs text-slate-500 mb-1.5">
+              <span>Progresso</span>
+              <span className="font-medium">{progress.percentComplete}%</span>
+            </div>
+            <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+              <motion.div
+                className="h-full rounded-full"
+                style={{ background: 'linear-gradient(90deg, #1B4D7A, #FF6B35)' }}
+                initial={{ width: 0 }}
+                animate={{ width: `${progress.percentComplete}%` }}
+                transition={{ duration: 0.5, ease: "easeOut" }}
+              />
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -752,53 +818,6 @@ function MatchingStatusCard({ jobId, autoTrigger }: { jobId: string; autoTrigger
   };
 
   const config = statusConfig[progress.status] || statusConfig.completed;
-
-  // Running or pending state - centered, prominent animation
-  if (progress.status === 'running' || progress.status === 'pending') {
-    return (
-      <div className="flex flex-col items-center text-center gap-5 py-8">
-        <motion.div
-          animate={{ scale: [1, 1.1, 1] }}
-          transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-          className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#1B4D7A] to-[#FF6B35] flex items-center justify-center"
-        >
-          <Bot className="h-8 w-8 text-white" />
-        </motion.div>
-        <div>
-          <p className="text-lg font-semibold text-[#0A2342]">Buscando candidatos...</p>
-          <p className="text-sm text-slate-500 mt-1">A IA está analisando perfis compatíveis com a vaga</p>
-        </div>
-        <div className="w-full max-w-xs">
-          {progress.status === 'running' && progress.percentComplete > 0 ? (
-            <>
-              <div className="flex justify-between text-xs text-orange-600 mb-2">
-                <span>Progresso</span>
-                <span className="font-semibold">{progress.percentComplete}%</span>
-              </div>
-              <div className="h-2 bg-orange-100 rounded-full overflow-hidden">
-                <motion.div
-                  className="h-full rounded-full"
-                  style={{ background: 'linear-gradient(90deg, #1B4D7A, #FF6B35)' }}
-                  initial={{ width: 0 }}
-                  animate={{ width: `${progress.percentComplete}%` }}
-                  transition={{ duration: 0.5, ease: "easeOut" }}
-                />
-              </div>
-            </>
-          ) : (
-            <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
-              <motion.div
-                className="h-full w-1/3 rounded-full"
-                style={{ background: 'linear-gradient(90deg, #1B4D7A, #FF6B35)' }}
-                animate={{ x: ['-100%', '300%'] }}
-                transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
-              />
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  }
 
   // Completed or failed states
   return (
@@ -821,10 +840,6 @@ function MatchingStatusCard({ jobId, autoTrigger }: { jobId: string; autoTrigger
             <p className="text-xs text-gray-500 mt-1">
               Nenhum candidato compatível encontrado no momento
             </p>
-          )}
-
-          {(progress as any).errorMessage && (
-            <p className="text-xs text-red-600 mt-1">{(progress as any).errorMessage}</p>
           )}
 
           {(progress.status === 'completed' || progress.status === 'failed') && (

@@ -149,7 +149,41 @@ export const affiliateRouter = router({
         input.notes
       );
 
-      return { ...result, affiliateName: affiliate.name };
+      // Send invitation email
+      const baseUrl = ENV.appUrl;
+      const inviteLink = `${baseUrl}/agencia/registro?token=${result.token}`;
+
+      const htmlBody = `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #1e293b;">Convite para Cadastro na Plataforma</h2>
+          <p>Olá!</p>
+          <p>Você foi convidado(a) para cadastrar sua agência em nossa plataforma de recrutamento.</p>
+          <p>Clique no botão abaixo para completar seu cadastro:</p>
+          <div style="margin: 30px 0;">
+            <a href="${inviteLink}" style="background-color: #2563eb; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">
+              Cadastrar Agência
+            </a>
+          </div>
+          <p style="color: #64748b; font-size: 14px;">Este link expira em 7 dias.</p>
+          <hr style="margin: 20px 0; border: none; border-top: 1px solid #eee;">
+          <p style="color: #64748b; font-size: 12px;">
+            Se você não solicitou este convite, por favor ignore este email.
+          </p>
+        </div>
+      `;
+
+      try {
+        await sendEmail(
+          input.email,
+          'Convite para se cadastrar na plataforma',
+          htmlBody
+        );
+      } catch (err: any) {
+        console.error('[Agency Invitation] Email send error:', err);
+        return { ...result, affiliateName: affiliate.name, emailSent: false };
+      }
+
+      return { ...result, affiliateName: affiliate.name, emailSent: true };
     }),
 
   // Update agency status (admins can approve/suspend agencies in their region)

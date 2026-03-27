@@ -48,12 +48,13 @@ const MENU_ITEMS = [
   { id: "documents", label: "Documentos", icon: FileText, description: "Contratos assinados" },
 ];
 
-function CandidateSidebarMenu({ open, onClose, onNavigate, onLogout, candidateName }: {
+function CandidateSidebarMenu({ open, onClose, onNavigate, onLogout, candidateName, candidatePhotoUrl }: {
   open: boolean;
   onClose: () => void;
   onNavigate: (tab: string) => void;
   onLogout: () => void;
   candidateName?: string;
+  candidatePhotoUrl?: string | null;
 }) {
   return (
     <AnimatePresence>
@@ -80,11 +81,15 @@ function CandidateSidebarMenu({ open, onClose, onNavigate, onLogout, candidateNa
             {/* Header */}
             <div className="flex items-center justify-between px-6 py-5 border-b border-slate-200">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-[#0A2342] flex items-center justify-center shadow-lg">
-                  <span className="text-white font-bold text-lg">
-                    {candidateName?.charAt(0)?.toUpperCase() || "C"}
-                  </span>
-                </div>
+                {candidatePhotoUrl ? (
+                  <img src={candidatePhotoUrl} alt="" className="w-10 h-10 rounded-lg object-cover shadow-lg" />
+                ) : (
+                  <div className="w-10 h-10 rounded-lg bg-[#0A2342] flex items-center justify-center shadow-lg">
+                    <span className="text-white font-bold text-lg">
+                      {candidateName?.charAt(0)?.toUpperCase() || "C"}
+                    </span>
+                  </div>
+                )}
                 <div>
                   <h2 className="text-lg font-bold text-[#0A2342]">{candidateName || "Candidato"}</h2>
                   <p className="text-[10px] text-slate-500 uppercase tracking-wider -mt-0.5">Menu</p>
@@ -218,6 +223,7 @@ function CandidatoPortalContent() {
         onNavigate={handleMenuNavigate}
         onLogout={logout}
         candidateName={candidateProfile?.full_name}
+        candidatePhotoUrl={candidateProfile?.photo_url}
       />
 
       <FunnelLayout

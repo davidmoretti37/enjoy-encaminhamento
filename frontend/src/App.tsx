@@ -50,6 +50,7 @@ import CompanyOnboarding from "./pages/company/CompanyOnboarding";
 import CompanyPendingContracts from "./pages/company/CompanyPendingContracts";
 import CandidateOnboarding from "./pages/candidate/CandidateOnboarding";
 import CompanyInviteAccept from "./pages/company/CompanyInviteAccept";
+import CompanyJoin from "./pages/company/CompanyJoin";
 import VagasPage from "./pages/VagasPage";
 import CompanyVagasPage from "./pages/CompanyVagasPage";
 // Public landing pages
@@ -99,6 +100,7 @@ function Router() {
       <Route path={"/book/:adminId"} component={PublicBooking} />
       <Route path={"/form/:adminId"} component={CompanyForm} />
       <Route path={"/company/invite/:token"} component={CompanyInviteAccept} />
+      <Route path={"/company/join"} component={CompanyJoin} />
       <Route path={"/assinar/:token"} component={ExternalSigningPage} />
       <Route path={"/404"} component={NotFound} />
 

@@ -17,6 +17,10 @@ export interface LLMReRankResult {
   concerns: string[];
   recommendation: 'HIGHLY_RECOMMENDED' | 'RECOMMENDED' | 'CONSIDER' | 'NOT_RECOMMENDED';
   reasoning: string;
+  discAnalysis?: string;
+  competencyAnalysis?: string;
+  companyFitNotes?: string;
+  fullAnalysis?: string;
 }
 
 export interface CandidateForReRank {
@@ -29,32 +33,49 @@ export interface CandidateForReRank {
 // PROMPT TEMPLATES
 // ============================================
 
-const SYSTEM_PROMPT = `Você é um especialista em recrutamento e seleção com anos de experiência em matching de candidatos com vagas.
+const SYSTEM_PROMPT = `Você é um especialista sênior em recrutamento e seleção com profundo conhecimento em perfis comportamentais DISC e desenvolvimento pessoal (PDP).
 
-Sua tarefa é avaliar a compatibilidade entre candidatos e uma vaga de emprego, fornecendo:
-1. Uma pontuação refinada (0-100)
-2. Um nível de confiança na sua avaliação (0-100)
-3. Pontos fortes do candidato para esta vaga
-4. Preocupações ou lacunas identificadas
-5. Uma recomendação clara
-6. Um raciocínio breve explicando sua avaliação
+Você analisa candidatos considerando três dimensões-chave:
 
-IMPORTANTE:
-- Seja inclusivo e considere potencial, não apenas experiência exata
-- Valorize habilidades transferíveis e capacidade de aprendizado
-- Considere o contexto brasileiro de mercado de trabalho
-- Não exclua candidatos por pequenas lacunas - pontue de forma justa
-- Foque no potencial de sucesso na função
+1. **PERFIL DISC** — Você interpreta os 4 fatores (Dominante, Influente, Estável, Conforme) e entende como cada perfil se encaixa em diferentes funções:
+   - **D (Dominante)**: Orientado a resultados, decisivo, competitivo. Ideal para liderança, vendas, gestão.
+   - **I (Influente)**: Comunicativo, entusiasta, persuasivo. Ideal para atendimento, vendas, marketing, relações públicas.
+   - **S (Estável)**: Paciente, colaborativo, leal. Ideal para suporte, trabalho em equipe, funções de cuidado.
+   - **C (Conforme)**: Analítico, detalhista, preciso. Ideal para funções técnicas, qualidade, compliance, análise.
 
-Responda APENAS em JSON válido no formato:
+2. **COMPETÊNCIAS PDP** — Você avalia como as 10 principais competências do candidato se alinham com as necessidades da vaga.
+
+3. **OBSERVAÇÕES DA EMPRESA** — Você lê as notas e observações da empresa sobre o que realmente buscam (além da descrição formal) e avalia o fit cultural e prático.
+
+Responda APENAS em JSON válido:
 {
-  "refinedScore": <número 0-100>,
-  "confidence": <número 0-100>,
+  "refinedScore": <0-100>,
+  "confidence": <0-100>,
+  "discAnalysis": "<Parágrafo analisando como o perfil DISC do candidato se encaixa nesta vaga específica. Explique quais dimensões são fortes/fracas para o cargo.>",
+  "competencyAnalysis": "<Parágrafo analisando como as competências PDP do candidato se alinham com os requisitos da vaga.>",
+  "companyFitNotes": "<Parágrafo conectando o perfil do candidato com as observações específicas da empresa. Se não houver observações, analise o fit cultural geral.>",
   "strengths": ["<ponto forte 1>", "<ponto forte 2>", ...],
   "concerns": ["<preocupação 1>", ...],
   "recommendation": "<HIGHLY_RECOMMENDED|RECOMMENDED|CONSIDER|NOT_RECOMMENDED>",
-  "reasoning": "<explicação de 2-3 frases>"
-}`;
+  "reasoning": "<Resumo geral de 3-5 frases integrando DISC, competências e fit com a empresa.>"
+}
+
+IMPORTANTE:
+- Escreva análises profundas e específicas, NÃO genéricas
+- Cite valores DISC específicos e competências PDP pelo nome
+- Conecte as observações da empresa com o perfil do candidato
+- Considere o contexto brasileiro de mercado de trabalho
+- Seja inclusivo — valorize potencial e habilidades transferíveis`;
+
+function getDominantDISC(candidate: CandidateData): string {
+  const scores = [
+    { name: 'Dominante (orientado a resultados)', val: candidate.disc_dominante || 0 },
+    { name: 'Influente (comunicativo/persuasivo)', val: candidate.disc_influente || 0 },
+    { name: 'Estável (paciente/colaborativo)', val: candidate.disc_estavel || 0 },
+    { name: 'Conforme (analítico/detalhista)', val: candidate.disc_conforme || 0 },
+  ].sort((a, b) => b.val - a.val);
+  return `${scores[0].name} (${scores[0].val}%) + ${scores[1].name} (${scores[1].val}%)`;
+}
 
 function buildCandidatePrompt(
   candidate: CandidateData,
@@ -69,17 +90,20 @@ function buildCandidatePrompt(
     ).join('\n');
   };
 
-  return `## VAGA: ${job.title}
+  const discDominant = getDominantDISC(candidate);
 
+  return `## VAGA: ${job.title}
+${job.company_name ? `**Empresa:** ${job.company_name}` : ''}${job.company_industry ? ` (${job.company_industry})` : ''}
 **Descrição:** ${job.description || 'Não especificada'}
-**Tipo de Contrato:** ${job.contract_type}
-**Tipo de Trabalho:** ${job.work_type}
+**Tipo de Contrato:** ${job.contract_type} | **Trabalho:** ${job.work_type}
 **Localização:** ${job.location || 'Não especificada'}
 **Salário:** ${job.salary ? `R$ ${job.salary}` : 'Não informado'}${job.salary_max ? ` - R$ ${job.salary_max}` : ''}
 **Educação Mínima:** ${job.min_education_level || 'Não especificada'}
 **Habilidades Requeridas:** ${(job.required_skills || []).join(', ') || 'Não especificadas'}
-**Idiomas Requeridos:** ${(job.required_languages || []).join(', ') || 'Não especificados'}
-**Experiência Requerida:** ${job.experience_required ? `Sim, mínimo ${job.min_experience_years || 0} anos` : 'Não'}
+**Experiência:** ${job.experience_required ? `Sim, mínimo ${job.min_experience_years || 0} anos` : 'Não obrigatória'}
+
+${job.notes ? `### OBSERVAÇÕES DA EMPRESA (informação privilegiada sobre o que realmente buscam):\n${job.notes}` : ''}
+${job.company_summary ? `### SOBRE A EMPRESA:\n${job.company_summary}` : ''}
 
 ---
 
@@ -88,46 +112,32 @@ function buildCandidatePrompt(
 **Localização:** ${candidate.city || '?'}, ${candidate.state || '?'}
 **Educação:** ${candidate.education_level || 'Não informada'}
 **Habilidades:** ${(candidate.skills || []).join(', ') || 'Não informadas'}
-**Idiomas:** ${(candidate.languages || []).join(', ') || 'Não informados'}
 
 **Experiência:**
 ${formatExperience(candidate.experience)}
 
-**Perfil DISC:**
-- Dominante: ${candidate.disc_dominante ?? 'N/A'}%
-- Influente: ${candidate.disc_influente ?? 'N/A'}%
-- Estável: ${candidate.disc_estavel ?? 'N/A'}%
-- Conforme: ${candidate.disc_conforme ?? 'N/A'}%
+### PERFIL DISC (Comportamental)
+- **Dominante (D):** ${candidate.disc_dominante ?? 'N/A'}% ${candidate.disc_dominante != null && candidate.disc_dominante >= 60 ? '⬆ ALTO' : ''}
+- **Influente (I):** ${candidate.disc_influente ?? 'N/A'}% ${candidate.disc_influente != null && candidate.disc_influente >= 60 ? '⬆ ALTO' : ''}
+- **Estável (S):** ${candidate.disc_estavel ?? 'N/A'}% ${candidate.disc_estavel != null && candidate.disc_estavel >= 60 ? '⬆ ALTO' : ''}
+- **Conforme (C):** ${candidate.disc_conforme ?? 'N/A'}% ${candidate.disc_conforme != null && candidate.disc_conforme >= 60 ? '⬆ ALTO' : ''}
+**Perfil dominante:** ${discDominant}
 
-**Competências (Top 10):** ${(candidate.pdp_top_10_competencies || []).join(', ') || 'Não avaliadas'}
+### COMPETÊNCIAS PDP (Top 10 - Pontos Fortes)
+${(candidate.pdp_top_10_competencies || []).map((c, i) => `${i + 1}. ${c}`).join('\n') || 'Não avaliadas'}
 
-**Disponibilidade:**
-- Estágio: ${candidate.available_for_internship ? 'Sim' : candidate.available_for_internship === false ? 'Não' : 'N/A'}
-- CLT: ${candidate.available_for_clt ? 'Sim' : candidate.available_for_clt === false ? 'Não' : 'N/A'}
-- Menor Aprendiz: ${candidate.available_for_apprentice ? 'Sim' : candidate.available_for_apprentice === false ? 'Não' : 'N/A'}
-- Trabalho Preferido: ${candidate.preferred_work_type || 'N/A'}
+${candidate.pdp_develop_competencies?.length ? `### ÁREAS DE DESENVOLVIMENTO\n${candidate.pdp_develop_competencies.join(', ')}` : ''}
 
-**Resumo do Candidato:**
-${candidate.summary || 'Sem resumo disponível'}
+**Resumo:** ${candidate.summary || 'Sem resumo'}
 
 ---
 
-## PONTUAÇÃO PRÉVIA DO ALGORITMO
-
-- **Score Composto:** ${compositeScore.toFixed(1)}
-- Semântico: ${factors.semantic}
-- Habilidades: ${factors.skills}
-- Localização: ${factors.location}
-- Educação: ${factors.education}
-- Experiência: ${factors.experience}
-- Contrato: ${factors.contract}
-- Personalidade: ${factors.personality}
-- Histórico: ${factors.history}
-- Bidirecional: ${factors.bidirectional}
+## PONTUAÇÃO ALGORÍTMICA: ${compositeScore.toFixed(1)}/100
+Skills: ${factors.skills} | Localização: ${factors.location} | Educação: ${factors.education} | Experiência: ${factors.experience} | Personalidade: ${factors.personality} | Competências: ${factors.competency}
 
 ---
 
-Avalie este candidato para esta vaga. Seja justo, inclusivo e considere o potencial. Responda em JSON.`;
+Analise profundamente este candidato para esta vaga, focando no perfil DISC, competências PDP e fit com as observações da empresa. Responda em JSON.`;
 }
 
 // ============================================
@@ -151,7 +161,7 @@ export async function reRankCandidate(
         { role: 'system', content: SYSTEM_PROMPT },
         { role: 'user', content: userPrompt },
       ],
-      { temperature: 0.3, maxTokens: 800 }
+      { temperature: 0.3, maxTokens: 2000 }
     );
 
     if (!response) {
@@ -174,6 +184,12 @@ export async function reRankCandidate(
 
     const parsed = JSON.parse(jsonStr);
 
+    const discAnalysis = String(parsed.discAnalysis || '');
+    const competencyAnalysis = String(parsed.competencyAnalysis || '');
+    const companyFitNotes = String(parsed.companyFitNotes || '');
+    const reasoning = String(parsed.reasoning || '');
+    const fullAnalysis = [discAnalysis, competencyAnalysis, companyFitNotes].filter(Boolean).join('\n\n');
+
     return {
       candidateId: candidate.id,
       refinedScore: Math.max(0, Math.min(100, Number(parsed.refinedScore) || compositeScore)),
@@ -181,7 +197,11 @@ export async function reRankCandidate(
       strengths: Array.isArray(parsed.strengths) ? parsed.strengths.slice(0, 5) : [],
       concerns: Array.isArray(parsed.concerns) ? parsed.concerns.slice(0, 5) : [],
       recommendation: validateRecommendation(parsed.recommendation),
-      reasoning: String(parsed.reasoning || '').slice(0, 500),
+      reasoning,
+      discAnalysis,
+      competencyAnalysis,
+      companyFitNotes,
+      fullAnalysis,
     };
   } catch (error) {
     console.error(`LLM re-ranking error for candidate ${candidate.id}:`, error);

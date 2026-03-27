@@ -62,16 +62,22 @@ function PreferenceForm({
   selectedJobId: string;
   refreshData: () => void;
 }) {
+  const { companyProfile } = useCompanyFunnel();
+
+  // Fall back to company profile address when job-specific fields are empty
+  const fallback = (jobField: string | undefined | null, companyField: string | undefined | null) =>
+    jobField || companyField || "";
+
   const [preferenceType, setPreferenceType] = useState<"online" | "in_person">(
-    selectedJob.preferred_interview_type || "online"
+    selectedJob.preferred_interview_type || "in_person"
   );
-  const [cep, setCep] = useState(selectedJob.interview_location_cep || "");
-  const [address, setAddress] = useState(selectedJob.interview_location_address || "");
-  const [number, setNumber] = useState(selectedJob.interview_location_number || "");
-  const [complement, setComplement] = useState(selectedJob.interview_location_complement || "");
-  const [neighborhood, setNeighborhood] = useState(selectedJob.interview_location_neighborhood || "");
-  const [city, setCity] = useState(selectedJob.interview_location_city || "");
-  const [state, setState] = useState(selectedJob.interview_location_state || "");
+  const [cep, setCep] = useState(fallback(selectedJob.interview_location_cep, companyProfile?.postal_code));
+  const [address, setAddress] = useState(fallback(selectedJob.interview_location_address, companyProfile?.address));
+  const [number, setNumber] = useState(fallback(selectedJob.interview_location_number, companyProfile?.number));
+  const [complement, setComplement] = useState(fallback(selectedJob.interview_location_complement, companyProfile?.complement));
+  const [neighborhood, setNeighborhood] = useState(fallback(selectedJob.interview_location_neighborhood, companyProfile?.neighborhood));
+  const [city, setCity] = useState(fallback(selectedJob.interview_location_city, companyProfile?.city));
+  const [state, setState] = useState(fallback(selectedJob.interview_location_state, companyProfile?.state));
   const [preferredDays, setPreferredDays] = useState<string[]>(selectedJob.preferred_days || []);
   const [timeStart, setTimeStart] = useState(selectedJob.preferred_time_start || "");
   const [timeEnd, setTimeEnd] = useState(selectedJob.preferred_time_end || "");
@@ -79,22 +85,22 @@ function PreferenceForm({
   const [saved, setSaved] = useState(false);
   const [cepLoading, setCepLoading] = useState(false);
 
-  // Reset form when job changes
+  // Reset form when job changes — fall back to company profile for address
   useEffect(() => {
-    setPreferenceType(selectedJob.preferred_interview_type || "online");
-    setCep(selectedJob.interview_location_cep || "");
-    setAddress(selectedJob.interview_location_address || "");
-    setNumber(selectedJob.interview_location_number || "");
-    setComplement(selectedJob.interview_location_complement || "");
-    setNeighborhood(selectedJob.interview_location_neighborhood || "");
-    setCity(selectedJob.interview_location_city || "");
-    setState(selectedJob.interview_location_state || "");
+    setPreferenceType(selectedJob.preferred_interview_type || "in_person");
+    setCep(fallback(selectedJob.interview_location_cep, companyProfile?.postal_code));
+    setAddress(fallback(selectedJob.interview_location_address, companyProfile?.address));
+    setNumber(fallback(selectedJob.interview_location_number, companyProfile?.number));
+    setComplement(fallback(selectedJob.interview_location_complement, companyProfile?.complement));
+    setNeighborhood(fallback(selectedJob.interview_location_neighborhood, companyProfile?.neighborhood));
+    setCity(fallback(selectedJob.interview_location_city, companyProfile?.city));
+    setState(fallback(selectedJob.interview_location_state, companyProfile?.state));
     setPreferredDays(selectedJob.preferred_days || []);
     setTimeStart(selectedJob.preferred_time_start || "");
     setTimeEnd(selectedJob.preferred_time_end || "");
     setSchedulingNotes(selectedJob.scheduling_notes || "");
     setSaved(false);
-  }, [selectedJob]);
+  }, [selectedJob, companyProfile]);
 
   // CEP auto-fill via ViaCEP
   const handleCepChange = async (value: string) => {

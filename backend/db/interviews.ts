@@ -412,3 +412,26 @@ export async function getCompanyInterviewSessionsByBatch(batchId: string): Promi
 
   return data || [];
 }
+
+export async function markSessionAttendance(
+  sessionId: string,
+  attendance: Array<{ participantId: string; status: "attended" | "no_show" }>
+): Promise<void> {
+  for (const entry of attendance) {
+    const { error } = await supabaseAdmin
+      .from("interview_participants")
+      .update({ status: entry.status })
+      .eq("id", entry.participantId)
+      .eq("session_id", sessionId);
+
+    if (error) {
+      console.error("[Database] Failed to update participant attendance:", error);
+    }
+  }
+
+  // Mark session as completed
+  await supabaseAdmin
+    .from("interview_sessions")
+    .update({ status: "completed" })
+    .eq("id", sessionId);
+}

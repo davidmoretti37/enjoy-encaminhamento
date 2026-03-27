@@ -25,6 +25,11 @@ export interface CandidateData {
   disc_estavel?: number;
   disc_conforme?: number;
   pdp_top_10_competencies?: string[];
+  pdp_intrapersonal?: Record<string, any>;
+  pdp_interpersonal?: Record<string, any>;
+  pdp_skills?: Record<string, any>;
+  pdp_competencies?: string[];
+  pdp_develop_competencies?: string[];
   available_for_internship?: boolean;
   available_for_clt?: boolean;
   available_for_apprentice?: boolean;
@@ -48,6 +53,10 @@ export interface JobData {
   max_age?: number;
   experience_required?: boolean;
   min_experience_years?: number;
+  notes?: string;
+  company_name?: string;
+  company_summary?: string;
+  company_industry?: string;
 }
 
 export interface CandidatePreferences {
@@ -70,6 +79,7 @@ export interface FactorScores {
   personality: number;
   history: number;
   bidirectional: number;
+  competency: number;
 }
 
 export interface BatchedCandidateData {
@@ -385,56 +395,111 @@ export function scoreContractCompatibility(candidate: CandidateData, job: JobDat
 
 /**
  * Score personality/DISC fit based on job type
+ * Uses cosine similarity between candidate DISC vector and ideal DISC vector inferred from job
  */
 export function scorePersonalityFit(candidate: CandidateData, job: JobData): number {
-  // If no DISC data, return neutral score
   if (
     candidate.disc_dominante == null &&
     candidate.disc_influente == null &&
     candidate.disc_estavel == null &&
     candidate.disc_conforme == null
   ) {
-    return 60; // Neutral - no data
+    return 50; // No data
   }
 
-  const d = candidate.disc_dominante || 0;
-  const i = candidate.disc_influente || 0;
-  const s = candidate.disc_estavel || 0;
-  const c = candidate.disc_conforme || 0;
+  const candidateVec = [
+    candidate.disc_dominante || 0,
+    candidate.disc_influente || 0,
+    candidate.disc_estavel || 0,
+    candidate.disc_conforme || 0,
+  ];
 
-  const title = (job.title || '').toLowerCase();
-  const description = (job.description || '').toLowerCase();
+  // Infer ideal DISC vector from job text
+  const idealVec = inferIdealDISC(job);
 
-  // Leadership roles - prefer D and I profiles
-  const leadershipKeywords = ['gerente', 'coordenador', 'supervisor', 'líder', 'diretor'];
-  if (leadershipKeywords.some(k => title.includes(k))) {
-    const score = (d * 0.4) + (i * 0.3) + (s * 0.15) + (c * 0.15);
-    return Math.round(score);
+  // Cosine similarity
+  const dot = candidateVec.reduce((sum, v, i) => sum + v * idealVec[i], 0);
+  const magA = Math.sqrt(candidateVec.reduce((sum, v) => sum + v * v, 0));
+  const magB = Math.sqrt(idealVec.reduce((sum, v) => sum + v * v, 0));
+
+  if (magA === 0 || magB === 0) return 50;
+
+  const cosineSim = dot / (magA * magB); // 0 to 1
+  // Convert to 0-100 scale with some generosity (0.5 cosine = 50, 1.0 = 100)
+  return Math.round(Math.max(0, Math.min(100, cosineSim * 100)));
+}
+
+function inferIdealDISC(job: JobData): number[] {
+  const text = `${job.title || ''} ${job.description || ''} ${job.notes || ''}`.toLowerCase();
+
+  // Count keyword matches for each dimension
+  const dKeywords = ['líder', 'liderança', 'gerente', 'coordenador', 'supervisor', 'diretor', 'decisão', 'resultado', 'meta', 'desafio', 'competitivo', 'autonomia', 'independente', 'comando', 'estratégia', 'objetivo'];
+  const iKeywords = ['vendas', 'vendedor', 'comercial', 'comunicação', 'apresentação', 'networking', 'persuasão', 'influência', 'entusiasmo', 'criativo', 'marketing', 'relacionamento', 'social', 'contato', 'motivação', 'negociação'];
+  const sKeywords = ['atendimento', 'suporte', 'cuidado', 'equipe', 'colaboração', 'estabilidade', 'rotina', 'paciente', 'acolhimento', 'dedicado', 'confiável', 'cooperação', 'harmonia', 'assistente', 'auxiliar', 'apoio'];
+  const cKeywords = ['analista', 'análise', 'qualidade', 'detalhes', 'precisão', 'processo', 'norma', 'controle', 'dados', 'relatório', 'técnico', 'desenvolvedor', 'engenheiro', 'programador', 'compliance', 'auditoria', 'documentação', 'minucioso'];
+
+  const countMatches = (keywords: string[]) => keywords.filter(k => text.includes(k)).length;
+
+  let d = countMatches(dKeywords) + 1; // +1 base so no dimension is 0
+  let i = countMatches(iKeywords) + 1;
+  let s = countMatches(sKeywords) + 1;
+  let c = countMatches(cKeywords) + 1;
+
+  // Normalize to percentages (sum to ~100)
+  const total = d + i + s + c;
+  return [d / total * 100, i / total * 100, s / total * 100, c / total * 100];
+}
+
+// ============================================
+// PDP COMPETENCY MATCHING
+// ============================================
+
+const COMPETENCY_JOB_KEYWORDS: Record<string, string[]> = {
+  'comunicação': ['atendimento', 'vendas', 'comercial', 'suporte', 'cliente', 'apresentação', 'telefone', 'negociação'],
+  'liderança': ['gerente', 'coordenador', 'supervisor', 'líder', 'gestão', 'equipe', 'diretor'],
+  'organização': ['administrativo', 'organização', 'planejamento', 'controle', 'documentação', 'arquivo'],
+  'negociação': ['vendas', 'comercial', 'negociação', 'fechamento', 'proposta', 'contrato'],
+  'criatividade': ['design', 'criativo', 'marketing', 'inovação', 'conteúdo', 'visual'],
+  'trabalho em equipe': ['equipe', 'colaboração', 'time', 'cooperação', 'conjunto'],
+  'proatividade': ['proativo', 'iniciativa', 'autônomo', 'independente', 'resolver'],
+  'responsabilidade': ['responsável', 'confiável', 'comprometido', 'pontual', 'dedicado'],
+  'flexibilidade': ['flexível', 'adaptável', 'dinâmico', 'versatil', 'multitarefa'],
+  'análise': ['analista', 'análise', 'dados', 'relatório', 'métrica', 'indicador'],
+  'empatia': ['atendimento', 'cuidado', 'acolhimento', 'paciente', 'humanizado'],
+  'resolução de problemas': ['resolver', 'solução', 'problema', 'troubleshoot', 'diagnóstico'],
+  'foco em resultados': ['resultado', 'meta', 'objetivo', 'performance', 'desempenho', 'kpi'],
+  'atenção aos detalhes': ['detalhes', 'qualidade', 'precisão', 'minucioso', 'cuidadoso'],
+  'relacionamento interpessoal': ['relacionamento', 'interpessoal', 'networking', 'contato', 'parceiro'],
+  'gestão do tempo': ['prazo', 'deadline', 'tempo', 'prioridade', 'organização'],
+  'adaptabilidade': ['adaptável', 'mudança', 'flexível', 'novos', 'aprendizado'],
+  'persistência': ['persistente', 'determinado', 'resiliente', 'constante'],
+  'autoconfiança': ['confiante', 'seguro', 'autônomo', 'decisão'],
+  'disciplina': ['disciplina', 'rotina', 'processo', 'procedimento', 'norma'],
+};
+
+export function scorePDPCompetencyFit(candidate: CandidateData, job: JobData): number {
+  const competencies = candidate.pdp_top_10_competencies;
+  if (!competencies || competencies.length === 0) return 50; // Neutral - no data
+
+  const jobText = `${job.title || ''} ${job.description || ''} ${job.notes || ''} ${(job.required_skills || []).join(' ')}`.toLowerCase();
+
+  let matchedCount = 0;
+  for (const comp of competencies) {
+    const compLower = comp.toLowerCase().trim();
+    // Direct match with competency keyword map
+    for (const [key, keywords] of Object.entries(COMPETENCY_JOB_KEYWORDS)) {
+      if (compLower.includes(key) || key.includes(compLower)) {
+        if (keywords.some(kw => jobText.includes(kw))) {
+          matchedCount++;
+          break;
+        }
+      }
+    }
   }
 
-  // Sales/Customer-facing - prefer I and S profiles
-  const salesKeywords = ['vendas', 'vendedor', 'atendimento', 'comercial'];
-  if (salesKeywords.some(k => title.includes(k) || description.includes(k))) {
-    const score = (d * 0.15) + (i * 0.4) + (s * 0.35) + (c * 0.1);
-    return Math.round(score);
-  }
-
-  // Technical/Analytical - prefer C and D profiles
-  const techKeywords = ['desenvolvedor', 'analista', 'engenheiro', 'programador'];
-  if (techKeywords.some(k => title.includes(k))) {
-    const score = (d * 0.25) + (i * 0.1) + (s * 0.2) + (c * 0.45);
-    return Math.round(score);
-  }
-
-  // Administrative/Support - prefer S and C profiles
-  const adminKeywords = ['administrativo', 'assistente', 'auxiliar', 'secretária'];
-  if (adminKeywords.some(k => title.includes(k))) {
-    const score = (d * 0.1) + (i * 0.15) + (s * 0.4) + (c * 0.35);
-    return Math.round(score);
-  }
-
-  // Default - balanced
-  return Math.round((d + i + s + c) / 4);
+  // Score: base 40 + up to 60 based on match ratio
+  const matchRatio = matchedCount / Math.min(competencies.length, 10);
+  return Math.round(40 + matchRatio * 60);
 }
 
 /**
@@ -744,6 +809,7 @@ export async function calculateAllFactorsBatch(
     personality: scorePersonalityFit(candidate, job),
     history: scoreHistoricalPerformanceFromBatch(candidate.id, batchedData),
     bidirectional: scoreBidirectionalMatchFromBatch(candidate.id, candidate, job, batchedData),
+    competency: scorePDPCompetencyFit(candidate, job),
   };
 }
 

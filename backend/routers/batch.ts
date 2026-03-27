@@ -587,4 +587,83 @@ export const batchRouter = router({
       const stats = await batchDb.getCompanyBatchStats(company.id);
       return stats;
     }),
+
+  // ============================================
+  // SHARED ENDPOINTS (agency + admin)
+  // ============================================
+
+  getBatchesByJobId: agencyProcedure
+    .input(z.object({ jobId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      const agency = await db.getAgencyForUserContext(ctx.user.id, ctx.user.role);
+      if (!agency) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Agency not found" });
+      }
+
+      const batches = await batchDb.getBatchesByJobId(input.jobId);
+      // Filter to only this agency's batches (unless admin)
+      if (ctx.user.role !== "admin") {
+        return batches.filter((b: any) => b.agency_id === agency.id);
+      }
+      return batches;
+    }),
+
+  getBatchSessions: agencyProcedure
+    .input(z.object({ batchId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      const { getInterviewSessionsByBatch } = await import("../db/interviews");
+      return await getInterviewSessionsByBatch(input.batchId);
+    }),
+
+  markSessionAttendance: agencyProcedure
+    .input(z.object({
+      sessionId: z.string().uuid(),
+      attendance: z.array(z.object({
+        participantId: z.string().uuid(),
+        status: z.enum(["attended", "no_show"]),
+      })),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const { markSessionAttendance } = await import("../db/interviews");
+      await markSessionAttendance(input.sessionId, input.attendance);
+      return { success: true };
+    }),
+
+  updateMeetingLink: agencyProcedure
+    .input(z.object({
+      batchId: z.string().uuid(),
+      meetingLink: z.string(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const batch = await batchDb.getBatchById(input.batchId);
+      if (!batch) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Batch not found" });
+      }
+
+      await batchDb.updateBatch(input.batchId, {
+        meeting_link: input.meetingLink,
+      });
+      return { success: true };
+    }),
+
+  addCandidatesToBatch: agencyProcedure
+    .input(z.object({
+      batchId: z.string().uuid(),
+      candidateIds: z.array(z.string().uuid()),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const batch = await batchDb.getBatchById(input.batchId);
+      if (!batch) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Batch not found" });
+      }
+
+      const existingIds = batch.candidate_ids || [];
+      const newIds = [...new Set([...existingIds, ...input.candidateIds])];
+
+      await batchDb.updateBatch(input.batchId, {
+        candidate_ids: newIds,
+        batch_size: newIds.length,
+      });
+      return { success: true };
+    }),
 });

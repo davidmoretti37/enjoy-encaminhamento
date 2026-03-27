@@ -39,6 +39,7 @@ import { toast } from "sonner";
 
 const EMPLOYMENT_TYPES = [
   { value: "clt", label: "CLT" },
+  { value: "pj", label: "PJ" },
   { value: "estagio", label: "Estágio" },
   { value: "jovem_aprendiz", label: "Jovem Aprendiz" },
 ];
@@ -58,6 +59,8 @@ const GENDER_OPTIONS = [
 ];
 
 const EDUCATION_LEVELS = [
+  { value: "fundamental_incompleto", label: "Fundamental Incompleto" },
+  { value: "fundamental_completo", label: "Fundamental Completo" },
   { value: "medio_incompleto", label: "Médio Incompleto" },
   { value: "medio_completo", label: "Médio Completo" },
   { value: "tecnico", label: "Técnico" },

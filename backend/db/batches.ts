@@ -258,6 +258,37 @@ export async function getUnlockedBatchesForCompany(companyId: string): Promise<a
 }
 
 /**
+ * Get batches for a specific job
+ */
+export async function getBatchesByJobId(jobId: string): Promise<any[]> {
+  const { data, error } = await supabaseAdmin
+    .from("candidate_batches")
+    .select(`
+      *,
+      job:jobs(id, title, contract_type, status),
+      company:companies(id, company_name, email)
+    `)
+    .eq("job_id", jobId)
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    console.error("[Database] Failed to get batches by job:", error);
+    return [];
+  }
+
+  // Enrich with candidate details (wrapped as { candidate: {...} } to match frontend expectations)
+  const enriched = await Promise.all(
+    (data || []).map(async (batch) => {
+      const rawCandidates = await getCandidatesByIds(batch.candidate_ids || []);
+      const candidates = rawCandidates.map((c: any) => ({ candidate: c }));
+      return { ...batch, candidates };
+    })
+  );
+
+  return enriched;
+}
+
+/**
  * Get batches for an agency
  */
 export async function getBatchesByAgencyId(

@@ -46,6 +46,8 @@ const GENDER_OPTIONS = [
 ];
 
 const EDUCATION_LEVELS = [
+  { value: "fundamental_incompleto", label: "Fundamental Incompleto" },
+  { value: "fundamental_completo", label: "Fundamental Completo" },
   { value: "medio_incompleto", label: "Médio Incompleto" },
   { value: "medio_completo", label: "Médio Completo" },
   { value: "tecnico", label: "Técnico" },
@@ -120,8 +122,12 @@ export default function CompanyOnboarding() {
     },
   });
 
+  const needsAgency = !user?.agency_id;
+  const { data: agencies } = trpc.agency.getAllPublic.useQuery(undefined, { enabled: needsAgency });
+
   const [formData, setFormData] = useState({
     // Company Data
+    agencyId: "",
     contactPerson: "",
     phoneNumbers: [{ label: "", number: "" }] as { label: string; number: string }[],
     emails: [{ label: "", email: user?.email || "", isPrimary: true }] as { label: string; email: string; isPrimary: boolean }[],
@@ -270,6 +276,10 @@ export default function CompanyOnboarding() {
   };
 
   const validateStep1 = () => {
+    if (needsAgency && !formData.agencyId) {
+      toast.error("Selecione a região");
+      return false;
+    }
     if (!formData.cnpj || !formData.legalName) {
       toast.error("CNPJ e Razão Social são obrigatórios");
       return false;
@@ -361,6 +371,7 @@ export default function CompanyOnboarding() {
 
     submitOnboarding.mutate({
       // Company data
+      agencyId: formData.agencyId || undefined,
       cnpj: formData.cnpj.replace(/\D/g, ""),
       legalName: formData.legalName,
       businessName: formData.businessName || undefined,
@@ -539,6 +550,25 @@ export default function CompanyOnboarding() {
 
               <Card className="shadow-xl border-0 bg-white/80 backdrop-blur">
               <CardContent className="p-8 space-y-6">
+                {needsAgency && (
+                  <div className="grid gap-2">
+                    <Label>Região *</Label>
+                    <Select value={formData.agencyId} onValueChange={(v) => setFormData({ ...formData, agencyId: v })}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione a região" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {agencies?.map((agency: any) => (
+                          <SelectItem key={agency.id} value={agency.id}>
+                            {agency.city} - {agency.state}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">Selecione a região onde sua empresa está localizada</p>
+                  </div>
+                )}
+
                 <div className="grid grid-cols-2 gap-4">
                   <div className="grid gap-2">
                     <Label htmlFor="cnpj">CNPJ *</Label>

@@ -110,61 +110,16 @@ export default function EmailComposeModal({
       return;
     }
 
-    setRecipientEmails(finalEmails);
-    setEmailInput("");
-    setIsSending(true);
-
-    const progress = { total: finalEmails.length, sent: 0, failed: 0, current: "" };
-    setSendingProgress({ ...progress });
-
-    const failedEmails: string[] = [];
-
-    for (const email of finalEmails) {
-      progress.current = email;
-      setSendingProgress({ ...progress });
-
-      try {
-        await sendEmailMutation.mutateAsync({
-          recipientEmail: email,
-          subject,
-          body,
-          includeFormLink,
-          includeBookingLink,
-          companyId,
-        });
-        progress.sent++;
-      } catch (err: any) {
-        progress.failed++;
-        failedEmails.push(email);
-        console.error(`Failed to send to ${email}:`, err);
-      }
-
-      setSendingProgress({ ...progress });
-
-      // Small delay between sends to avoid rate limits
-      if (finalEmails.length > 1) {
-        await new Promise(resolve => setTimeout(resolve, 200));
-      }
-    }
-
-    setIsSending(false);
-
-    if (progress.failed === 0) {
-      toast.success(
-        finalEmails.length === 1
-          ? "Email enviado com sucesso!"
-          : `${progress.sent} emails enviados com sucesso!`
-      );
-      onOpenChange(false);
-      resetForm();
-    } else {
-      toast.error(
-        `${progress.sent} enviados com sucesso, ${progress.failed} falharam`
-      );
-      // Keep modal open with only failed emails
-      setRecipientEmails(failedEmails);
-      setSendingProgress(null);
-    }
+    const to = finalEmails.join(',');
+    const gmailSubject = encodeURIComponent(subject);
+    const gmailBody = encodeURIComponent(body);
+    window.open(
+      `https://mail.google.com/mail/?view=cm&to=${encodeURIComponent(to)}&su=${gmailSubject}&body=${gmailBody}`,
+      '_blank'
+    );
+    toast.success('Abrindo Gmail para envio.');
+    onOpenChange(false);
+    resetForm();
   };
 
   const handleClose = () => {

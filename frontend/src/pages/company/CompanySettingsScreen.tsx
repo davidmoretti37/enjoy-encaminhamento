@@ -51,6 +51,11 @@ export default function CompanySettingsScreen() {
     setLocation(`/company/settings?tab=${tab}`, { replace: true });
   };
   const [addUserModalOpen, setAddUserModalOpen] = useState(false);
+  const [newUserName, setNewUserName] = useState('');
+  const [newUserEmail, setNewUserEmail] = useState('');
+  const [newUserRole, setNewUserRole] = useState('member');
+
+  const createUserInviteMutation = trpc.company.createUserInvitation.useMutation();
 
   const utils = trpc.useUtils();
 
@@ -189,69 +194,7 @@ export default function CompanySettingsScreen() {
 
         {/* Company Data Tab */}
         {activeTab === "company" && (
-          <CardEntrance>
-            <div className="bg-white rounded-xl border-2 border-slate-200 shadow-sm p-6">
-              <div className="flex items-center justify-between mb-6">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-[#FF6B35]/20 flex items-center justify-center">
-                    <Building2 className="w-5 h-5 text-[#FF6B35]" />
-                  </div>
-                  <div>
-                    <h3 className="text-[#0A2342] font-semibold">Dados da Empresa</h3>
-                    <p className="text-slate-600 text-sm">Informações cadastradas</p>
-                  </div>
-                </div>
-                <button className="px-4 py-2 rounded-lg bg-white border-2 border-slate-200 hover:border-[#FF6B35]/50 hover:bg-slate-50 transition-all text-[#0A2342] font-medium">
-                  Solicitar Alteração
-                </button>
-              </div>
-
-              {infoLoading ? (
-                <FormSkeleton fields={5} />
-              ) : companyInfo ? (
-                <>
-                  <div className="grid grid-cols-2 gap-6 mb-6">
-                    <div>
-                      <span className="text-xs text-slate-500 uppercase tracking-wider">Razão Social</span>
-                      <p className="font-medium text-[#0A2342] mt-1">{companyInfo.company_name || '-'}</p>
-                    </div>
-                    <div>
-                      <span className="text-xs text-slate-500 uppercase tracking-wider">CNPJ</span>
-                      <p className="font-medium text-[#0A2342] mt-1">{companyInfo.cnpj || '-'}</p>
-                    </div>
-                    <div className="col-span-2">
-                      <span className="text-xs text-slate-500 uppercase tracking-wider">Endereço</span>
-                      <p className="font-medium text-[#0A2342] mt-1">
-                        {companyInfo.address ? `${companyInfo.address}, ${companyInfo.city} - ${companyInfo.state}` : '-'}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="h-px bg-slate-200 my-6" />
-
-                  <div>
-                    <h4 className="font-semibold text-[#0A2342] mb-4">Contato</h4>
-                    <div className="grid grid-cols-2 gap-6">
-                      <div>
-                        <span className="text-xs text-slate-500 uppercase tracking-wider">Email</span>
-                        <p className="font-medium text-[#0A2342] mt-1">{companyInfo.email || '-'}</p>
-                      </div>
-                      <div>
-                        <span className="text-xs text-slate-500 uppercase tracking-wider">Telefone</span>
-                        <p className="font-medium text-[#0A2342] mt-1">{companyInfo.phone || '-'}</p>
-                      </div>
-                    </div>
-                  </div>
-
-                  <p className="text-sm text-slate-500 mt-6">
-                    Alterações precisam de aprovação
-                  </p>
-                </>
-              ) : (
-                <p className="text-slate-500 text-center py-8">Informações não disponíveis</p>
-              )}
-            </div>
-          </CardEntrance>
+          <CompanyDataTab companyInfo={companyInfo} isLoading={infoLoading} onSaved={() => utils.company.getCompanyInfo.invalidate()} />
         )}
 
         {/* Users Tab */}
@@ -290,13 +233,20 @@ export default function CompanySettingsScreen() {
                           <TableCell className="font-medium text-[#0A2342]">{companyUser.name || '-'}</TableCell>
                           <TableCell className="text-slate-600">{companyUser.email}</TableCell>
                           <TableCell>
-                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                              companyUser.isOwner
-                                ? 'bg-[#FF6B35]/20 text-[#FF6B35]'
-                                : 'bg-slate-200 text-slate-700'
-                            }`}>
-                              {companyUser.isOwner ? 'Administrador' : 'Membro'}
-                            </span>
+                            <div className="flex items-center gap-2">
+                              <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                companyUser.isOwner
+                                  ? 'bg-[#FF6B35]/20 text-[#FF6B35]'
+                                  : 'bg-slate-200 text-slate-700'
+                              }`}>
+                                {companyUser.isOwner ? 'Administrador' : 'Membro'}
+                              </span>
+                              {companyUser.isPending && (
+                                <span className="px-2 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-700">
+                                  Pendente
+                                </span>
+                              )}
+                            </div>
                           </TableCell>
                           <TableCell className="text-right">
                             {!companyUser.isOwner && (
@@ -570,15 +520,15 @@ export default function CompanySettingsScreen() {
           <div className="space-y-4 py-4">
             <div>
               <Label htmlFor="new_user_name">Nome</Label>
-              <Input id="new_user_name" placeholder="Nome completo" />
+              <Input id="new_user_name" placeholder="Nome completo" value={newUserName} onChange={e => setNewUserName(e.target.value)} />
             </div>
             <div>
               <Label htmlFor="new_user_email">Email</Label>
-              <Input id="new_user_email" type="email" placeholder="email@empresa.com.br" />
+              <Input id="new_user_email" type="email" placeholder="email@empresa.com.br" value={newUserEmail} onChange={e => setNewUserEmail(e.target.value)} />
             </div>
             <div>
               <Label htmlFor="new_user_role">Função</Label>
-              <Select defaultValue="member">
+              <Select value={newUserRole} onValueChange={setNewUserRole}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -597,18 +547,219 @@ export default function CompanySettingsScreen() {
               Cancelar
             </button>
             <button
-              onClick={() => {
-                setAddUserModalOpen(false);
-                toast.success('Convite enviado!');
+              disabled={createUserInviteMutation.isPending}
+              onClick={async () => {
+                if (!newUserEmail) { toast.error('Informe o email'); return; }
+                try {
+                  const result = await createUserInviteMutation.mutateAsync({
+                    email: newUserEmail,
+                    name: newUserName || undefined,
+                    role: newUserRole,
+                  });
+                  const inviteLink = `${window.location.origin}/company/join?token=${result.token}`;
+                  const companyName = result.companyName || 'nossa empresa';
+                  const roleName = newUserRole === 'admin' ? 'Administrador' : 'Membro';
+                  const subject = encodeURIComponent(`Convite para acessar o portal - ${companyName}`);
+                  const body = encodeURIComponent(
+                    `Olá${newUserName ? ` ${newUserName}` : ''}!\n\nVocê foi convidado(a) para acessar o portal da empresa ${companyName} como ${roleName}.\n\nClique no link abaixo para criar sua conta:\n${inviteLink}\n\nEste link é válido por 7 dias.`
+                  );
+                  window.open(
+                    `https://mail.google.com/mail/?view=cm&to=${encodeURIComponent(newUserEmail)}&su=${subject}&body=${body}`,
+                    '_blank'
+                  );
+                  toast.success('Convite criado! Abrindo Gmail.');
+                  setAddUserModalOpen(false);
+                  setNewUserName('');
+                  setNewUserEmail('');
+                  setNewUserRole('member');
+                } catch (err: any) {
+                  toast.error(err.message || 'Erro ao criar convite');
+                }
               }}
-              className="px-4 py-2 rounded-lg bg-gradient-to-r from-[#1B4D7A] to-[#FF6B35] text-white font-medium shadow-lg shadow-[#FF6B35]/25 hover:shadow-[#FF6B35]/40 hover:scale-105 transition-all"
+              className="px-4 py-2 rounded-lg bg-gradient-to-r from-[#1B4D7A] to-[#FF6B35] text-white font-medium shadow-lg shadow-[#FF6B35]/25 hover:shadow-[#FF6B35]/40 hover:scale-105 transition-all disabled:opacity-50"
             >
-              Enviar Convite
+              {createUserInviteMutation.isPending ? 'Criando...' : 'Enviar Convite'}
             </button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
     </FunnelLayout>
+  );
+}
+
+function InfoField({ label, value }: { label: string; value: string | null | undefined }) {
+  if (!value) return null;
+  return (
+    <div>
+      <span className="text-xs text-slate-500 uppercase tracking-wider">{label}</span>
+      <p className="font-medium text-[#0A2342] mt-1">{value}</p>
+    </div>
+  );
+}
+
+function CompanyDataTab({ companyInfo, isLoading, onSaved }: { companyInfo: any; isLoading: boolean; onSaved: () => void }) {
+  const [editing, setEditing] = useState(false);
+  const [form, setForm] = useState<Record<string, string>>({});
+
+  const updateMutation = trpc.company.updateProfile.useMutation({
+    onSuccess: () => {
+      toast.success('Dados atualizados com sucesso!');
+      setEditing(false);
+      onSaved();
+    },
+    onError: (err) => toast.error(err.message || 'Erro ao salvar'),
+  });
+
+  useEffect(() => {
+    if (companyInfo) {
+      setForm({
+        companyName: companyInfo.company_name || '',
+        phone: companyInfo.phone || '',
+        address: companyInfo.address || '',
+        city: companyInfo.city || '',
+        state: companyInfo.state || '',
+        zipCode: companyInfo.zip_code || companyInfo.cep || '',
+        website: companyInfo.website || '',
+        industry: companyInfo.industry || '',
+        companySize: companyInfo.company_size || '',
+        description: companyInfo.description || '',
+      });
+    }
+  }, [companyInfo]);
+
+  const handleSave = () => {
+    updateMutation.mutate(form);
+  };
+
+  if (isLoading) {
+    return <CardEntrance><div className="bg-white rounded-xl border-2 border-slate-200 shadow-sm p-6"><FormSkeleton fields={8} /></div></CardEntrance>;
+  }
+
+  if (!companyInfo) {
+    return <p className="text-slate-500 text-center py-8">Informações não disponíveis</p>;
+  }
+
+  const c = companyInfo;
+
+  if (editing) {
+    return (
+      <CardEntrance>
+        <div className="bg-white rounded-xl border-2 border-slate-200 shadow-sm p-6 space-y-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-[#FF6B35]/20 flex items-center justify-center">
+                <Edit2 className="w-5 h-5 text-[#FF6B35]" />
+              </div>
+              <h3 className="text-[#0A2342] font-semibold">Editar Dados</h3>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div><Label>Razão Social</Label><Input value={form.companyName} onChange={e => setForm({...form, companyName: e.target.value})} /></div>
+            <div><Label>Telefone</Label><Input value={form.phone} onChange={e => setForm({...form, phone: e.target.value})} /></div>
+            <div><Label>Endereço</Label><Input value={form.address} onChange={e => setForm({...form, address: e.target.value})} /></div>
+            <div><Label>CEP</Label><Input value={form.zipCode} onChange={e => setForm({...form, zipCode: e.target.value})} /></div>
+            <div><Label>Cidade</Label><Input value={form.city} onChange={e => setForm({...form, city: e.target.value})} /></div>
+            <div><Label>Estado</Label><Input value={form.state} onChange={e => setForm({...form, state: e.target.value})} /></div>
+            <div><Label>Site</Label><Input value={form.website} onChange={e => setForm({...form, website: e.target.value})} /></div>
+            <div><Label>Setor</Label><Input value={form.industry} onChange={e => setForm({...form, industry: e.target.value})} /></div>
+            <div><Label>Porte da Empresa</Label>
+              <Select value={form.companySize} onValueChange={v => setForm({...form, companySize: v})}>
+                <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="1-10">1-10</SelectItem>
+                  <SelectItem value="11-50">11-50</SelectItem>
+                  <SelectItem value="51-200">51-200</SelectItem>
+                  <SelectItem value="201-500">201-500</SelectItem>
+                  <SelectItem value="500+">500+</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="col-span-2"><Label>Descrição</Label><Input value={form.description} onChange={e => setForm({...form, description: e.target.value})} /></div>
+          </div>
+
+          <div className="flex gap-3 justify-end">
+            <button onClick={() => setEditing(false)} className="px-4 py-2 rounded-lg bg-white border-2 border-slate-200 hover:bg-slate-50 transition-all text-[#0A2342] font-medium">
+              Cancelar
+            </button>
+            <button onClick={handleSave} disabled={updateMutation.isPending} className="px-6 py-2.5 rounded-full bg-gradient-to-r from-[#1B4D7A] to-[#FF6B35] text-white font-medium shadow-lg shadow-[#FF6B35]/25 hover:shadow-[#FF6B35]/40 hover:scale-105 transition-all disabled:opacity-50">
+              {updateMutation.isPending ? 'Salvando...' : 'Salvar'}
+            </button>
+          </div>
+        </div>
+      </CardEntrance>
+    );
+  }
+
+  const fullAddress = [c.address, c.complement, c.neighborhood].filter(Boolean).join(', ');
+  const cityState = [c.city, c.state].filter(Boolean).join(' - ');
+
+  return (
+    <div className="space-y-6">
+      {/* Company Info Card */}
+      <CardEntrance>
+        <div className="bg-white rounded-xl border-2 border-slate-200 shadow-sm p-6">
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-[#FF6B35]/20 flex items-center justify-center">
+                <Building2 className="w-5 h-5 text-[#FF6B35]" />
+              </div>
+              <div>
+                <h3 className="text-[#0A2342] font-semibold">Dados da Empresa</h3>
+                <p className="text-slate-600 text-sm">Informações cadastradas</p>
+              </div>
+            </div>
+            <button onClick={() => setEditing(true)} className="px-4 py-2 rounded-lg bg-white border-2 border-slate-200 hover:border-[#FF6B35]/50 hover:bg-slate-50 transition-all text-[#0A2342] font-medium flex items-center gap-2">
+              <Edit2 className="w-4 h-4" />
+              Editar
+            </button>
+          </div>
+
+          <div className="grid grid-cols-2 gap-6 mb-6">
+            <InfoField label="Razão Social" value={c.company_name} />
+            <InfoField label="CNPJ" value={c.cnpj} />
+            {fullAddress && (
+              <div className="col-span-2">
+                <span className="text-xs text-slate-500 uppercase tracking-wider">Endereço</span>
+                <p className="font-medium text-[#0A2342] mt-1">{fullAddress}{cityState ? ` — ${cityState}` : ''}</p>
+                {(c.zip_code || c.cep) && <p className="text-sm text-slate-500 mt-0.5">CEP: {c.zip_code || c.cep}</p>}
+              </div>
+            )}
+          </div>
+
+          <div className="h-px bg-slate-200 my-6" />
+
+          <h4 className="font-semibold text-[#0A2342] mb-4">Contato</h4>
+          <div className="grid grid-cols-2 gap-6 mb-6">
+            <InfoField label="Email" value={c.email} />
+            <InfoField label="Telefone" value={c.phone} />
+            <InfoField label="Responsável" value={c.contact_person} />
+            <InfoField label="Celular" value={c.mobile_phone} />
+            <InfoField label="Telefone Fixo" value={c.landline_phone} />
+          </div>
+
+          {(c.website || c.social_media || c.industry || c.company_size || c.employee_count || c.description) && (
+            <>
+              <div className="h-px bg-slate-200 my-6" />
+              <h4 className="font-semibold text-[#0A2342] mb-4">Detalhes</h4>
+              <div className="grid grid-cols-2 gap-6">
+                <InfoField label="Site" value={c.website} />
+                <InfoField label="Rede Social" value={c.social_media} />
+                <InfoField label="Setor" value={c.industry} />
+                <InfoField label="Porte" value={c.company_size} />
+                <InfoField label="Nº de Funcionários" value={c.employee_count} />
+                {c.description && (
+                  <div className="col-span-2">
+                    <span className="text-xs text-slate-500 uppercase tracking-wider">Descrição</span>
+                    <p className="font-medium text-[#0A2342] mt-1">{c.description}</p>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+      </CardEntrance>
+    </div>
   );
 }
 

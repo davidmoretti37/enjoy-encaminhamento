@@ -40,6 +40,8 @@ import PDPResults from "@/components/pdp/PDPResults";
 import { PDPResults as PDPResultsType, pdpCompetencies } from "@/data/pdpQuestions";
 
 const EDUCATION_LEVELS = [
+  { value: 'fundamental_incompleto', label: 'Fundamental Incompleto' },
+  { value: 'fundamental_completo', label: 'Fundamental Completo' },
   { value: 'medio_incompleto', label: 'Médio Incompleto' },
   { value: 'medio_completo', label: 'Médio Completo' },
   { value: 'tecnico', label: 'Técnico' },

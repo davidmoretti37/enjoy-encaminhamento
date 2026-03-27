@@ -504,13 +504,14 @@ export default function CompanyDocumentsModal({
                       </div>
                     ) : null}
 
-                    {/* Upload contract section - only show if not signed */}
-                    {!contractData.signed_at && (
-                      <div className="pt-2 border-t">
+                    {/* Upload contract section - always visible */}
+                    <div className="pt-2 border-t">
                         <p className="text-sm text-muted-foreground mb-3">
-                          {contractData.sent_at
-                            ? "Se a empresa já assinou o contrato offline, faça o upload aqui:"
-                            : "Faça upload do contrato assinado:"}
+                          {contractData.signed_at
+                            ? "Adicionar mais documentos:"
+                            : contractData.sent_at
+                              ? "Se a empresa já assinou o contrato offline, faça o upload aqui:"
+                              : "Faça upload do contrato assinado:"}
                         </p>
                         <div className="flex items-center gap-3">
                           <Label
@@ -538,9 +539,7 @@ export default function CompanyDocumentsModal({
                             disabled={isUploading}
                           />
                         </div>
-                      </div>
-                    )}
-
+                    </div>
                     {!contractData.sent_at && !contractData.signed_at && (
                       <p className="text-sm text-muted-foreground">
                         Contrato ainda não foi enviado para esta empresa.
@@ -659,6 +658,9 @@ export default function CompanyDocumentsModal({
                 </CollapsibleTrigger>
                 <CollapsibleContent>
                   <div className="px-4 py-3 ml-8 border-l-2 border-gray-200">
+                    <p className="text-xs text-muted-foreground mb-3">
+                      Contratos individuais de candidatos contratados por esta empresa (estágio, CLT, jovem aprendiz).
+                    </p>
                     {hiringProcesses.length > 0 ? (
                       <div className="space-y-4">
                         {hiringProcesses.map((hp: any) => {

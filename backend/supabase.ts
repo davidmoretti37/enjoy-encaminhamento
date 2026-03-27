@@ -1,9 +1,12 @@
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "./types/database";
 import { ENV } from "./_core/env";
+import { ipv4Fetch } from "./lib/ipv4-fetch";
 
 // Create a single supabase client for interacting with your database
-export const supabase = createClient<Database>(ENV.supabaseUrl, ENV.supabaseAnonKey);
+export const supabase = createClient<Database>(ENV.supabaseUrl, ENV.supabaseAnonKey, {
+  global: { fetch: ipv4Fetch },
+});
 
 // Service role client for admin operations (use service role key if available)
 export const supabaseAdmin = createClient<Database>(
@@ -14,6 +17,7 @@ export const supabaseAdmin = createClient<Database>(
       autoRefreshToken: false,
       persistSession: false,
     },
+    global: { fetch: ipv4Fetch },
   }
 );
 

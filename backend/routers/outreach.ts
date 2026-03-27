@@ -137,8 +137,8 @@ export const outreachRouter = router({
       const agencyId = await resolveAgencyId(ctx.user.id, ctx.user.role, input.agencyId);
       return await db.createAdminAvailability({
         adminId: ctx.user.id,
-        agencyId,
         ...input,
+        agencyId,
       });
     }),
 

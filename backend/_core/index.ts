@@ -1,4 +1,6 @@
 import "dotenv/config";
+import dns from "dns";
+dns.setDefaultResultOrder("ipv4first");
 import express from "express";
 import { createServer } from "http";
 import net from "net";
@@ -60,6 +62,12 @@ async function startServer() {
 
   // Global rate limiting
   app.use(globalRateLimiter);
+
+  // Supabase proxy - routes browser Supabase requests through backend (IPv4)
+  // Must be before JSON body parsers so the raw body is preserved
+  const { supabaseProxyRouter } = await import("./supabase-proxy");
+  app.use("/api/supabase-proxy", express.raw({ type: "*/*", limit: "50mb" }));
+  app.use(supabaseProxyRouter);
 
   // Configure body parser with reasonable size limit (reduced from 50mb)
   app.use(express.json({ limit: "10mb" }));

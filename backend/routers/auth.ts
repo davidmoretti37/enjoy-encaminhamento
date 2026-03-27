@@ -74,6 +74,14 @@ export const authRouter = router({
         }
       }
 
+      // Fall back to signup metadata if no invitation was found
+      if (!agencyId && ctx.user.agency_id) {
+        agencyId = ctx.user.agency_id;
+      }
+      if (role === "candidate" && ctx.user.role === "company") {
+        role = "company";
+      }
+
       const { error } = await db.createUserProfile({
         id: ctx.user.id,
         email: ctx.user.email,

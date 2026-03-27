@@ -12,6 +12,7 @@ export interface WeightConfig {
   personality: number;   // DISC/personality fit
   history: number;       // Past performance/reliability
   bidirectional: number; // Candidate preference match
+  competency: number;    // PDP competency fit
 }
 
 export interface WeightProfile {
@@ -31,15 +32,16 @@ export const BALANCED_WEIGHTS: WeightProfile = {
   name: 'balanced',
   description: 'Perfil equilibrado - considera todos os fatores igualmente',
   weights: {
-    semantic: 0.15,
-    skills: 0.20,
-    location: 0.10,
-    education: 0.10,
+    semantic: 0.12,
+    skills: 0.17,
+    location: 0.08,
+    education: 0.08,
     experience: 0.10,
-    contract: 0.10,
-    personality: 0.05,
-    history: 0.10,
-    bidirectional: 0.10,
+    contract: 0.08,
+    personality: 0.12,
+    history: 0.07,
+    bidirectional: 0.08,
+    competency: 0.10,
   },
 };
 
@@ -48,15 +50,16 @@ export const TECHNICAL_WEIGHTS: WeightProfile = {
   name: 'technical',
   description: 'Perfil técnico - prioriza habilidades técnicas e formação',
   weights: {
-    semantic: 0.10,
-    skills: 0.35,
+    semantic: 0.08,
+    skills: 0.28,
     location: 0.05,
-    education: 0.15,
+    education: 0.12,
     experience: 0.15,
     contract: 0.05,
-    personality: 0.05,
+    personality: 0.08,
     history: 0.05,
-    bidirectional: 0.05,
+    bidirectional: 0.04,
+    competency: 0.10,
   },
 };
 
@@ -65,15 +68,16 @@ export const CUSTOMER_FACING_WEIGHTS: WeightProfile = {
   name: 'customer_facing',
   description: 'Perfil atendimento - prioriza personalidade e comunicação',
   weights: {
-    semantic: 0.10,
-    skills: 0.15,
-    location: 0.10,
+    semantic: 0.08,
+    skills: 0.12,
+    location: 0.08,
     education: 0.05,
-    experience: 0.10,
+    experience: 0.08,
     contract: 0.05,
-    personality: 0.25,
-    history: 0.15,
-    bidirectional: 0.05,
+    personality: 0.20,
+    history: 0.10,
+    bidirectional: 0.04,
+    competency: 0.20,
   },
 };
 
@@ -82,15 +86,16 @@ export const ENTRY_LEVEL_WEIGHTS: WeightProfile = {
   name: 'entry_level',
   description: 'Perfil estágio/júnior - prioriza potencial sobre experiência',
   weights: {
-    semantic: 0.15,
-    skills: 0.20,
-    location: 0.10,
-    education: 0.20,
+    semantic: 0.12,
+    skills: 0.15,
+    location: 0.08,
+    education: 0.15,
     experience: 0.05,
-    contract: 0.10,
-    personality: 0.10,
+    contract: 0.08,
+    personality: 0.12,
     history: 0.05,
     bidirectional: 0.05,
+    competency: 0.15,
   },
 };
 
@@ -99,15 +104,16 @@ export const LEADERSHIP_WEIGHTS: WeightProfile = {
   name: 'leadership',
   description: 'Perfil liderança - prioriza experiência e perfil comportamental',
   weights: {
-    semantic: 0.10,
-    skills: 0.15,
+    semantic: 0.08,
+    skills: 0.12,
     location: 0.05,
-    education: 0.10,
-    experience: 0.25,
+    education: 0.08,
+    experience: 0.20,
     contract: 0.05,
-    personality: 0.20,
+    personality: 0.18,
     history: 0.05,
-    bidirectional: 0.05,
+    bidirectional: 0.04,
+    competency: 0.15,
   },
 };
 
@@ -169,6 +175,7 @@ export function calculateCompositeScore(
   score += (factors.personality || 0) * weights.personality;
   score += (factors.history || 0) * weights.history;
   score += (factors.bidirectional || 0) * weights.bidirectional;
+  score += (factors.competency || 0) * (weights.competency || 0);
 
   // Clamp to 0-100
   return Math.max(0, Math.min(100, score));

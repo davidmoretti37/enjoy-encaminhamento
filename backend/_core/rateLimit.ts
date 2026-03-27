@@ -9,6 +9,8 @@ import rateLimit from "express-rate-limit";
 import type { Request } from "express";
 import { TRPCError } from "@trpc/server";
 
+const isDev = process.env.NODE_ENV === "development";
+
 // ============================================================
 // Express Middleware Rate Limiters
 // ============================================================
@@ -20,6 +22,7 @@ import { TRPCError } from "@trpc/server";
 export const globalRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 1000,
+  skip: () => isDev,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: "Too many requests, please try again later." },
@@ -34,6 +37,7 @@ export const globalRateLimiter = rateLimit({
 export const authRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 20,
+  skip: () => isDev,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: "Too many authentication attempts, please try again later." },

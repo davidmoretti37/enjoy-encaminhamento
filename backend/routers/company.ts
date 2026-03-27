@@ -3,7 +3,7 @@
 import { z } from "zod";
 import { router } from "../_core/trpc";
 import { TRPCError } from "@trpc/server";
-import { protectedProcedure } from "../_core/trpc";
+import { protectedProcedure, publicProcedure } from "../_core/trpc";
 import { adminProcedure, companyProcedure } from "./procedures";
 import * as db from "../db";
 import { supabaseAdmin } from "../supabase";
@@ -67,6 +67,7 @@ export const companyRouter = router({
   submitOnboarding: protectedProcedure
     .input(z.object({
       // Company data
+      agencyId: z.string().uuid().optional(),
       cnpj: z.string().min(11),
       legalName: z.string().min(1),
       businessName: z.string().optional(),
@@ -127,9 +128,21 @@ export const companyRouter = router({
         });
       }
 
-      // Get agency_id from user profile (set during signup)
+      // Get agency_id from user profile, auth metadata, or form input
       const userProfile = existingProfile || await db.getUserById(ctx.user.id);
-      const agencyId = userProfile?.agency_id || ctx.user.agency_id || null;
+      const agencyId = userProfile?.agency_id || ctx.user.agency_id || input.agencyId || null;
+
+      if (!agencyId) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Selecione a região para continuar o cadastro' });
+      }
+
+      // Sync agency_id to user profile if it was only in auth metadata or form input
+      if (!userProfile?.agency_id && agencyId) {
+        await supabaseAdmin
+          .from('users')
+          .update({ agency_id: agencyId })
+          .eq('id', ctx.user.id);
+      }
 
       // Get agency's affiliate_id for proper linking (if agency exists)
       let agencyData: { id: string; affiliate_id: string | null } | null = null;
@@ -909,4 +922,101 @@ export const companyRouter = router({
 
     return { adminId: agency.user_id, agencyName: agency.name };
   }),
+
+  // ── Company User Invitations ──
+
+  createUserInvitation: companyProcedure
+    .input(z.object({ email: z.string().email(), name: z.string().optional(), role: z.string().optional() }))
+    .mutation(async ({ ctx, input }) => {
+      const company = await db.getCompanyByUserId(ctx.user.id);
+      if (!company) throw new TRPCError({ code: 'NOT_FOUND', message: 'Empresa não encontrada' });
+
+      const { data, error } = await supabaseAdmin
+        .from('company_user_invitations')
+        .insert({
+          company_id: company.id,
+          email: input.email,
+          name: input.name || null,
+          role: input.role || 'member',
+          created_by: ctx.user.id,
+        })
+        .select('token')
+        .single();
+
+      if (error) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: error.message });
+      return { token: data.token, companyName: company.company_name };
+    }),
+
+  validateUserInvitation: publicProcedure
+    .input(z.object({ token: z.string().uuid() }))
+    .query(async ({ input }) => {
+      const { data, error } = await supabaseAdmin
+        .from('company_user_invitations')
+        .select('*, companies(company_name)')
+        .eq('token', input.token)
+        .eq('status', 'pending')
+        .single();
+
+      if (error || !data) return { valid: false, invitation: null };
+      if (new Date(data.expires_at) < new Date()) return { valid: false, invitation: null };
+      return { valid: true, invitation: { email: data.email, name: data.name, companyName: (data.companies as any)?.company_name } };
+    }),
+
+  acceptUserInvitation: publicProcedure
+    .input(z.object({ token: z.string().uuid(), name: z.string().min(1), email: z.string().email(), password: z.string().min(6) }))
+    .mutation(async ({ input }) => {
+      // Validate invitation
+      const { data: invite, error: invErr } = await supabaseAdmin
+        .from('company_user_invitations')
+        .select('*, companies(id, company_name, agency_id)')
+        .eq('token', input.token)
+        .eq('status', 'pending')
+        .single();
+
+      if (invErr || !invite) throw new TRPCError({ code: 'NOT_FOUND', message: 'Convite inválido ou expirado' });
+      if (new Date(invite.expires_at) < new Date()) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Convite expirado' });
+
+      // Create Supabase auth user
+      const { data: authData, error: authErr } = await supabaseAdmin.auth.admin.createUser({
+        email: input.email,
+        password: input.password,
+        email_confirm: true,
+        user_metadata: { name: input.name, role: 'company', agency_id: (invite.companies as any)?.agency_id },
+      });
+
+      if (authErr) {
+        console.error('[CompanyJoin] Auth create failed:', authErr.message);
+        throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: authErr.message });
+      }
+
+      if (!authData?.user) {
+        throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Falha ao criar usuário' });
+      }
+
+      console.log('[CompanyJoin] Auth user created:', authData.user.id, input.email);
+
+      // Create user profile linked to same company
+      const company = invite.companies as any;
+      const profileResult = await db.createUserProfile({
+        id: authData.user.id,
+        email: input.email,
+        name: input.name,
+        role: 'company',
+        agency_id: company?.agency_id || null,
+      });
+
+      if (profileResult?.error) {
+        console.error('[CompanyJoin] Profile create failed:', profileResult.error);
+      }
+
+      console.log('[CompanyJoin] Profile created, marking invitation accepted');
+
+      // Mark invitation as accepted
+      await supabaseAdmin
+        .from('company_user_invitations')
+        .update({ status: 'accepted', accepted_at: new Date().toISOString() })
+        .eq('token', input.token);
+
+      return { success: true };
+    }),
 });

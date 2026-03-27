@@ -21,6 +21,7 @@ import {
   preScreenCandidatesListwise,
 } from './llmReranking';
 import { generateExplanation } from './explainability';
+import { initProgress, addMessage, completeProgress, failProgress } from './progress';
 
 // ============================================
 // TYPE DEFINITIONS
@@ -88,7 +89,7 @@ const DEFAULT_CONFIG: Required<MatchingConfig> = {
   limit: 50,
 };
 
-const ALGORITHM_VERSION = 'v2.0';
+const ALGORITHM_VERSION = 'v3.0';
 
 // ============================================
 // STAGE 1: VECTOR RETRIEVAL
@@ -250,10 +251,13 @@ export async function runMatchingPipeline(
   const startTime = Date.now();
   const cfg = { ...DEFAULT_CONFIG, ...config };
 
-  // Load job data
+  initProgress(jobId);
+  addMessage(jobId, 'Iniciando busca de candidatos...', 5);
+
+  // Load job data with company info
   const { data: job, error: jobError } = await supabaseAdmin
     .from('jobs')
-    .select('*')
+    .select('*, companies(company_name, summary, industry)')
     .eq('id', jobId)
     .single();
 
@@ -277,6 +281,10 @@ export async function runMatchingPipeline(
     max_age: job.max_age,
     experience_required: job.experience_required,
     min_experience_years: job.min_experience_years,
+    notes: job.notes || undefined,
+    company_name: (job.companies as any)?.company_name || undefined,
+    company_summary: (job.companies as any)?.summary || undefined,
+    company_industry: (job.companies as any)?.industry || undefined,
   };
 
   // Determine weight profile
@@ -291,12 +299,14 @@ export async function runMatchingPipeline(
 
   // STAGE 1: Vector Retrieval
   console.log(`[Matching] Stage 1: Retrieving candidates for job ${jobId}`);
+  addMessage(jobId, `Analisando a vaga "${jobData.title}" e buscando perfis compatíveis...`, 10);
   let candidates = await retrieveCandidatesBroad(jobId, {
     threshold: cfg.vectorThreshold,
     limit: cfg.vectorRecallLimit,
     useHybridSearch: cfg.useHybridSearch,
   });
   console.log(`[Matching] Retrieved ${candidates.length} candidates from vector search`);
+  addMessage(jobId, `${candidates.length} perfis encontrados na base de dados. Analisando compatibilidade...`, 25);
 
   // Fetch candidates who applied directly to this job
   const applicantIds = await getApplicantCandidateIds(jobId);
@@ -331,6 +341,7 @@ export async function runMatchingPipeline(
   }
 
   if (candidates.length === 0) {
+    completeProgress(jobId, 0);
     return {
       jobId,
       totalCandidatesRetrieved: 0,
@@ -345,18 +356,46 @@ export async function runMatchingPipeline(
 
   // STAGE 2 & 3: Soft Scoring + Bidirectional
   console.log(`[Matching] Stage 2-3: Scoring ${candidates.length} candidates`);
+  addMessage(jobId, 'Avaliando habilidades, localização, experiência e perfil de cada candidato...', 35);
   const scoredCandidates = await scoreCandidates(candidates, jobData, weights);
   console.log(`[Matching] Scoring complete`);
+  addMessage(jobId, `Pontuação concluída. Classificando os melhores perfis...`, 60);
+
+  // Enrich top candidates with detailed PDP data before LLM stage
+  const topCandidateIds = scoredCandidates
+    .slice(0, cfg.llmRerankLimit + 5)
+    .map(sc => sc.candidate.id);
+  if (topCandidateIds.length > 0) {
+    const { data: pdpData } = await supabaseAdmin
+      .from('candidates')
+      .select('id, pdp_intrapersonal, pdp_interpersonal, pdp_skills, pdp_competencies, pdp_develop_competencies')
+      .in('id', topCandidateIds);
+    if (pdpData) {
+      const pdpMap = new Map(pdpData.map(p => [p.id, p]));
+      for (const sc of scoredCandidates.slice(0, cfg.llmRerankLimit + 5)) {
+        const pdp = pdpMap.get(sc.candidate.id);
+        if (pdp) {
+          sc.candidate.pdp_intrapersonal = pdp.pdp_intrapersonal;
+          sc.candidate.pdp_interpersonal = pdp.pdp_interpersonal;
+          sc.candidate.pdp_skills = pdp.pdp_skills;
+          sc.candidate.pdp_competencies = pdp.pdp_competencies;
+          sc.candidate.pdp_develop_competencies = pdp.pdp_develop_competencies;
+        }
+      }
+    }
+  }
 
   // STAGE 4: LLM Re-Ranking (optional)
   let llmResults = new Map<string, LLMReRankResult>();
   if (cfg.enableLLMReranking) {
     console.log(`[Matching] Stage 4: LLM re-ranking top candidates`);
+    addMessage(jobId, 'A IA está analisando perfil DISC, competências PDP e observações da empresa...', 70);
     llmResults = await reRankTopCandidates(scoredCandidates, jobData, {
       threshold: cfg.llmRerankThreshold,
       limit: cfg.llmRerankLimit,
     });
     console.log(`[Matching] Re-ranked ${llmResults.size} candidates`);
+    addMessage(jobId, `${llmResults.size} candidatos reavaliados pela IA com análise detalhada.`, 90);
   }
 
   // Build final results
@@ -404,6 +443,7 @@ export async function runMatchingPipeline(
 
   const executionTimeMs = Date.now() - startTime;
   console.log(`[Matching] Pipeline complete in ${executionTimeMs}ms`);
+  completeProgress(jobId, results.length);
 
   return {
     jobId,
@@ -451,7 +491,12 @@ export async function saveMatchResults(
     concerns: r.explanation?.concerns || [],
     explanation_summary: r.explanation?.summary || null,
     data_completeness: r.explanation?.dataCompleteness || null,
-    applied_to_job: r.applied || false, // Track if candidate applied directly
+    disc_analysis: r.llmResult?.discAnalysis || null,
+    competency_analysis: r.llmResult?.competencyAnalysis || null,
+    company_fit_notes: r.llmResult?.companyFitNotes || null,
+    full_analysis: r.llmResult?.fullAnalysis || null,
+    competency_score: r.factors.competency || null,
+    applied_to_job: r.applied || false,
     algorithm_version: ALGORITHM_VERSION,
     updated_at: new Date().toISOString(),
   }));
