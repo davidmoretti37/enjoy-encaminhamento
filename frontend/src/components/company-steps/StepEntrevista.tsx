@@ -257,24 +257,25 @@ function ReceivedState({
   const handleHire = (applicationId: string | null, batchId?: string, candidateId?: string) => {
     const startDate = new Date();
     startDate.setDate(startDate.getDate() + 7);
+    const cleanBatchId = batchId && batchId !== "undefined" ? batchId : undefined;
 
-    if (applicationId) {
+    if (applicationId && applicationId !== "undefined") {
       setHiringCandidateId(applicationId);
       initiateHiringMutation.mutate({
         applicationId,
-        batchId: batchId || undefined,
+        batchId: cleanBatchId,
         startDate: startDate.toISOString().split("T")[0],
       });
-    } else if (candidateId && selectedJobId) {
+    } else if (candidateId && candidateId !== "undefined" && selectedJobId) {
       setHiringCandidateId(candidateId);
       initiateHiringMutation.mutate({
         candidateId,
         jobId: selectedJobId,
-        batchId: batchId || undefined,
+        batchId: cleanBatchId,
         startDate: startDate.toISOString().split("T")[0],
       });
     } else {
-      toast.error("Candidato sem candidatura vinculada");
+      toast.error("Erro: candidato não identificado");
     }
   };
 
@@ -592,8 +593,8 @@ function ReceivedState({
           onHire={() =>
             handleHire(
               selectedCandidate?.applicationId || null,
-              selectedCandidate?.batchId,
-              selectedCandidateId
+              selectedCandidate?.batchId || undefined,
+              selectedCandidate?.profile?.id || selectedCandidateId || undefined
             )
           }
         />
