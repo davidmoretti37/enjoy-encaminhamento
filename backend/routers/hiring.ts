@@ -1062,6 +1062,26 @@ export const hiringRouter = router({
         ...(receiptUrl ? { receipt_url: receiptUrl } : {}),
       });
 
+      // AI receipt verification (async — doesn't block confirmation)
+      if (receiptUrl && process.calculated_fee) {
+        // Get agency PIX info for destination verification
+        const agency = company.agency_id ? await db.getAgencyById(company.agency_id) : null;
+        const pixKey = agency?.pix_key || null;
+
+        // Run verification in background
+        import("../services/ai/receiptVerifier").then(({ verifyReceiptWithAI }) => {
+          // The verifier checks amount, completion status, agendamento, and PIX destination
+          verifyReceiptWithAI(
+            input.hiringProcessId,
+            receiptUrl!,
+            process.calculated_fee,
+            pixKey
+          ).catch((err) => {
+            console.error("[Hiring] AI receipt verification failed:", err);
+          });
+        }).catch(() => {});
+      }
+
       // Create 30-day follow-up if not already created
       const startDate = new Date(process.start_date);
       try {

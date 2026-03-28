@@ -11,7 +11,8 @@ const VISION_MODEL = 'google/gemini-2.0-flash-001';
 export async function verifyReceiptWithAI(
   paymentId: string,
   receiptUrl: string,
-  expectedAmountCents: number
+  expectedAmountCents: number,
+  expectedPixKey?: string | null
 ): Promise<void> {
   const apiKey = process.env.OPENROUTER_API_KEY;
 
@@ -22,11 +23,15 @@ export async function verifyReceiptWithAI(
 
   const expectedAmountBRL = (expectedAmountCents / 100).toFixed(2);
 
+  const pixCheckInstruction = expectedPixKey
+    ? `\n4. Se a chave PIX de destino no comprovante confere com a chave esperada: ${expectedPixKey}\n`
+    : '';
+
   const systemPrompt = `Voce e um verificador de comprovantes de pagamento PIX.
 Analise a imagem do comprovante e extraia:
 1. O valor do pagamento (em reais)
 2. Se o pagamento foi concluido com sucesso (NAO apenas agendado)
-3. Se o pagamento e um AGENDAMENTO (agendado/programado para data futura) ou se foi realmente CONCLUIDO/EFETUADO
+3. Se o pagamento e um AGENDAMENTO (agendado/programado para data futura) ou se foi realmente CONCLUIDO/EFETUADO${pixCheckInstruction}
 
 IMPORTANTE: Pagamentos AGENDADOS nao sao pagamentos concluidos. Se o comprovante mostrar "agendado", "programado", "sera debitado em", ou qualquer indicacao de que o pagamento ainda nao foi efetuado, marque is_scheduled como true e payment_confirmed como false.
 
@@ -35,6 +40,8 @@ Responda EXATAMENTE neste formato JSON:
   "amount_found": <numero em reais, ex: 150.00>,
   "payment_confirmed": <true/false - true SOMENTE se o pagamento foi efetivamente concluido>,
   "is_scheduled": <true/false - true se for um agendamento e nao um pagamento concluido>,
+  "destination_matches": <true/false/null - true se a chave PIX destino confere, null se nao foi possivel verificar>,
+  "destination_found": "<chave PIX de destino encontrada no comprovante, ou null>",
   "confidence": "<high/medium/low>",
   "details": "<breve descricao do que foi encontrado>"
 }
@@ -44,6 +51,8 @@ Se nao conseguir ler a imagem ou nao for um comprovante, retorne:
   "amount_found": null,
   "payment_confirmed": false,
   "is_scheduled": false,
+  "destination_matches": null,
+  "destination_found": null,
   "confidence": "low",
   "details": "Nao foi possivel verificar o comprovante"
 }`;
@@ -97,6 +106,7 @@ O comprovante confere com o valor esperado?`;
     const amountMatches = Math.abs(amountFoundCents - expectedAmountCents) <= tolerance
       && result.payment_confirmed === true;
     const isScheduled = result.is_scheduled === true;
+    const destinationMismatch = expectedPixKey && result.destination_matches === false;
 
     if (isScheduled) {
       // Scheduled payment - flag for manual review
@@ -117,6 +127,34 @@ O comprovante confere com o valor esperado?`;
           user_id: admin.id,
           title: 'Comprovante de pagamento agendado',
           message: `Comprovante enviado e um agendamento, nao um pagamento concluido. Valor: R$ ${expectedAmountBRL}`,
+          type: 'warning',
+          related_to_type: 'contract',
+          related_to_id: paymentId,
+          is_read: false,
+        }));
+        await supabaseAdmin.from("notifications").insert(notifications);
+      }
+      return;
+    }
+
+    if (destinationMismatch) {
+      // Wrong PIX destination - flag for review
+      await updatePayment(paymentId, {
+        receipt_status: 'pending-review',
+        ai_verification_result: { ...result, rejection_reason: `PIX destino diferente do esperado. Esperado: ${expectedPixKey}, Encontrado: ${result.destination_found}` },
+      });
+      console.log(`[ReceiptVerifier] Payment ${paymentId} destination mismatch, flagged for review`);
+
+      const { data: admins } = await supabaseAdmin
+        .from("users")
+        .select("id")
+        .in("role", ["admin", "agency"]);
+
+      if (admins && admins.length > 0) {
+        const notifications = admins.map((admin: any) => ({
+          user_id: admin.id,
+          title: 'Comprovante com destino incorreto',
+          message: `PIX enviado para chave diferente da esperada. Esperado: ${expectedPixKey}`,
           type: 'warning',
           related_to_type: 'contract',
           related_to_id: paymentId,
