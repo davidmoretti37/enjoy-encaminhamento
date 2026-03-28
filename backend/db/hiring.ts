@@ -791,8 +791,11 @@ export function calculateEstagioFee(isFirstIntern: boolean): number {
 }
 
 /**
- * Calculate CLT fee (50% of salary)
+ * Calculate CLT/PJ fee (50% of salary)
+ * Salary is stored as whole reais (e.g. 2000 = R$2000), fee returned in cents
  */
 export function calculateCLTFee(monthlySalary: number): number {
-  return Math.round(monthlySalary * 0.5);
+  // Salary stored as reais (not cents), convert to cents for fee
+  const salaryInCents = monthlySalary > 10000 ? monthlySalary : monthlySalary * 100;
+  return Math.round(salaryInCents * 0.5);
 }
