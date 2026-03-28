@@ -515,7 +515,38 @@ export const contractRouter = router({
           template: { name: 'Contrato Assinado', file_url: m.contract_pdf_url, category: 'contrato_inicial' },
         }));
 
-        return [...signedDocs, ...normalizedMeetingDocs];
+        // Also check Supabase Storage for contracts uploaded during onboarding
+        let storageContracts: any[] = [];
+        try {
+          const storagePath = `contracts/signed/company-${company.id}`;
+          const { data: storageFiles } = await supabaseAdmin.storage.from('contracts').list(storagePath, { limit: 20 });
+          if (storageFiles && storageFiles.length > 0) {
+            // Filter out files already in signedDocs or meetingContracts
+            const existingUrls = new Set([
+              ...signedDocs.map((d: any) => d.signed_pdf_url),
+              ...normalizedMeetingDocs.map((d: any) => d.signed_pdf_url),
+            ].filter(Boolean));
+
+            for (const file of storageFiles) {
+              const { data: urlData } = supabaseAdmin.storage.from('contracts').getPublicUrl(`${storagePath}/${file.name}`);
+              if (urlData?.publicUrl && !existingUrls.has(urlData.publicUrl)) {
+                storageContracts.push({
+                  id: `storage-${file.id}`,
+                  category: 'contrato_inicial',
+                  signed_at: file.created_at || company.contract_signed_at,
+                  signer_name: company.contract_signer_name || company.company_name,
+                  signer_cpf: company.contract_signer_cpf || '',
+                  signed_pdf_url: urlData.publicUrl,
+                  template: { name: file.name.replace(/^\d+-/, '').replace(/\.[^.]+$/, ''), file_url: urlData.publicUrl, category: 'contrato_inicial' },
+                });
+              }
+            }
+          }
+        } catch (err) {
+          console.error('[Contract] Error checking storage contracts:', err);
+        }
+
+        return [...signedDocs, ...normalizedMeetingDocs, ...storageContracts];
       }
 
       if (ctx.user.role === 'agency') {

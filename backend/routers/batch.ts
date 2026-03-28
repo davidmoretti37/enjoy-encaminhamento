@@ -615,6 +615,13 @@ export const batchRouter = router({
       return await getInterviewSessionsByBatch(input.batchId);
     }),
 
+  getCompanyInterviewSessions: agencyProcedure
+    .input(z.object({ batchId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      const { getCompanyInterviewSessionsByBatch } = await import("../db/interviews");
+      return await getCompanyInterviewSessionsByBatch(input.batchId);
+    }),
+
   markSessionAttendance: agencyProcedure
     .input(z.object({
       sessionId: z.string().uuid(),
@@ -664,6 +671,67 @@ export const batchRouter = router({
         candidate_ids: newIds,
         batch_size: newIds.length,
       });
+      return { success: true };
+    }),
+
+  scheduleCompanyInterview: agencyProcedure
+    .input(z.object({
+      batchId: z.string().uuid(),
+      candidateIds: z.array(z.string().uuid()),
+      interviewType: z.enum(['online', 'in_person']),
+      sessionFormat: z.enum(['group', 'individual']),
+      scheduledAt: z.string(),
+      durationMinutes: z.number().default(30),
+      locationAddress: z.string().optional(),
+      locationCity: z.string().optional(),
+      locationState: z.string().optional(),
+      notes: z.string().optional(),
+      candidateSchedules: z.array(z.object({
+        candidateId: z.string().uuid(),
+        scheduledAt: z.string(),
+      })).optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const { createPreSelectionSession } = await import("../db/interviews");
+
+      const batch = await batchDb.getBatchById(input.batchId);
+      if (!batch) throw new TRPCError({ code: 'NOT_FOUND', message: 'Batch not found' });
+
+      if (input.sessionFormat === 'individual' && input.candidateSchedules?.length) {
+        for (const cs of input.candidateSchedules) {
+          await createPreSelectionSession({
+            batchId: input.batchId,
+            jobId: batch.job_id,
+            companyId: batch.company_id,
+            interviewType: input.interviewType,
+            sessionFormat: 'individual',
+            interviewStage: 'company_interview',
+            scheduledAt: cs.scheduledAt,
+            durationMinutes: input.durationMinutes,
+            locationAddress: input.locationAddress,
+            locationCity: input.locationCity,
+            locationState: input.locationState,
+            notes: input.notes,
+            candidates: [{ candidateId: cs.candidateId, applicationId: null }],
+          });
+        }
+      } else {
+        await createPreSelectionSession({
+          batchId: input.batchId,
+          jobId: batch.job_id,
+          companyId: batch.company_id,
+          interviewType: input.interviewType,
+          sessionFormat: input.sessionFormat,
+          interviewStage: 'company_interview',
+          scheduledAt: input.scheduledAt,
+          durationMinutes: input.durationMinutes,
+          locationAddress: input.locationAddress,
+          locationCity: input.locationCity,
+          locationState: input.locationState,
+          notes: input.notes,
+          candidates: input.candidateIds.map(id => ({ candidateId: id, applicationId: null })),
+        });
+      }
       return { success: true };
     }),
 

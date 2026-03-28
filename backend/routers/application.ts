@@ -6,6 +6,7 @@ import { TRPCError } from "@trpc/server";
 import { companyProcedure, candidateProcedure } from "./procedures";
 import * as db from "../db";
 import * as hiringDb from "../db/hiring";
+import { supabaseAdmin } from "../supabase";
 
 export const applicationRouter = router({
   // Apply to job
@@ -52,7 +53,7 @@ export const applicationRouter = router({
     }
 
     // Remap 'jobs' to 'job' and strip company info (ANEC is middleman)
-    return applications.map((app: any) => ({
+    const explicitApps = applications.map((app: any) => ({
       ...app,
       job: app.jobs ? {
         ...app.jobs,
@@ -61,7 +62,82 @@ export const applicationRouter = router({
         company_id: undefined,
       } : null,
       jobs: undefined,
+      source: 'application',
     }));
+
+    // Also fetch agency-initiated funnels (batches containing this candidate)
+    const { getBatchesByCandidateId } = await import("../db/batches");
+    const batches = await getBatchesByCandidateId(candidate.id);
+
+    // Get candidate's interview participations to determine real funnel position
+    const { data: participations } = await supabaseAdmin
+      .from('interview_participants')
+      .select('candidate_id, status, interview_session_id, session:interview_sessions(id, interview_stage, status, scheduled_at, interview_type, batch_id)')
+      .eq('candidate_id', candidate.id);
+
+    const participationMap = new Map<string, any[]>(); // batch_id → participations
+    for (const p of participations || []) {
+      const batchId = (p.session as any)?.batch_id;
+      if (batchId) {
+        if (!participationMap.has(batchId)) participationMap.set(batchId, []);
+        participationMap.get(batchId)!.push(p);
+      }
+    }
+
+    // Filter out batches for jobs the candidate already applied to
+    const appliedJobIds = new Set(explicitApps.map((a: any) => a.job_id));
+
+    const batchApps = batches
+      .filter(b => !appliedJobIds.has(b.job_id))
+      .map((batch: any) => {
+        // Determine status from interview participations
+        const batchParticipations = participationMap.get(batch.id) || [];
+        const companyInterview = batchParticipations.find((p: any) => (p.session as any)?.interview_stage === 'company_interview');
+        const preSelection = batchParticipations.find((p: any) => (p.session as any)?.interview_stage === 'pre_selection');
+
+        let status = 'screening';
+        let interviewDetails = null;
+
+        if (batch.candidateStatus === 'rejected') {
+          status = 'rejected';
+        } else if (companyInterview) {
+          const session = companyInterview.session as any;
+          if (session.status === 'completed' && companyInterview.status === 'attended') {
+            status = 'interviewed';
+          } else {
+            status = 'interview-scheduled';
+            interviewDetails = {
+              scheduledAt: session.scheduled_at,
+              interviewType: session.interview_type,
+            };
+          }
+        } else if (batch.candidateStatus === 'approved') {
+          status = 'screening'; // Approved in pre-selection, waiting for company interview
+        } else if (preSelection) {
+          status = 'screening';
+        }
+
+        return {
+          id: `batch_${batch.id}`,
+          job_id: batch.job_id,
+          candidate_id: candidate.id,
+          status,
+          applied_at: batch.created_at,
+          job: batch.job ? {
+            ...batch.job,
+            companies: undefined,
+            company: undefined,
+            company_id: undefined,
+          } : null,
+          jobs: batch.job || null,
+          source: 'agency_match',
+          interviewDetails,
+        };
+      });
+
+    return [...explicitApps, ...batchApps].sort((a: any, b: any) =>
+      new Date(b.applied_at).getTime() - new Date(a.applied_at).getTime()
+    );
   }),
 
   // Get applications by job (company, agency, or admin)

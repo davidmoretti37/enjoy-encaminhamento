@@ -425,7 +425,14 @@ export default function CandidateApplications() {
                             <StatusIcon className={`h-5 w-5 ${isHired ? 'text-green-600' : 'text-slate-600'}`} />
                           </div>
                           <div>
-                            <h3 className="font-semibold">{app.jobs?.title || 'Vaga'}</h3>
+                            <div className="flex items-center gap-2">
+                              <h3 className="font-semibold">{app.jobs?.title || app.job?.title || 'Vaga'}</h3>
+                              {app.source === 'agency_match' && (
+                                <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-700 border border-indigo-200">
+                                  Selecionado pela agência
+                                </span>
+                              )}
+                            </div>
                             <div className="flex flex-wrap gap-2 mt-1 text-sm text-muted-foreground">
                               {/* Only show company name if hired */}
                               {isHired && app.jobs?.companies?.name && (
@@ -434,18 +441,18 @@ export default function CandidateApplications() {
                                   {app.jobs.companies.name}
                                 </span>
                               )}
-                              {app.jobs?.location && (
+                              {(app.jobs?.location || app.job?.location) && (
                                 <span className="flex items-center gap-1">
                                   <MapPin className="h-4 w-4" />
-                                  {app.jobs.location}
+                                  {app.jobs?.location || app.job?.location}
                                 </span>
                               )}
-                              {app.jobs?.contract_type && (
+                              {(app.jobs?.contract_type || app.job?.contract_type) && (
                                 <Badge variant="outline" className="text-xs">
-                                  {app.jobs.contract_type === 'clt' ? 'CLT' :
-                                   app.jobs.contract_type === 'estagio' ? 'Estágio' :
-                                   app.jobs.contract_type === 'menor-aprendiz' ? 'Menor Aprendiz' :
-                                   app.jobs.contract_type}
+                                  {(app.jobs?.contract_type || app.job?.contract_type) === 'clt' ? 'CLT' :
+                                   (app.jobs?.contract_type || app.job?.contract_type) === 'estagio' ? 'Estágio' :
+                                   (app.jobs?.contract_type || app.job?.contract_type) === 'menor-aprendiz' ? 'Menor Aprendiz' :
+                                   (app.jobs?.contract_type || app.job?.contract_type)}
                                 </Badge>
                               )}
                             </div>

@@ -197,8 +197,8 @@ function MatchedCandidatesList({ jobId, onGroupCreated }: { jobId: string; onGro
     if (selectedIds.size === 0) return;
     const candidateIds = Array.from(selectedIds);
 
-    if (hasExistingBatch) {
-      addCandidatesMutation.mutate({ jobId, candidateIds });
+    if (hasExistingBatch && existingBatches?.[0]?.id) {
+      addCandidatesMutation.mutate({ batchId: existingBatches[0].id, candidateIds });
     } else {
       createBatchMutation.mutate({ jobId, candidateIds });
     }

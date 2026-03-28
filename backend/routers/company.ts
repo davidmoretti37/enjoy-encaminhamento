@@ -442,15 +442,68 @@ export const companyRouter = router({
     if (!company) {
       throw new TRPCError({ code: 'NOT_FOUND', message: 'Company not found' });
     }
-    // TODO: implement getCompanyDashboardStats
-    return { activeJobs: 0, totalCandidates: 0, pendingInterviews: 0, hiredCount: 0 };
+
+    // Active jobs
+    const { count: activeJobs } = await supabaseAdmin
+      .from('jobs')
+      .select('*', { count: 'exact', head: true })
+      .eq('company_id', company.id)
+      .in('status', ['open', 'searching', 'pending_review']);
+
+    // Pending interviews
+    const { count: pendingInterviews } = await supabaseAdmin
+      .from('interview_sessions')
+      .select('*', { count: 'exact', head: true })
+      .eq('company_id', company.id)
+      .eq('interview_stage', 'company_interview')
+      .eq('status', 'scheduled');
+
+    // Total candidates in batches
+    const { data: batches } = await supabaseAdmin
+      .from('candidate_batches')
+      .select('candidate_ids')
+      .eq('company_id', company.id)
+      .neq('status', 'cancelled');
+    const totalCandidates = (batches || []).reduce((sum, b) => sum + (b.candidate_ids?.length || 0), 0);
+
+    // Hired count
+    const { count: hiredCount } = await supabaseAdmin
+      .from('hiring_processes')
+      .select('*', { count: 'exact', head: true })
+      .eq('company_id', company.id)
+      .eq('status', 'active');
+
+    return {
+      activeJobs: activeJobs || 0,
+      totalCandidates,
+      pendingInterviews: pendingInterviews || 0,
+      hiredCount: hiredCount || 0,
+    };
   }),
 
   getUpcomingEvents: companyProcedure.query(async ({ ctx }) => {
     const company = await db.getCompanyByUserId(ctx.user.id);
     if (!company) return [];
-    // TODO: implement getCompanyUpcomingEvents
-    return [];
+
+    const { data: sessions } = await supabaseAdmin
+      .from('interview_sessions')
+      .select(`
+        id, interview_type, session_format, scheduled_at, duration_minutes, status, interview_stage,
+        location_address, location_city, meeting_link, notes,
+        job:jobs(id, title),
+        participants:interview_participants(
+          id, status,
+          candidate:candidates(id, full_name, phone, email)
+        )
+      `)
+      .eq('company_id', company.id)
+      .eq('interview_stage', 'company_interview')
+      .in('status', ['scheduled', 'confirmed'])
+      .gte('scheduled_at', new Date().toISOString())
+      .order('scheduled_at', { ascending: true })
+      .limit(20);
+
+    return sessions || [];
   }),
 
   getPendingActions: companyProcedure.query(async ({ ctx }) => {
@@ -458,8 +511,21 @@ export const companyRouter = router({
     if (!company) {
       return { pendingFeedback: [], overduePayments: [], pendingAvailability: [] };
     }
-    // TODO: implement getCompanyPendingActions
-    return { pendingFeedback: [], overduePayments: [], pendingAvailability: [] };
+
+    // Completed interviews without hiring decision
+    const { data: completedSessions } = await supabaseAdmin
+      .from('interview_sessions')
+      .select('id, scheduled_at, job:jobs(title), participants:interview_participants(candidate:candidates(full_name))')
+      .eq('company_id', company.id)
+      .eq('interview_stage', 'company_interview')
+      .eq('status', 'completed')
+      .limit(10);
+
+    return {
+      pendingFeedback: completedSessions || [],
+      overduePayments: [],
+      pendingAvailability: [],
+    };
   }),
 
   // Jobs

@@ -102,6 +102,7 @@ export const interviewRouter = router({
         jobId: input.jobId,
         companyId: company.id,
         interviewType: input.interviewType,
+        interviewStage: 'company_interview',
         scheduledAt: input.scheduledAt,
         durationMinutes: input.durationMinutes,
         locationAddress,

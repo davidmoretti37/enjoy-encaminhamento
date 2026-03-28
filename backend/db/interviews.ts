@@ -21,6 +21,7 @@ export async function createInterviewSession(params: {
   jobId: string;
   companyId: string;
   interviewType: "online" | "in_person";
+  interviewStage?: "pre_selection" | "company_interview";
   scheduledAt: string;
   durationMinutes?: number;
   locationAddress?: string;
@@ -39,6 +40,7 @@ export async function createInterviewSession(params: {
       job_id: params.jobId,
       company_id: params.companyId,
       interview_type: params.interviewType,
+      interview_stage: params.interviewStage || "pre_selection",
       scheduled_at: params.scheduledAt,
       duration_minutes: params.durationMinutes || 30,
       location_address: params.locationAddress,

@@ -197,7 +197,7 @@ export async function getBatchesForCompany(companyId: string): Promise<any[]> {
     .select(`
       *,
       job:jobs(id, title, description, contract_type, work_type, salary),
-      agency:agencies(id, name)
+      agency:agencies(id, agency_name)
     `)
     .eq("company_id", companyId)
     .in("status", ["sent", "unlocked", "meeting_scheduled"])
@@ -294,6 +294,34 @@ export async function getBatchesByJobId(jobId: string): Promise<any[]> {
 }
 
 /**
+ * Get batches that contain a specific candidate
+ * Used to show agency-initiated funnels in the candidate's portal
+ */
+export async function getBatchesByCandidateId(candidateId: string): Promise<any[]> {
+  const { data, error } = await supabaseAdmin
+    .from("candidate_batches")
+    .select(`
+      id, job_id, agency_id, company_id, status, candidate_statuses, created_at,
+      job:jobs(id, title, description, contract_type, work_type, location, salary,
+        companies(id, company_name)
+      )
+    `)
+    .contains("candidate_ids", [candidateId])
+    .neq("status", "cancelled")
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    console.error("[Database] Failed to get batches by candidate:", error);
+    return [];
+  }
+
+  return (data || []).map(batch => ({
+    ...batch,
+    candidateStatus: batch.candidate_statuses?.[candidateId] || 'pending',
+  }));
+}
+
+/**
  * Get batches for an agency
  */
 export async function getBatchesByAgencyId(
@@ -338,7 +366,7 @@ export async function getBatchesByAgencyIds(
       *,
       job:jobs(id, title, contract_type, status),
       company:companies(id, company_name, email),
-      agency:agencies(id, name)
+      agency:agencies(id, agency_name)
     `)
     .in("agency_id", agencyIds);
 
