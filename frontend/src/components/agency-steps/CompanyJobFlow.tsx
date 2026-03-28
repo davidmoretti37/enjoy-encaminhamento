@@ -117,10 +117,69 @@ function getRecommendationLabel(rec: string | null) {
 }
 
 // Component to show matched candidates for a job
+function AgencyCandidateEditForm({ candidateId, initial, onSaved }: {
+  candidateId: string;
+  initial: { full_name: string; email: string; phone: string; city: string; state: string; education_level: string; skills: string[] };
+  onSaved: () => void;
+}) {
+  const [form, setForm] = useState(initial);
+  const [skillInput, setSkillInput] = useState('');
+  const mutation = trpc.candidate.agencyUpdateCandidate.useMutation({
+    onSuccess: () => { toast.success('Cadastro atualizado!'); onSaved(); },
+    onError: (err) => toast.error(err.message || 'Erro ao salvar'),
+  });
+
+  return (
+    <div className="bg-white rounded-lg border border-orange-200 p-4 space-y-3">
+      <p className="text-xs font-semibold text-orange-700 uppercase tracking-wide">Editar Cadastro do Candidato</p>
+      <div className="grid grid-cols-2 gap-3">
+        <div><Label className="text-xs">Nome</Label><Input value={form.full_name} onChange={e => setForm({...form, full_name: e.target.value})} className="h-8 text-sm" /></div>
+        <div><Label className="text-xs">Email</Label><Input value={form.email} onChange={e => setForm({...form, email: e.target.value})} className="h-8 text-sm" /></div>
+        <div><Label className="text-xs">Telefone</Label><Input value={form.phone} onChange={e => setForm({...form, phone: e.target.value})} className="h-8 text-sm" /></div>
+        <div><Label className="text-xs">Cidade</Label><Input value={form.city} onChange={e => setForm({...form, city: e.target.value})} className="h-8 text-sm" /></div>
+        <div><Label className="text-xs">Estado</Label><Input value={form.state} onChange={e => setForm({...form, state: e.target.value})} className="h-8 text-sm" /></div>
+        <div><Label className="text-xs">Escolaridade</Label>
+          <select value={form.education_level} onChange={e => setForm({...form, education_level: e.target.value})} className="w-full h-8 text-sm border rounded px-2">
+            <option value="">-</option>
+            <option value="fundamental">Fundamental</option>
+            <option value="medio">Médio</option>
+            <option value="superior">Superior</option>
+            <option value="pos-graduacao">Pós-graduação</option>
+          </select>
+        </div>
+      </div>
+      <div>
+        <Label className="text-xs">Habilidades</Label>
+        <div className="flex flex-wrap gap-1 mb-1">
+          {form.skills.map((s, i) => (
+            <span key={i} className="px-2 py-0.5 text-xs bg-orange-50 text-orange-700 rounded border border-orange-100 flex items-center gap-1">
+              {s}
+              <button onClick={() => setForm({...form, skills: form.skills.filter((_, j) => j !== i)})} className="text-orange-400 hover:text-red-500">&times;</button>
+            </span>
+          ))}
+        </div>
+        <div className="flex gap-1">
+          <Input value={skillInput} onChange={e => setSkillInput(e.target.value)} placeholder="Adicionar habilidade" className="h-7 text-xs flex-1"
+            onKeyDown={e => { if (e.key === 'Enter' && skillInput.trim()) { e.preventDefault(); setForm({...form, skills: [...form.skills, skillInput.trim()]}); setSkillInput(''); }}} />
+          <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => { if (skillInput.trim()) { setForm({...form, skills: [...form.skills, skillInput.trim()]}); setSkillInput(''); }}}>+</Button>
+        </div>
+      </div>
+      <div className="flex gap-2 justify-end">
+        <Button size="sm" variant="outline" onClick={onSaved} className="text-xs">Cancelar</Button>
+        <Button size="sm" onClick={() => mutation.mutate({ candidateId, ...form })} disabled={mutation.isPending} className="text-xs bg-orange-600 hover:bg-orange-700 text-white">
+          {mutation.isPending ? 'Salvando...' : 'Salvar'}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 function MatchedCandidatesList({ jobId, onGroupCreated }: { jobId: string; onGroupCreated?: () => void }) {
   const [minScore, setMinScore] = useState(0);
+  const [cityFilter, setCityFilter] = useState<string>('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [showAll, setShowAll] = useState(false);
+  const [editingCandidateId, setEditingCandidateId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   // Manual search state
@@ -256,9 +315,23 @@ function MatchedCandidatesList({ jobId, onGroupCreated }: { jobId: string; onGro
     );
   }
 
-  // Filter by min score on the client
+  // Filter by min score and city on the client
   const matches = data?.matches || [];
-  const filteredMatches = matches.filter((m: any) => m.compositeScore >= minScore);
+  const normalize = (s: string) => s.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const titleCase = (s: string) => s.trim().charAt(0).toUpperCase() + s.trim().slice(1).toLowerCase();
+  const cityMap = new Map<string, string>();
+  for (const m of matches) {
+    const raw = m.candidateProfile?.city;
+    if (!raw) continue;
+    const key = normalize(raw);
+    if (!cityMap.has(key)) cityMap.set(key, titleCase(raw));
+  }
+  const availableCities = [...cityMap.values()].sort();
+  const filteredMatches = matches.filter((m: any) => {
+    if (m.compositeScore < minScore) return false;
+    if (cityFilter && normalize(m.candidateProfile?.city || "") !== normalize(cityFilter)) return false;
+    return true;
+  });
   const displayedMatches = showAll ? filteredMatches : filteredMatches.slice(0, 10);
 
   return (
@@ -395,6 +468,28 @@ function MatchedCandidatesList({ jobId, onGroupCreated }: { jobId: string; onGro
         </Card>
       )}
 
+      {/* City filter */}
+      {availableCities.length > 1 && (
+        <div className="flex items-center gap-2 mb-3">
+          <MapPin className="h-4 w-4 text-gray-400 shrink-0" />
+          <select
+            value={cityFilter}
+            onChange={(e) => setCityFilter(e.target.value)}
+            className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-orange-300"
+          >
+            <option value="">Todas as cidades</option>
+            {availableCities.map((city: string) => (
+              <option key={city} value={city}>{city}</option>
+            ))}
+          </select>
+          {cityFilter && (
+            <button onClick={() => setCityFilter('')} className="text-xs text-gray-400 hover:text-gray-600">
+              Limpar
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Candidate list */}
       <div className="space-y-2">
         {displayedMatches.map((match: any) => {
@@ -495,21 +590,49 @@ function MatchedCandidatesList({ jobId, onGroupCreated }: { jobId: string; onGro
               {/* Expanded detail */}
               {isExpanded && (
                 <div className="border-t bg-gray-50/50 px-4 py-4 space-y-4">
-                  {/* Contact info */}
-                  <div className="flex flex-wrap gap-4">
-                    {match.candidateEmail && (
-                      <a href={`mailto:${match.candidateEmail}`} className="text-sm text-orange-600 hover:underline flex items-center gap-1">
-                        <Mail className="h-3.5 w-3.5" />
-                        {match.candidateEmail}
-                      </a>
-                    )}
-                    {match.candidatePhone && (
-                      <a href={`tel:${match.candidatePhone}`} className="text-sm text-orange-600 hover:underline flex items-center gap-1">
-                        <Phone className="h-3.5 w-3.5" />
-                        {match.candidatePhone}
-                      </a>
-                    )}
+                  {/* Contact info + Edit button */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex flex-wrap gap-4">
+                      {match.candidateEmail && (
+                        <a href={`mailto:${match.candidateEmail}`} className="text-sm text-orange-600 hover:underline flex items-center gap-1">
+                          <Mail className="h-3.5 w-3.5" />
+                          {match.candidateEmail}
+                        </a>
+                      )}
+                      {match.candidatePhone && (
+                        <a href={`tel:${match.candidatePhone}`} className="text-sm text-orange-600 hover:underline flex items-center gap-1">
+                          <Phone className="h-3.5 w-3.5" />
+                          {match.candidatePhone}
+                        </a>
+                      )}
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={(e) => { e.stopPropagation(); setEditingCandidateId(editingCandidateId === match.candidateId ? null : match.candidateId); }}
+                      className="text-xs"
+                    >
+                      <Pencil className="h-3 w-3 mr-1" />
+                      {editingCandidateId === match.candidateId ? 'Fechar' : 'Editar Cadastro'}
+                    </Button>
                   </div>
+
+                  {/* Inline edit form */}
+                  {editingCandidateId === match.candidateId && (
+                    <AgencyCandidateEditForm
+                      candidateId={match.candidateId}
+                      initial={{
+                        full_name: match.candidateName || '',
+                        email: match.candidateEmail || '',
+                        phone: match.candidatePhone || '',
+                        city: match.candidateProfile?.city || '',
+                        state: match.candidateProfile?.state || '',
+                        education_level: match.candidateProfile?.educationLevel || '',
+                        skills: match.candidateProfile?.skills || [],
+                      }}
+                      onSaved={() => { setEditingCandidateId(null); utils.job.getMatchesForJob.invalidate({ jobId }); }}
+                    />
+                  )}
 
                   {/* Summary */}
                   {match.candidateProfile?.summary && (

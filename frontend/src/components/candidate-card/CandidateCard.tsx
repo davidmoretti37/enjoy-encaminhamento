@@ -1,6 +1,8 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import {
   MapPin,
@@ -14,9 +16,13 @@ import {
   User,
   Mail,
   Phone,
+  Pencil,
 } from "lucide-react";
+import { useState } from "react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { trpc } from "@/lib/trpc";
+import { toast } from "sonner";
 
 interface CandidateProfile {
   id: string;
@@ -482,6 +488,26 @@ export function CandidateCard({
   onHire,
   isPdfLoading,
 }: CandidateCardProps) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [editForm, setEditForm] = useState({
+    full_name: profile.name || "",
+    email: profile.email || "",
+    phone: profile.phone || "",
+    city: profile.city || "",
+    state: profile.state || "",
+    education_level: profile.education || "",
+    skills: profile.skills || [],
+  });
+  const [skillInput, setSkillInput] = useState("");
+
+  const editMutation = trpc.candidate.agencyUpdateCandidate.useMutation({
+    onSuccess: () => {
+      toast.success("Cadastro atualizado!");
+      setIsEditing(false);
+    },
+    onError: (err: any) => toast.error(err.message || "Erro ao salvar"),
+  });
+
   const initials = (profile.name || "?")
     .split(" ")
     .map((n) => n[0])
@@ -511,13 +537,22 @@ export function CandidateCard({
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-start justify-between gap-4">
-              <div>
-                <h2 className="text-2xl font-bold tracking-tight">{profile.name}</h2>
-                {jobTitle && (
-                  <p className="text-white/50 text-sm mt-0.5">
-                    Candidato para <span className="text-white/80 font-medium">{jobTitle}</span>
-                  </p>
-                )}
+              <div className="flex items-center gap-3">
+                <div>
+                  <h2 className="text-2xl font-bold tracking-tight">{profile.name}</h2>
+                  {jobTitle && (
+                    <p className="text-white/50 text-sm mt-0.5">
+                      Candidato para <span className="text-white/80 font-medium">{jobTitle}</span>
+                    </p>
+                  )}
+                </div>
+                <button
+                  onClick={() => setIsEditing(!isEditing)}
+                  className="px-3 py-1.5 text-xs bg-white/15 hover:bg-white/25 text-white rounded-lg transition-colors flex items-center gap-1.5"
+                >
+                  <Pencil className="w-3 h-3" />
+                  {isEditing ? "Fechar" : "Editar"}
+                </button>
               </div>
               {matchScore != null && (
                 <div className="w-14 h-14 rounded-full border-2 border-white/30 flex flex-col items-center justify-center shrink-0 bg-white/10">
@@ -560,6 +595,51 @@ export function CandidateCard({
           )}
         </div>
       </div>
+
+      {/* ── Edit Form ── */}
+      {isEditing && (
+        <div className="bg-orange-50 border border-t-0 border-orange-200 px-8 py-5 space-y-3">
+          <p className="text-xs font-semibold text-orange-700 uppercase tracking-wide">Editar Cadastro do Candidato</p>
+          <div className="grid grid-cols-2 gap-3">
+            <div><Label className="text-xs">Nome</Label><Input value={editForm.full_name} onChange={e => setEditForm({...editForm, full_name: e.target.value})} className="h-8 text-sm" /></div>
+            <div><Label className="text-xs">Email</Label><Input value={editForm.email} onChange={e => setEditForm({...editForm, email: e.target.value})} className="h-8 text-sm" /></div>
+            <div><Label className="text-xs">Telefone</Label><Input value={editForm.phone} onChange={e => setEditForm({...editForm, phone: e.target.value})} className="h-8 text-sm" /></div>
+            <div><Label className="text-xs">Cidade</Label><Input value={editForm.city} onChange={e => setEditForm({...editForm, city: e.target.value})} className="h-8 text-sm" /></div>
+            <div><Label className="text-xs">Estado</Label><Input value={editForm.state} onChange={e => setEditForm({...editForm, state: e.target.value})} className="h-8 text-sm" /></div>
+            <div><Label className="text-xs">Escolaridade</Label>
+              <select value={editForm.education_level} onChange={e => setEditForm({...editForm, education_level: e.target.value})} className="w-full h-8 text-sm border rounded px-2">
+                <option value="">-</option>
+                <option value="fundamental">Fundamental</option>
+                <option value="medio">Médio</option>
+                <option value="superior">Superior</option>
+                <option value="pos-graduacao">Pós-graduação</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <Label className="text-xs">Habilidades</Label>
+            <div className="flex flex-wrap gap-1 mb-1">
+              {(editForm.skills || []).map((s: string, i: number) => (
+                <span key={i} className="px-2 py-0.5 text-xs bg-orange-100 text-orange-700 rounded border border-orange-200 flex items-center gap-1">
+                  {s}
+                  <button onClick={() => setEditForm({...editForm, skills: editForm.skills.filter((_: string, j: number) => j !== i)})} className="text-orange-400 hover:text-red-500">&times;</button>
+                </span>
+              ))}
+            </div>
+            <div className="flex gap-1">
+              <Input value={skillInput} onChange={e => setSkillInput(e.target.value)} placeholder="Adicionar habilidade" className="h-7 text-xs flex-1"
+                onKeyDown={e => { if (e.key === 'Enter' && skillInput.trim()) { e.preventDefault(); setEditForm({...editForm, skills: [...editForm.skills, skillInput.trim()]}); setSkillInput(''); }}} />
+              <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => { if (skillInput.trim()) { setEditForm({...editForm, skills: [...editForm.skills, skillInput.trim()]}); setSkillInput(''); }}}>+</Button>
+            </div>
+          </div>
+          <div className="flex gap-2 justify-end">
+            <Button size="sm" variant="outline" onClick={() => setIsEditing(false)} className="text-xs">Cancelar</Button>
+            <Button size="sm" onClick={() => editMutation.mutate({ candidateId: profile.id, ...editForm })} disabled={editMutation.isPending} className="text-xs bg-orange-600 hover:bg-orange-700 text-white">
+              {editMutation.isPending ? 'Salvando...' : 'Salvar'}
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* ── Body ── */}
       <div className="bg-white rounded-b-xl border border-t-0 border-slate-200">
