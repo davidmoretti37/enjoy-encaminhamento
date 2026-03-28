@@ -16,6 +16,9 @@ import {
   Plus,
   ExternalLink,
   Mail,
+  Upload,
+  Image,
+  QrCode,
 } from "lucide-react";
 import { CardEntrance } from "@/components/funnel";
 import { format } from "date-fns";
@@ -438,6 +441,12 @@ function CLTPaymentCard({ hiringProcess, onRefresh }: { hiringProcess: any; onRe
   const candidate = hiringProcess.candidate;
   const feeReais = (hiringProcess.calculated_fee / 100).toFixed(2).replace(".", ",");
   const isPendingPayment = hiringProcess.status === "pending_payment" || hiringProcess.status === "pending_signatures";
+  const [receiptBase64, setReceiptBase64] = useState<string | null>(null);
+  const [receiptFileName, setReceiptFileName] = useState<string | null>(null);
+  const [receiptPreview, setReceiptPreview] = useState<string | null>(null);
+
+  // Fetch agency payment info
+  const { data: agencyPaymentInfo } = trpc.company.getAgencyPaymentInfo.useQuery();
 
   const confirmMutation = trpc.hiring.confirmCLTPayment.useMutation({
     onSuccess: () => {
@@ -447,10 +456,34 @@ function CLTPaymentCard({ hiringProcess, onRefresh }: { hiringProcess: any; onRe
     onError: (err) => toast.error(err.message || "Erro ao confirmar pagamento"),
   });
 
+  const handleReceiptUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error("Arquivo muito grande. Máximo 10MB");
+      return;
+    }
+    setReceiptFileName(file.name);
+    // Preview
+    const previewUrl = URL.createObjectURL(file);
+    setReceiptPreview(previewUrl);
+    // Base64
+    const reader = new FileReader();
+    reader.onload = () => {
+      const base64 = (reader.result as string).split(",")[1];
+      setReceiptBase64(base64);
+    };
+    reader.readAsDataURL(file);
+  };
+
   // Calculate 30-day follow-up date
   const startDate = hiringProcess.start_date ? new Date(hiringProcess.start_date) : null;
   const followUpDate = startDate ? new Date(startDate) : null;
   if (followUpDate) followUpDate.setDate(followUpDate.getDate() + 30);
+
+  const pixTypeLabels: Record<string, string> = {
+    cpf: "CPF", cnpj: "CNPJ", email: "E-mail", phone: "Telefone", random: "Chave aleatória",
+  };
 
   return (
     <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
@@ -460,24 +493,16 @@ function CLTPaymentCard({ hiringProcess, onRefresh }: { hiringProcess: any; onRe
           <div className="flex items-center gap-3">
             <div className="w-12 h-12 rounded-full bg-[#0A2342] flex items-center justify-center">
               {candidate?.photo_url ? (
-                <img
-                  src={candidate.photo_url}
-                  alt={candidate.full_name}
-                  className="w-full h-full rounded-full object-cover"
-                />
+                <img src={candidate.photo_url} alt={candidate.full_name} className="w-full h-full rounded-full object-cover" />
               ) : (
-                <span className="text-white font-semibold text-lg">
-                  {candidate?.full_name?.charAt(0) || "?"}
-                </span>
+                <span className="text-white font-semibold text-lg">{candidate?.full_name?.charAt(0) || "?"}</span>
               )}
             </div>
             <div>
-              <h3 className="text-[#0A2342] font-semibold">
-                {candidate?.full_name || "Candidato"}
-              </h3>
+              <h3 className="text-[#0A2342] font-semibold">{candidate?.full_name || "Candidato"}</h3>
               <div className="flex items-center gap-2 mt-0.5">
                 <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-600">
-                  CLT
+                  {hiringProcess.hiring_type === "pj" ? "PJ" : hiringProcess.hiring_type === "clt" ? "CLT" : hiringProcess.hiring_type}
                 </span>
                 {hiringProcess.start_date && (
                   <span className="text-slate-500 text-xs flex items-center gap-1">
@@ -491,8 +516,8 @@ function CLTPaymentCard({ hiringProcess, onRefresh }: { hiringProcess: any; onRe
         </div>
       </div>
 
-      {/* Payment info */}
-      <div className="p-5">
+      <div className="p-5 space-y-4">
+        {/* Fee info */}
         <div className="p-4 rounded-lg border border-slate-200 bg-slate-50">
           <div className="flex items-center gap-3 mb-3">
             <div className="w-10 h-10 rounded-lg bg-[#FF6B35]/10 flex items-center justify-center">
@@ -503,18 +528,12 @@ function CLTPaymentCard({ hiringProcess, onRefresh }: { hiringProcess: any; onRe
               <p className="text-xs text-slate-500">Pagamento único — 50% do salário</p>
             </div>
           </div>
-
           <div className="flex items-center justify-between p-3 rounded-lg bg-white border border-slate-200">
             <span className="text-xl font-bold text-[#0A2342]">R$ {feeReais}</span>
-            <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${
-              isPendingPayment
-                ? "bg-amber-100 text-amber-700"
-                : "bg-green-100 text-green-700"
-            }`}>
+            <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${isPendingPayment ? "bg-amber-100 text-amber-700" : "bg-green-100 text-green-700"}`}>
               {isPendingPayment ? "Pendente" : "Pago"}
             </span>
           </div>
-
           {followUpDate && (
             <p className="mt-3 text-xs text-slate-500 flex items-center gap-1">
               <Calendar className="w-3 h-3" />
@@ -523,19 +542,87 @@ function CLTPaymentCard({ hiringProcess, onRefresh }: { hiringProcess: any; onRe
           )}
         </div>
 
+        {/* Agency PIX payment info */}
+        {isPendingPayment && agencyPaymentInfo?.pix_key && (
+          <div className="p-4 rounded-lg border-2 border-blue-200 bg-blue-50">
+            <div className="flex items-center gap-2 mb-3">
+              <QrCode className="w-5 h-5 text-blue-600" />
+              <p className="text-sm font-semibold text-blue-900">Dados para Pagamento via PIX</p>
+            </div>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between p-2.5 rounded-lg bg-white border border-blue-200">
+                <div>
+                  <p className="text-xs text-blue-600 font-medium">{pixTypeLabels[agencyPaymentInfo.pix_key_type || ""] || "Chave PIX"}</p>
+                  <p className="text-sm font-bold text-[#0A2342] font-mono">{agencyPaymentInfo.pix_key}</p>
+                </div>
+                <button
+                  onClick={() => { navigator.clipboard.writeText(agencyPaymentInfo.pix_key!); toast.success("Chave PIX copiada!"); }}
+                  className="px-3 py-1.5 rounded-lg bg-blue-100 text-blue-700 text-xs font-medium hover:bg-blue-200 transition-colors flex items-center gap-1"
+                >
+                  <Copy className="w-3 h-3" /> Copiar
+                </button>
+              </div>
+              {agencyPaymentInfo.agency_name && (
+                <p className="text-xs text-blue-700">Beneficiário: <span className="font-medium">{agencyPaymentInfo.agency_name}</span></p>
+              )}
+              {agencyPaymentInfo.payment_instructions && (
+                <p className="text-xs text-blue-600 mt-1 p-2 bg-blue-100/50 rounded">{agencyPaymentInfo.payment_instructions}</p>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Receipt upload */}
+        {isPendingPayment && (
+          <div className="p-4 rounded-lg border border-slate-200 bg-slate-50">
+            <div className="flex items-center gap-2 mb-3">
+              <Upload className="w-4 h-4 text-slate-600" />
+              <p className="text-sm font-medium text-[#0A2342]">Comprovante de Pagamento</p>
+            </div>
+            <p className="text-xs text-slate-500 mb-3">Envie uma foto ou PDF do comprovante de pagamento</p>
+
+            {receiptPreview ? (
+              <div className="space-y-2">
+                <div className="relative rounded-lg overflow-hidden border border-slate-200 bg-white p-2">
+                  <img src={receiptPreview} alt="Comprovante" className="max-h-48 mx-auto rounded" />
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-slate-500 flex items-center gap-1">
+                    <Image className="w-3 h-3" /> {receiptFileName}
+                  </span>
+                  <button onClick={() => { setReceiptBase64(null); setReceiptFileName(null); setReceiptPreview(null); }} className="text-xs text-red-500 hover:text-red-700">
+                    Remover
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <label className="cursor-pointer flex flex-col items-center justify-center p-6 rounded-lg border-2 border-dashed border-slate-300 hover:border-[#FF6B35] hover:bg-[#FF6B35]/5 transition-colors">
+                <Upload className="w-8 h-8 text-slate-400 mb-2" />
+                <span className="text-sm text-slate-600 font-medium">Clique para enviar comprovante</span>
+                <span className="text-xs text-slate-400 mt-1">JPG, PNG ou PDF até 10MB</span>
+                <input type="file" accept="image/*,.pdf" className="hidden" onChange={handleReceiptUpload} />
+              </label>
+            )}
+          </div>
+        )}
+
         {/* Confirm payment button */}
         {isPendingPayment && (
           <button
-            onClick={() => confirmMutation.mutate({ hiringProcessId: hiringProcess.id })}
-            disabled={confirmMutation.isPending}
-            className="mt-4 w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-[#FF6B35] text-white font-medium text-sm hover:bg-[#FF6B35]/90 transition-colors disabled:opacity-60"
+            onClick={() => confirmMutation.mutate({
+              hiringProcessId: hiringProcess.id,
+              receiptBase64: receiptBase64 || undefined,
+              receiptFileName: receiptFileName || undefined,
+            })}
+            disabled={confirmMutation.isPending || !receiptBase64}
+            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-[#FF6B35] text-white font-medium text-sm hover:bg-[#FF6B35]/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           >
             {confirmMutation.isPending ? (
               <Loader2 className="w-4 h-4 animate-spin" />
             ) : (
               <CheckCircle className="w-4 h-4" />
             )}
-            {confirmMutation.isPending ? "Confirmando..." : "Confirmar Pagamento"}
+            {confirmMutation.isPending ? "Confirmando..." : !receiptBase64 ? "Envie o comprovante para confirmar" : "Confirmar Pagamento"}
           </button>
         )}
       </div>

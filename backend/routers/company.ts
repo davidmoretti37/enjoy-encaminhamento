@@ -356,6 +356,20 @@ export const companyRouter = router({
     return company || null;
   }),
 
+  // Get agency payment info (PIX key, instructions) for the company's agency
+  getAgencyPaymentInfo: companyProcedure.query(async ({ ctx }) => {
+    const company = await db.getCompanyByUserId(ctx.user.id);
+    if (!company?.agency_id) return null;
+    const agency = await db.getAgencyById(company.agency_id);
+    if (!agency) return null;
+    return {
+      agency_name: agency.agency_name,
+      pix_key: agency.pix_key || null,
+      pix_key_type: agency.pix_key_type || null,
+      payment_instructions: agency.payment_instructions || null,
+    };
+  }),
+
   // Create company profile
   createProfile: protectedProcedure
     .input(z.object({

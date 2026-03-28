@@ -1025,6 +1025,8 @@ export const hiringRouter = router({
   confirmCLTPayment: companyProcedure
     .input(z.object({
       hiringProcessId: z.string().uuid(),
+      receiptBase64: z.string().optional(),
+      receiptFileName: z.string().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       const company = await db.getCompanyByUserId(ctx.user.id);
@@ -1044,8 +1046,21 @@ export const hiringRouter = router({
         });
       }
 
-      // Update hiring process to active
-      await hiringDb.updateHiringProcess(input.hiringProcessId, { status: "active" });
+      // Upload receipt if provided
+      let receiptUrl: string | null = null;
+      if (input.receiptBase64 && input.receiptFileName) {
+        const { storagePut } = await import("../storage");
+        const buffer = Buffer.from(input.receiptBase64, "base64");
+        const key = `receipts/${company.id}/${input.hiringProcessId}/${Date.now()}-${input.receiptFileName}`;
+        const { url } = await storagePut(key, buffer, "image/jpeg");
+        receiptUrl = url;
+      }
+
+      // Update hiring process to active (with receipt URL if uploaded)
+      await hiringDb.updateHiringProcess(input.hiringProcessId, {
+        status: "active",
+        ...(receiptUrl ? { receipt_url: receiptUrl } : {}),
+      });
 
       // Create 30-day follow-up if not already created
       const startDate = new Date(process.start_date);
