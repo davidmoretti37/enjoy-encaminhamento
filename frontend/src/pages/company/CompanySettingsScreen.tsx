@@ -511,13 +511,30 @@ export default function CompanySettingsScreen() {
                   <p className="text-sm text-red-600">{passwordError}</p>
                 )}
 
-                <button
-                  type="submit"
-                  disabled={changePasswordMutation.isPending}
-                  className="px-6 py-2.5 rounded-full bg-gradient-to-r from-[#1B4D7A] to-[#FF6B35] text-white font-medium shadow-lg shadow-[#FF6B35]/25 hover:shadow-[#FF6B35]/40 hover:scale-105 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {changePasswordMutation.isPending ? 'Alterando...' : 'Alterar Senha'}
-                </button>
+                <div className="flex items-center gap-4">
+                  <button
+                    type="submit"
+                    disabled={changePasswordMutation.isPending}
+                    className="px-6 py-2.5 rounded-full bg-gradient-to-r from-[#1B4D7A] to-[#FF6B35] text-white font-medium shadow-lg shadow-[#FF6B35]/25 hover:shadow-[#FF6B35]/40 hover:scale-105 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {changePasswordMutation.isPending ? 'Alterando...' : 'Alterar Senha'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        const { resetPassword } = await import('@/lib/auth-helpers');
+                        await resetPassword(user?.email || '');
+                        toast.success('Email de redefinição enviado! Verifique sua caixa de entrada.');
+                      } catch (err: any) {
+                        toast.error(err.message || 'Erro ao enviar email');
+                      }
+                    }}
+                    className="text-sm text-[#FF6B35] hover:underline"
+                  >
+                    Esqueci minha senha
+                  </button>
+                </div>
               </form>
             </div>
           </CardEntrance>
