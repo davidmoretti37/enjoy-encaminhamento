@@ -164,13 +164,24 @@ export const hiringRouter = router({
         if (!job || !candidate) {
           throw new TRPCError({ code: "NOT_FOUND", message: "Job or candidate not found" });
         }
-        // Auto-create application
-        const appId = await db.createApplication({
-          candidate_id: input.candidateId,
-          job_id: input.jobId,
-          status: "selected",
-        });
-        application = await db.getApplicationById(appId);
+        // Find existing or create application
+        const { data: existingApp } = await supabaseAdmin
+          .from("applications")
+          .select("id")
+          .eq("candidate_id", input.candidateId)
+          .eq("job_id", input.jobId)
+          .maybeSingle();
+
+        if (existingApp) {
+          application = await db.getApplicationById(existingApp.id);
+        } else {
+          const appId = await db.createApplication({
+            candidate_id: input.candidateId,
+            job_id: input.jobId,
+            status: "selected",
+          });
+          application = await db.getApplicationById(appId);
+        }
       } else {
         throw new TRPCError({ code: "BAD_REQUEST", message: "Forneça applicationId ou candidateId + jobId" });
       }
