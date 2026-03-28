@@ -110,22 +110,20 @@ export default function SettingsPage() {
   // Sync payment info state from query data
   useEffect(() => {
     const data = agencyProfileQuery.data as any;
-    if (data && !paymentInfoLoaded) {
+    if (data && !savingPaymentInfo) {
       setPixKey(data.pix_key || "");
       setPixKeyType(data.pix_key_type || "cnpj");
       setPaymentInstructions(data.payment_instructions || "");
-      setPaymentInfoLoaded(true);
     }
-  }, [agencyProfileQuery.data, paymentInfoLoaded]);
+  }, [agencyProfileQuery.data]);
 
   const utils = trpc.useUtils();
 
   const updateProfileMutation = trpc.agency.updateProfile.useMutation({
-    onSuccess: () => {
+    onSuccess: async () => {
       toast.success("Informacoes de pagamento salvas!");
       setSavingPaymentInfo(false);
-      setPaymentInfoLoaded(false);
-      utils.agency.getProfile.invalidate();
+      await utils.agency.getProfile.invalidate();
     },
     onError: (error: any) => {
       toast.error(`Erro ao salvar: ${error.message}`);
