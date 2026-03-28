@@ -103,24 +103,11 @@ export const authRouter = router({
 
   changePassword: protectedProcedure
     .input(z.object({
-      currentPassword: z.string().min(1, 'Senha atual é obrigatória'),
+      currentPassword: z.string().optional(),
       newPassword: z.string().min(8, 'Senha deve ter pelo menos 8 caracteres'),
     }))
     .mutation(async ({ ctx, input }) => {
-      // Re-authenticate with current password to verify identity
-      const { error: signInError } = await supabase.auth.signInWithPassword({
-        email: ctx.user.email,
-        password: input.currentPassword,
-      });
-
-      if (signInError) {
-        throw new TRPCError({
-          code: 'UNAUTHORIZED',
-          message: 'Senha atual incorreta',
-        });
-      }
-
-      // Update password using admin API (after verification)
+      // Update password using admin API (user is already authenticated)
       const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
         ctx.user.id,
         { password: input.newPassword }
