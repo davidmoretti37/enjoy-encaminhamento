@@ -254,19 +254,28 @@ function ReceivedState({
     });
   };
 
-  const handleHire = (applicationId: string, batchId?: string) => {
-    if (!applicationId) {
-      toast.error("Candidato sem candidatura vinculada");
-      return;
-    }
-    setHiringCandidateId(applicationId);
+  const handleHire = (applicationId: string | null, batchId?: string, candidateId?: string) => {
     const startDate = new Date();
     startDate.setDate(startDate.getDate() + 7);
-    initiateHiringMutation.mutate({
-      applicationId,
-      batchId: batchId || undefined,
-      startDate: startDate.toISOString().split("T")[0],
-    });
+
+    if (applicationId) {
+      setHiringCandidateId(applicationId);
+      initiateHiringMutation.mutate({
+        applicationId,
+        batchId: batchId || undefined,
+        startDate: startDate.toISOString().split("T")[0],
+      });
+    } else if (candidateId && selectedJobId) {
+      setHiringCandidateId(candidateId);
+      initiateHiringMutation.mutate({
+        candidateId,
+        jobId: selectedJobId,
+        batchId: batchId || undefined,
+        startDate: startDate.toISOString().split("T")[0],
+      });
+    } else {
+      toast.error("Candidato sem candidatura vinculada");
+    }
   };
 
   // Build candidate profiles for the card components
@@ -433,12 +442,11 @@ function ReceivedState({
               <button
                 onClick={() => {
                   const candidates = candidateProfiles.filter((c) => selectedForHiring.has(c.profile.id));
-                  const withApplication = candidates.filter((c) => c.applicationId);
-                  if (withApplication.length === 0) {
-                    toast.error("Nenhum candidato selecionado possui candidatura vinculada");
+                  if (candidates.length === 0) {
+                    toast.error("Selecione ao menos um candidato");
                     return;
                   }
-                  withApplication.forEach((c) => handleHire(c.applicationId, c.batchId));
+                  candidates.forEach((c) => handleHire(c.applicationId || null, c.batchId, c.profile.id));
                   setSelectedForHiring(new Set());
                 }}
                 disabled={initiateHiringMutation.isPending}
@@ -581,14 +589,12 @@ function ReceivedState({
           jobTitle={selectedJob.title}
           onDownloadPdf={handleDownloadPdf}
           isPdfLoading={pdfMutation.isPending}
-          onHire={
-            selectedCandidate?.applicationId
-              ? () =>
-                  handleHire(
-                    selectedCandidate.applicationId,
-                    selectedCandidate.batchId
-                  )
-              : undefined
+          onHire={() =>
+            handleHire(
+              selectedCandidate?.applicationId || null,
+              selectedCandidate?.batchId,
+              selectedCandidateId
+            )
           }
         />
       )}

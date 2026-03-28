@@ -119,7 +119,9 @@ export const hiringRouter = router({
    */
   initiateHiring: companyProcedure
     .input(z.object({
-      applicationId: z.string().uuid(),
+      applicationId: z.string().uuid().optional(),
+      candidateId: z.string().uuid().optional(),
+      jobId: z.string().uuid().optional(),
       batchId: z.string().uuid().optional(),
       startDate: z.string(), // ISO date string
       monthlySalary: z.number().optional(), // In cents
@@ -143,20 +145,40 @@ export const hiringRouter = router({
         throw new TRPCError({ code: "NOT_FOUND", message: "Company not found" });
       }
 
-      // Get application
-      const application = await db.getApplicationById(input.applicationId);
-      if (!application) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Application not found" });
+      let application: any;
+      let job: any;
+      let candidate: any;
+
+      if (input.applicationId) {
+        // Standard path: hire via application
+        application = await db.getApplicationById(input.applicationId);
+        if (!application) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Application not found" });
+        }
+        job = await db.getJobById(application.job_id);
+        candidate = await db.getCandidateById(application.candidate_id);
+      } else if (input.candidateId && input.jobId) {
+        // Alternative path: hire directly (agency-selected candidate without formal application)
+        job = await db.getJobById(input.jobId);
+        candidate = await db.getCandidateById(input.candidateId);
+        if (!job || !candidate) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Job or candidate not found" });
+        }
+        // Auto-create application
+        const appId = await db.createApplication({
+          candidate_id: input.candidateId,
+          job_id: input.jobId,
+          status: "selected",
+        });
+        application = await db.getApplicationById(appId);
+      } else {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Forneça applicationId ou candidateId + jobId" });
       }
 
-      // Get job
-      const job = await db.getJobById(application.job_id);
       if (!job || job.company_id !== company.id) {
         throw new TRPCError({ code: "FORBIDDEN", message: "Not authorized" });
       }
 
-      // Get candidate
-      const candidate = await db.getCandidateById(application.candidate_id);
       if (!candidate) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Candidate not found" });
       }
