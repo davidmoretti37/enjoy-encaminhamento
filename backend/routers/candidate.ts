@@ -4,7 +4,7 @@ import { z } from "zod";
 import { router } from "../_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { protectedProcedure } from "../_core/trpc";
-import { adminProcedure, candidateProcedure } from "./procedures";
+import { adminProcedure, candidateProcedure, agencyProcedure } from "./procedures";
 import * as db from "../db";
 import { generateCandidateSummary } from "../services/ai/summarizer";
 import { generateCandidateEmbedding, findMatchingJobs } from "../services/matching";
@@ -578,4 +578,29 @@ export const candidateRouter = router({
     }
     return db.getSignedDocuments({ candidateId: candidate.id });
   }),
+
+  // Agency can edit candidate profile (for candidates who made mistakes)
+  agencyUpdateCandidate: agencyProcedure
+    .input(z.object({
+      candidateId: z.string().uuid(),
+      full_name: z.string().optional(),
+      email: z.string().optional(),
+      phone: z.string().optional(),
+      city: z.string().optional(),
+      state: z.string().optional(),
+      education_level: z.string().optional(),
+      institution: z.string().optional(),
+      course: z.string().optional(),
+      skills: z.array(z.string()).optional(),
+      languages: z.array(z.string()).optional(),
+      available_for_clt: z.boolean().optional(),
+      available_for_internship: z.boolean().optional(),
+      available_for_apprentice: z.boolean().optional(),
+      preferred_work_type: z.string().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const { candidateId, ...updateData } = input;
+      await db.updateCandidate(candidateId, updateData);
+      return { success: true };
+    }),
 });
