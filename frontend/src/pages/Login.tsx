@@ -88,7 +88,23 @@ export default function Login() {
       } else if (user?.role === 'agency') {
         window.location.href = '/agency/dashboard';
       } else if (user?.role === 'company') {
-        window.location.href = '/company/portal';
+        // Check if company has completed onboarding before redirecting
+        try {
+          const session = await getSession();
+          const res = await fetch('/api/trpc/company.checkOnboarding', {
+            headers: {
+              'Authorization': `Bearer ${session?.access_token}`,
+            },
+          });
+          const json = await res.json();
+          if (json?.result?.data?.json?.completed === false) {
+            window.location.href = '/company/onboarding';
+          } else {
+            window.location.href = '/company/portal';
+          }
+        } catch {
+          window.location.href = '/company/portal';
+        }
       } else if (user?.role === 'candidate') {
         // Check if candidate has completed onboarding before redirecting
         try {

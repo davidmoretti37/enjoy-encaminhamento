@@ -103,6 +103,28 @@ export default function CandidateGroupManagement({ jobId, companyInterviewCandid
     [batchSessions]
   );
 
+  // Mutation to update candidate status (approve/reject)
+  const updateStatusMutation = trpc.batch.updateCandidateStatus.useMutation({
+    onSuccess: () => {
+      toast.success("Status do candidato atualizado!");
+      refetch();
+    },
+    onError: (error) => {
+      toast.error(error.message || "Erro ao atualizar status");
+    },
+  });
+
+  // Mutation to remove candidate from batch
+  const removeCandidateMutation = trpc.batch.removeCandidateFromBatch.useMutation({
+    onSuccess: () => {
+      toast.success("Candidato removido do grupo.");
+      refetch();
+    },
+    onError: (error) => {
+      toast.error(error.message || "Erro ao remover candidato");
+    },
+  });
+
   // Mutation to mark session attendance (conclude meeting)
   const markAttendanceMutation = trpc.batch.markSessionAttendance.useMutation({
     onSuccess: () => {
@@ -250,7 +272,9 @@ export default function CandidateGroupManagement({ jobId, companyInterviewCandid
   };
 
   const handleRemoveCandidate = (candidateId: string) => {
-    toast.info("Funcionalidade de remocao em desenvolvimento");
+    if (!currentBatch?.id) return;
+    if (!confirm("Tem certeza que deseja remover este candidato do grupo?")) return;
+    removeCandidateMutation.mutate({ batchId: currentBatch.id, candidateId });
   };
 
   // Get selected candidate names for modal
@@ -487,11 +511,35 @@ export default function CandidateGroupManagement({ jobId, companyInterviewCandid
                   {/* Status Badge */}
                   <div className="shrink-0">
                     {sectionType === "completed" && sessionInfo ? (
-                      // Show attendance status for completed section
-                      sessionInfo.participantStatus === "attended" ? (
-                        <div className="flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-green-50 text-green-700 border border-green-200">
+                      // Show pass/fail buttons or status for completed section
+                      batchCandidate.status === "approved" ? (
+                        <div className="flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700 border border-green-200">
                           <UserCheck className="w-3 h-3" />
-                          Compareceu
+                          Aprovado
+                        </div>
+                      ) : batchCandidate.status === "rejected" ? (
+                        <div className="flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-600 border border-red-200">
+                          <XCircle className="w-3 h-3" />
+                          Reprovado
+                        </div>
+                      ) : sessionInfo.participantStatus === "attended" ? (
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            onClick={(e) => { e.stopPropagation(); updateStatusMutation.mutate({ batchId: currentBatch.id, candidateId: candidate.id, status: "approved" }); }}
+                            disabled={updateStatusMutation.isPending}
+                            className="flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-green-600 text-white hover:bg-green-700 transition-colors"
+                          >
+                            <UserCheck className="w-3 h-3" />
+                            Aprovar
+                          </button>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); updateStatusMutation.mutate({ batchId: currentBatch.id, candidateId: candidate.id, status: "rejected" }); }}
+                            disabled={updateStatusMutation.isPending}
+                            className="flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-red-600 text-white hover:bg-red-700 transition-colors"
+                          >
+                            <XCircle className="w-3 h-3" />
+                            Reprovar
+                          </button>
                         </div>
                       ) : sessionInfo.participantStatus === "no_show" ? (
                         <div className="flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-red-50 text-red-600 border border-red-200">

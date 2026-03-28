@@ -280,7 +280,12 @@ export async function getBatchesByJobId(jobId: string): Promise<any[]> {
   const enriched = await Promise.all(
     (data || []).map(async (batch) => {
       const rawCandidates = await getCandidatesByIds(batch.candidate_ids || []);
-      const candidates = rawCandidates.map((c: any) => ({ candidate: c }));
+      const statuses = batch.candidate_statuses || {};
+      const candidates = rawCandidates.map((c: any) => ({
+        candidate: c,
+        status: statuses[c.id] || 'pending',
+        match_score: null,
+      }));
       return { ...batch, candidates };
     })
   );

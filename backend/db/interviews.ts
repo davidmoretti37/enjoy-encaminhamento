@@ -422,7 +422,7 @@ export async function markSessionAttendance(
       .from("interview_participants")
       .update({ status: entry.status })
       .eq("id", entry.participantId)
-      .eq("session_id", sessionId);
+      .eq("interview_session_id", sessionId);
 
     if (error) {
       console.error("[Database] Failed to update participant attendance:", error);

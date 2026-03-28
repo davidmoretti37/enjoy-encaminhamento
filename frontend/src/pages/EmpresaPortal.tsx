@@ -425,8 +425,14 @@ export default function EmpresaPortal() {
   const { user, loading: authLoading } = useAuth();
   const [, setLocation] = useLocation();
 
+  // Check onboarding status
+  const { data: onboardingStatus, isLoading: onboardingLoading } = trpc.company.checkOnboarding.useQuery(
+    undefined,
+    { enabled: !!user && user.role === "company" }
+  );
+
   // Auth loading
-  if (authLoading) {
+  if (authLoading || onboardingLoading) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center">
         <FunnelContentSkeleton />
@@ -437,6 +443,12 @@ export default function EmpresaPortal() {
   // Not logged in or not a company
   if (!user || user.role !== "company") {
     setLocation("/login");
+    return null;
+  }
+
+  // Company hasn't completed onboarding — redirect
+  if (onboardingStatus && !onboardingStatus.completed) {
+    setLocation("/company/onboarding");
     return null;
   }
 

@@ -34,9 +34,35 @@ export default function AuthCallback() {
           } else if (role === "agency") {
             setLocation("/agency/portal");
           } else if (role === "company") {
-            setLocation("/company/portal");
+            // Check if company onboarding is complete
+            try {
+              const onbRes = await fetch("/api/trpc/company.checkOnboarding", {
+                headers: { Authorization: `Bearer ${session.access_token}` },
+              });
+              const onbJson = await onbRes.json();
+              if (onbJson?.result?.data?.json?.completed === false) {
+                setLocation("/company/onboarding");
+              } else {
+                setLocation("/company/portal");
+              }
+            } catch {
+              setLocation("/company/portal");
+            }
           } else if (role === "candidate") {
-            setLocation("/candidate");
+            // Check if candidate onboarding is complete
+            try {
+              const onbRes = await fetch("/api/trpc/candidate.checkOnboarding", {
+                headers: { Authorization: `Bearer ${session.access_token}` },
+              });
+              const onbJson = await onbRes.json();
+              if (onbJson?.result?.data?.json?.completed === false) {
+                setLocation("/candidate/onboarding");
+              } else {
+                setLocation("/candidate");
+              }
+            } catch {
+              setLocation("/candidate");
+            }
           } else {
             setLocation("/candidate/onboarding");
           }

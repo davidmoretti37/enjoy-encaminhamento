@@ -667,6 +667,23 @@ export const batchRouter = router({
       return { success: true };
     }),
 
+  removeCandidateFromBatch: agencyProcedure
+    .input(z.object({
+      batchId: z.string().uuid(),
+      candidateId: z.string().uuid(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const batch = await batchDb.getBatchById(input.batchId);
+      if (!batch) throw new TRPCError({ code: 'NOT_FOUND', message: 'Batch not found' });
+
+      const newIds = (batch.candidate_ids || []).filter((id: string) => id !== input.candidateId);
+      await batchDb.updateBatch(input.batchId, {
+        candidate_ids: newIds,
+        batch_size: newIds.length,
+      });
+      return { success: true };
+    }),
+
   schedulePreSelectionSessions: agencyProcedure
     .input(z.object({
       batchId: z.string().uuid(),
