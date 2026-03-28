@@ -513,7 +513,10 @@ export function CandidateCard({
       toast.success("Cadastro atualizado!");
       setIsEditing(false);
     },
-    onError: (err: any) => toast.error(err.message || "Erro ao salvar"),
+    onError: (err: any) => {
+      console.error("[CandidateCard] Save error:", err);
+      toast.error(err.message || "Erro ao salvar");
+    },
   });
 
   const initials = (profile.name || "?")
