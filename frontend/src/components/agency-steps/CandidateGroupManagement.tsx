@@ -352,9 +352,9 @@ export default function CandidateGroupManagement({ jobId, companyInterviewCandid
                         onClick={() => {
                           markAttendanceMutation.mutate({
                             sessionId: session.id,
-                            attendees: participants.map((p: any) => ({
+                            attendance: participants.map((p: any) => ({
                               participantId: p.id,
-                              attended: true,
+                              status: "attended" as const,
                             })),
                           });
                         }}

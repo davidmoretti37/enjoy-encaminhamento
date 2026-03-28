@@ -221,7 +221,7 @@ export async function reRankCandidatesBatch(
     onProgress?: (completed: number, total: number) => void;
   } = {}
 ): Promise<Map<string, LLMReRankResult>> {
-  const { concurrency = 5, onProgress } = options;
+  const { concurrency = 2, onProgress } = options;
   const results = new Map<string, LLMReRankResult>();
 
   // Process in batches with concurrency limit

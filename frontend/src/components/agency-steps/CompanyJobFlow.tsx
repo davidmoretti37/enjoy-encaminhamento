@@ -782,12 +782,13 @@ function TypingIndicator() {
 function MatchingStatusCard({ jobId, autoTrigger }: { jobId: string; autoTrigger?: boolean }) {
   const utils = trpc.useUtils();
   const [hasTriggered, setHasTriggered] = useState(false);
+  const [isReSearching, setIsReSearching] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { data: progress, isLoading } = trpc.job.getMatchingProgress.useQuery(
     { jobId },
     { refetchInterval: (query: any) => {
       const status = query.state?.data?.status;
-      return (status === 'running' || status === 'pending' || status === 'not_started') ? 1500 : false;
+      return (status === 'running' || status === 'pending' || status === 'not_started' || isReSearching) ? 1500 : false;
     }}
   );
 
@@ -817,7 +818,14 @@ function MatchingStatusCard({ jobId, autoTrigger }: { jobId: string; autoTrigger
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages.length]);
 
-  const isRunning = !progress || progress.status === 'not_started' || progress.status === 'running' || progress.status === 'pending';
+  const isRunning = isReSearching || !progress || progress.status === 'not_started' || progress.status === 'running' || progress.status === 'pending';
+
+  // Stop re-searching state when progress shows completed after a re-search
+  useEffect(() => {
+    if (isReSearching && progress?.status === 'completed') {
+      setIsReSearching(false);
+    }
+  }, [isReSearching, progress?.status]);
 
   // Loading / Running state with chat bubbles
   if (isLoading || (autoTrigger && !hasTriggered) || isRunning) {
@@ -911,7 +919,10 @@ function MatchingStatusCard({ jobId, autoTrigger }: { jobId: string; autoTrigger
               size="sm"
               variant="outline"
               className="mt-3"
-              onClick={() => triggerMatchingMutation.mutate({ jobId })}
+              onClick={() => {
+                setIsReSearching(true);
+                triggerMatchingMutation.mutate({ jobId });
+              }}
               disabled={triggerMatchingMutation.isPending}
             >
               <Search className="h-4 w-4 mr-1.5" />

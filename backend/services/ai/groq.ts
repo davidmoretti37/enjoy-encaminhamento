@@ -45,35 +45,48 @@ export async function generateWithGroq(
 
   const { temperature = 0.7, maxTokens = 1024 } = options;
 
-  try {
-    const response = await fetch(OPENROUTER_API_URL, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-        'HTTP-Referer': process.env.APP_URL || 'http://localhost:5001',
-        'X-Title': 'Recruitment Platform',
-      },
-      body: JSON.stringify({
-        model: GROQ_MODEL,
-        messages,
-        temperature,
-        max_tokens: maxTokens,
-      }),
-    });
+  const MAX_RETRIES = 3;
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    try {
+      const response = await fetch(OPENROUTER_API_URL, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+          'HTTP-Referer': process.env.APP_URL || 'http://localhost:5001',
+          'X-Title': 'Recruitment Platform',
+        },
+        body: JSON.stringify({
+          model: GROQ_MODEL,
+          messages,
+          temperature,
+          max_tokens: maxTokens,
+        }),
+      });
 
-    if (!response.ok) {
-      const error = await response.text();
-      console.error('OpenRouter API error:', error);
-      throw new Error(`OpenRouter API error: ${response.status}`);
+      if (response.status === 429) {
+        const delay = 2000 * (attempt + 1);
+        console.warn(`[OpenRouter] Rate limited, retrying in ${delay}ms (attempt ${attempt + 1}/${MAX_RETRIES})`);
+        await new Promise(r => setTimeout(r, delay));
+        continue;
+      }
+
+      if (!response.ok) {
+        const error = await response.text();
+        console.error('OpenRouter API error:', error);
+        throw new Error(`OpenRouter API error: ${response.status}`);
+      }
+
+      const data: OpenRouterResponse = await response.json();
+      return data.choices[0]?.message?.content || '';
+    } catch (error) {
+      if (attempt === MAX_RETRIES - 1) {
+        console.error('Failed to generate with OpenRouter:', error);
+        return '';
+      }
     }
-
-    const data: OpenRouterResponse = await response.json();
-    return data.choices[0]?.message?.content || '';
-  } catch (error) {
-    console.error('Failed to generate with OpenRouter:', error);
-    return '';
   }
+  return '';
 }
 
 export { GROQ_MODEL };

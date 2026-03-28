@@ -666,4 +666,68 @@ export const batchRouter = router({
       });
       return { success: true };
     }),
+
+  schedulePreSelectionSessions: agencyProcedure
+    .input(z.object({
+      batchId: z.string().uuid(),
+      candidateIds: z.array(z.string().uuid()),
+      interviewType: z.enum(['online', 'in_person']),
+      sessionFormat: z.enum(['group', 'individual']),
+      scheduledAt: z.string(),
+      durationMinutes: z.number().default(30),
+      locationAddress: z.string().optional(),
+      locationCity: z.string().optional(),
+      locationState: z.string().optional(),
+      notes: z.string().optional(),
+      candidateSchedules: z.array(z.object({
+        candidateId: z.string().uuid(),
+        scheduledAt: z.string(),
+      })).optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const { createPreSelectionSession } = await import("../db/interviews");
+
+      const batch = await batchDb.getBatchById(input.batchId);
+      if (!batch) throw new TRPCError({ code: 'NOT_FOUND', message: 'Batch not found' });
+
+      if (input.sessionFormat === 'individual' && input.candidateSchedules?.length) {
+        // Create individual sessions for each candidate
+        const sessions = [];
+        for (const cs of input.candidateSchedules) {
+          const session = await createPreSelectionSession({
+            batchId: input.batchId,
+            jobId: batch.job_id,
+            companyId: batch.company_id,
+            interviewType: input.interviewType,
+            sessionFormat: 'individual',
+            scheduledAt: cs.scheduledAt,
+            durationMinutes: input.durationMinutes,
+            locationAddress: input.locationAddress,
+            locationCity: input.locationCity,
+            locationState: input.locationState,
+            notes: input.notes,
+            candidates: [{ candidateId: cs.candidateId, applicationId: null }],
+          });
+          sessions.push(session);
+        }
+        return { success: true, sessionsCreated: sessions.length };
+      } else {
+        // Create one group session with all candidates
+        const session = await createPreSelectionSession({
+          batchId: input.batchId,
+          jobId: batch.job_id,
+          companyId: batch.company_id,
+          interviewType: input.interviewType,
+          sessionFormat: input.sessionFormat,
+          scheduledAt: input.scheduledAt,
+          durationMinutes: input.durationMinutes,
+          locationAddress: input.locationAddress,
+          locationCity: input.locationCity,
+          locationState: input.locationState,
+          notes: input.notes,
+          candidates: input.candidateIds.map(id => ({ candidateId: id, applicationId: null })),
+        });
+        return { success: true, sessionsCreated: 1 };
+      }
+    }),
 });
