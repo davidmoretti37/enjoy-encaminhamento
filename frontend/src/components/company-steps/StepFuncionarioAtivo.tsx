@@ -1,4 +1,5 @@
 import { motion } from "framer-motion";
+import { useState } from "react";
 import { useCompanyFunnel } from "@/contexts/CompanyFunnelContext";
 import {
   User,
@@ -9,10 +10,18 @@ import {
   AlertCircle,
   BarChart,
   Briefcase,
+  ChevronDown,
+  ChevronUp,
+  DollarSign,
+  Shield,
+  Mail,
+  Phone,
+  MapPin,
 } from "lucide-react";
 import { CardEntrance } from "@/components/funnel";
 import { format, differenceInDays, addMonths } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { toast } from "sonner";
 
 export default function StepFuncionarioAtivo() {
   const { selectedJob, selectedJobId, hiringProcesses } = useCompanyFunnel();
@@ -118,6 +127,7 @@ export default function StepFuncionarioAtivo() {
 }
 
 function EmployeeCard({ employee }: { employee: any }) {
+  const [showDetails, setShowDetails] = useState(false);
   const candidate = employee.candidate;
   const isEstagio = employee.hiring_type === "estagio";
   const startDate = employee.start_date ? new Date(employee.start_date) : null;
@@ -252,6 +262,7 @@ function EmployeeCard({ employee }: { employee: any }) {
             <motion.button
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
+              onClick={() => toast.info("Relatório mensal em desenvolvimento")}
               className="px-6 py-3 rounded-full bg-[#0A2342] text-white font-semibold shadow-lg shadow-green-500/25 hover:shadow-green-500/40 transition-all flex items-center justify-center gap-2"
             >
               <BarChart className="w-5 h-5" />
@@ -260,15 +271,82 @@ function EmployeeCard({ employee }: { employee: any }) {
           </div>
         </div>
 
-        {/* Footer with link-style secondary action */}
+        {/* Contract details toggle */}
         <div className="p-4 border-t border-slate-200/50 bg-slate-50/30">
-          <motion.button
-            whileHover={{ x: 4 }}
+          <button
+            onClick={() => setShowDetails(!showDetails)}
             className="text-sm text-slate-600 hover:text-[#0A2342] font-medium transition-all flex items-center gap-2"
           >
             <FileText className="w-4 h-4" />
             Ver Detalhes do Contrato
-          </motion.button>
+            {showDetails ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+          </button>
+
+          {showDetails && (
+            <div className="mt-4 space-y-3">
+              {/* Contract info */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="p-3 rounded-lg bg-white border border-slate-200">
+                  <p className="text-xs text-slate-500">Tipo de Contrato</p>
+                  <p className="text-sm font-semibold text-[#0A2342]">
+                    {isEstagio ? "Estágio" : employee.hiring_type === "clt" ? "CLT" : employee.hiring_type === "pj" ? "PJ" : employee.hiring_type === "menor_aprendiz" || employee.hiring_type === "menor-aprendiz" ? "Jovem Aprendiz" : employee.hiring_type}
+                  </p>
+                </div>
+                {employee.monthly_fee != null && (
+                  <div className="p-3 rounded-lg bg-white border border-slate-200">
+                    <p className="text-xs text-slate-500 flex items-center gap-1"><DollarSign className="w-3 h-3" /> Taxa Mensal</p>
+                    <p className="text-sm font-semibold text-[#0A2342]">R$ {(employee.monthly_fee / 100).toFixed(2)}</p>
+                  </div>
+                )}
+                {employee.payment_day && (
+                  <div className="p-3 rounded-lg bg-white border border-slate-200">
+                    <p className="text-xs text-slate-500">Dia de Pagamento</p>
+                    <p className="text-sm font-semibold text-[#0A2342]">Dia {employee.payment_day}</p>
+                  </div>
+                )}
+                {employee.duration_months && (
+                  <div className="p-3 rounded-lg bg-white border border-slate-200">
+                    <p className="text-xs text-slate-500">Duração</p>
+                    <p className="text-sm font-semibold text-[#0A2342]">{employee.duration_months} meses</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Candidate contact */}
+              {candidate && (
+                <div className="p-3 rounded-lg bg-white border border-slate-200">
+                  <p className="text-xs text-slate-500 mb-2">Contato do Funcionário</p>
+                  <div className="flex flex-wrap gap-3 text-sm">
+                    {candidate.email && (
+                      <span className="flex items-center gap-1 text-slate-600">
+                        <Mail className="w-3.5 h-3.5 text-slate-400" /> {candidate.email}
+                      </span>
+                    )}
+                    {candidate.phone && (
+                      <span className="flex items-center gap-1 text-slate-600">
+                        <Phone className="w-3.5 h-3.5 text-slate-400" /> {candidate.phone}
+                      </span>
+                    )}
+                    {candidate.city && (
+                      <span className="flex items-center gap-1 text-slate-600">
+                        <MapPin className="w-3.5 h-3.5 text-slate-400" /> {candidate.city}{candidate.state ? `, ${candidate.state}` : ""}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Insurance status for estágio */}
+              {isEstagio && (
+                <div className="p-3 rounded-lg bg-white border border-slate-200">
+                  <p className="text-xs text-slate-500 flex items-center gap-1 mb-1"><Shield className="w-3 h-3" /> Seguro Estágio</p>
+                  <p className="text-sm font-semibold text-[#0A2342]">
+                    {employee.insurance_status === "active" ? "✓ Ativo" : employee.insurance_status === "expired" ? "⚠ Expirado" : "Pendente"}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </motion.div>

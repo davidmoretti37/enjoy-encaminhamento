@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useCompanyFunnel } from "@/contexts/CompanyFunnelContext";
 import {
   Video,
@@ -12,6 +12,7 @@ import {
   Briefcase,
   CheckSquare,
   CheckCircle2,
+  UserPlus,
 } from "lucide-react";
 import { CardEntrance } from "@/components/funnel";
 import { trpc } from "@/lib/trpc";
@@ -118,6 +119,20 @@ function ReceivedState({
     });
   };
 
+  // Initialize completedInterviews from already-completed sessions
+  useEffect(() => {
+    const alreadyCompleted = interviews
+      .filter((i: any) => i.status === "completed")
+      .map((i: any) => i.id);
+    if (alreadyCompleted.length > 0) {
+      setCompletedInterviews((prev) => {
+        const next = new Set(prev);
+        alreadyCompleted.forEach((id: string) => next.add(id));
+        return next;
+      });
+    }
+  }, [interviews]);
+
   // Get company interview sessions for the selected job
   const jobInterviews = interviews.filter(
     (i: any) =>
@@ -209,12 +224,33 @@ function ReceivedState({
     },
   });
 
-  const toggleInterviewCompleted = (interviewId: string) => {
-    setCompletedInterviews((prev) => {
-      const next = new Set(prev);
-      if (next.has(interviewId)) next.delete(interviewId);
-      else next.add(interviewId);
-      return next;
+  const markAttendanceMutation = trpc.interview.markAttendance.useMutation({
+    onSuccess: (data) => {
+      toast.success("Entrevista marcada como realizada!");
+      setCompletedInterviews((prev) => new Set([...prev, markingSessionId!]));
+      setMarkingSessionId(null);
+      utils.interview.getCompanyInterviews.invalidate();
+      utils.batch.getUnlockedBatches.invalidate();
+    },
+    onError: (error) => {
+      toast.error(error.message || "Erro ao marcar entrevista");
+      setMarkingSessionId(null);
+    },
+  });
+
+  const [markingSessionId, setMarkingSessionId] = useState<string | null>(null);
+
+  const handleMarkCompleted = (interview: any) => {
+    if (completedInterviews.has(interview.id) || interview.status === "completed") return;
+    setMarkingSessionId(interview.id);
+    // Mark all participants as attended
+    const attendees = (interview.participants || []).map((p: any) => ({
+      participantId: p.id,
+      attended: true,
+    }));
+    markAttendanceMutation.mutate({
+      sessionId: interview.id,
+      attendees,
     });
   };
 
@@ -491,20 +527,44 @@ function ReceivedState({
                         </a>
                       )}
                       <button
-                        onClick={() => toggleInterviewCompleted(interview.id)}
+                        onClick={() => handleMarkCompleted(interview)}
+                        disabled={completedInterviews.has(interview.id) || interview.status === "completed" || markingSessionId === interview.id}
                         className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                          completedInterviews.has(interview.id)
-                            ? "bg-green-600 text-white border border-green-600"
-                            : "border border-green-200 bg-green-50 text-green-700 hover:bg-green-100"
+                          completedInterviews.has(interview.id) || interview.status === "completed"
+                            ? "bg-green-600 text-white border border-green-600 cursor-default"
+                            : markingSessionId === interview.id
+                              ? "bg-green-100 text-green-500 border border-green-200 cursor-wait"
+                              : "border border-green-200 bg-green-50 text-green-700 hover:bg-green-100"
                         }`}
                       >
-                        <CheckCircle2 className="w-3.5 h-3.5" />
-                        Realizado
+                        {markingSessionId === interview.id ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                        )}
+                        {completedInterviews.has(interview.id) || interview.status === "completed" ? "Concluída" : "Realizado"}
                       </button>
                     </div>
                   </div>
                 );
               })}
+            </div>
+          </div>
+        </CardEntrance>
+      )}
+
+      {/* Hiring CTA — shown when interviews are completed */}
+      {interviews.some((i: any) => completedInterviews.has(i.id) || i.status === "completed") && allCandidates.length > 0 && (
+        <CardEntrance direction="forward" delay={0.2}>
+          <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl border border-green-200 p-5">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-8 h-8 rounded-lg bg-green-100 flex items-center justify-center">
+                <UserPlus className="w-4 h-4 text-green-700" />
+              </div>
+              <div>
+                <h4 className="font-semibold text-green-900">Pronto para contratar?</h4>
+                <p className="text-xs text-green-600">Selecione os candidatos aprovados na lista acima e clique em "Contratar"</p>
+              </div>
             </div>
           </div>
         </CardEntrance>
