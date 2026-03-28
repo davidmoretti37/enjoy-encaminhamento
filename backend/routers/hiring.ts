@@ -192,7 +192,7 @@ export const hiringRouter = router({
         });
       }
 
-      const hiringType = job.contract_type as "estagio" | "clt" | "menor-aprendiz";
+      const hiringType = job.contract_type as string;
       const startDate = new Date(input.startDate);
 
       // Calculate fee
@@ -203,7 +203,7 @@ export const hiringRouter = router({
         const activeEstagios = await hiringDb.countActiveEstagioContracts(company.id);
         isFirstIntern = activeEstagios === 0;
         calculatedFee = hiringDb.calculateEstagioFee(isFirstIntern);
-      } else if (hiringType === "clt") {
+      } else if (hiringType === "clt" || hiringType === "pj") {
         const salary = input.monthlySalary || job.salary || 0;
         calculatedFee = hiringDb.calculateCLTFee(salary);
       }
