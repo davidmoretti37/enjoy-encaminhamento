@@ -189,6 +189,23 @@ export default function CompanySettingsScreen() {
       onSelectorChange={undefined}
     >
       <div className="space-y-6">
+        {/* Tab navigation */}
+        <div className="flex flex-wrap gap-2">
+          {Object.entries(sectionTitles).map(([key, label]) => (
+            <button
+              key={key}
+              onClick={() => setActiveTab(key)}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                activeTab === key
+                  ? 'bg-[#0A2342] text-white'
+                  : 'bg-white border-2 border-slate-200 text-slate-600 hover:border-[#FF6B35]/50 hover:text-[#0A2342]'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
         {/* Section title */}
         <h2 className="text-2xl font-bold text-[#0A2342]">{sectionTitles[activeTab] || "Configurações"}</h2>
 
