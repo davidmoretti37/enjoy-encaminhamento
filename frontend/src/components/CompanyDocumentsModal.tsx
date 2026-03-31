@@ -898,6 +898,48 @@ export default function CompanyDocumentsModal({
                                   </div>
                                 ))}
                               </div>
+
+                              {/* Upload contract document for this employee */}
+                              <div className="pt-2 border-t border-gray-200">
+                                {hp.contract_document_url ? (
+                                  <a href={hp.contract_document_url} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 hover:underline flex items-center gap-1">
+                                    <FileText className="h-3.5 w-3.5" />
+                                    Ver contrato do funcionário
+                                  </a>
+                                ) : (
+                                  <label className="cursor-pointer inline-flex items-center gap-2 px-3 py-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm">
+                                    <Upload className="h-3.5 w-3.5" />
+                                    Upload Contrato
+                                    <input
+                                      type="file"
+                                      accept=".pdf"
+                                      className="hidden"
+                                      onChange={(e) => {
+                                        const file = e.target.files?.[0];
+                                        if (!file) return;
+                                        const reader = new FileReader();
+                                        reader.onload = async () => {
+                                          const base64 = (reader.result as string).split(',')[1];
+                                          const sanitizedName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+                                          try {
+                                            const { storagePut } = await import('@/lib/trpc').then(() => ({ storagePut: null }));
+                                            // Use the uploadSignedContract mutation
+                                            uploadMutation.mutate({
+                                              companyEmail: meeting?.company_email || '',
+                                              fileBase64: base64,
+                                              fileName: `employee-${hp.candidate?.full_name?.replace(/[^a-zA-Z0-9]/g, '_') || 'contract'}-${sanitizedName}`,
+                                            });
+                                          } catch (err: any) {
+                                            toast.error('Erro ao enviar: ' + (err.message || ''));
+                                          }
+                                        };
+                                        reader.readAsDataURL(file);
+                                        e.target.value = '';
+                                      }}
+                                    />
+                                  </label>
+                                )}
+                              </div>
                             </div>
                           );
                         })}
