@@ -1016,6 +1016,33 @@ export const companyRouter = router({
       return { success: true, receiptUrl: url };
     }),
 
+  // Upload employee contract document
+  uploadEmployeeContract: companyProcedure
+    .input(z.object({
+      hiringProcessId: z.string(),
+      fileName: z.string(),
+      fileData: z.string(),
+      contentType: z.string(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const company = await db.getCompanyByUserId(ctx.user.id);
+      if (!company) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Company not found' });
+      }
+
+      const sanitizedName = input.fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const fileBuffer = Buffer.from(input.fileData, 'base64');
+      const storageKey = `contracts/employees/${company.id}/${input.hiringProcessId}/${Date.now()}-${sanitizedName}`;
+      const { url } = await storagePut(storageKey, fileBuffer, input.contentType);
+
+      // Update hiring process with contract document URL
+      await supabaseAdmin.from('hiring_processes').update({
+        contract_document_url: url,
+      }).eq('id', input.hiringProcessId).eq('company_id', company.id);
+
+      return { success: true, url };
+    }),
+
   // Settings
   getCompanyInfo: companyProcedure.query(async ({ ctx }) => {
     const company = await db.getCompanyByUserId(ctx.user.id);

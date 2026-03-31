@@ -17,7 +17,6 @@ import {
   Phone,
   MapPin,
   Upload,
-  FileText,
 } from "lucide-react";
 import { CardEntrance } from "@/components/funnel";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -208,6 +207,14 @@ export default function StepFuncionarioAtivo() {
 
 function EmployeeCard({ employee, onOpenReport }: { employee: any; onOpenReport: (emp: any) => void }) {
   const [showDetails, setShowDetails] = useState(false);
+  const uploadContractMutation = trpc.company.uploadEmployeeContract.useMutation({
+    onSuccess: () => {
+      toast.success('Contrato enviado com sucesso!');
+    },
+    onError: (error: any) => {
+      toast.error(error.message || 'Erro ao enviar contrato');
+    },
+  });
   const candidate = employee.candidate;
   const isEstagio = employee.hiring_type === "estagio";
   const startDate = employee.start_date ? new Date(employee.start_date) : null;
@@ -394,10 +401,21 @@ function EmployeeCard({ employee, onOpenReport }: { employee: any; onOpenReport:
                     type="file"
                     accept=".pdf,image/*"
                     className="hidden"
+                    disabled={uploadContractMutation.isPending}
                     onChange={(e) => {
                       const file = e.target.files?.[0];
                       if (!file) return;
-                      toast.info("Funcionalidade de upload será disponibilizada em breve");
+                      const reader = new FileReader();
+                      reader.onload = () => {
+                        const base64 = (reader.result as string).split(',')[1];
+                        uploadContractMutation.mutate({
+                          hiringProcessId: employee.id,
+                          fileName: file.name,
+                          fileData: base64,
+                          contentType: file.type,
+                        });
+                      };
+                      reader.readAsDataURL(file);
                       e.target.value = '';
                     }}
                   />
