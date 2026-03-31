@@ -1447,4 +1447,28 @@ Regras:
 
       return { success: true };
     }),
+
+  // Upload employee contract document (agency)
+  uploadEmployeeContract: agencyProcedure
+    .input(z.object({
+      hiringProcessId: z.string(),
+      fileName: z.string(),
+      fileData: z.string(),
+      contentType: z.string(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const { storagePut } = await import('../storage');
+      const sanitizedName = input.fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const fileBuffer = Buffer.from(input.fileData, 'base64');
+      const storageKey = `contracts/employees/${input.hiringProcessId}/${Date.now()}-${sanitizedName}`;
+      const { url } = await storagePut(storageKey, fileBuffer, input.contentType);
+
+      await supabaseAdmin.from('hiring_processes').update({
+        contract_document_url: url,
+        company_signed: true,
+        company_signed_at: new Date().toISOString(),
+      }).eq('id', input.hiringProcessId);
+
+      return { success: true, url };
+    }),
 });
