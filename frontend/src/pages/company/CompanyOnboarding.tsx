@@ -394,7 +394,7 @@ export default function CompanyOnboarding() {
       compensation: formData.compensation,
       mainActivities: formData.mainActivities,
       requiredSkills: formData.requiredSkills,
-      employmentType: formData.employmentType || undefined,
+      employmentType: (formData.employmentType || undefined) as "estagio" | "clt" | "menor-aprendiz" | "pj" | "jovem_aprendiz" | undefined,
       urgency: formData.urgency || undefined,
       ageRange: `${formData.minAge}-${formData.maxAge}`,
       educationLevel: formData.educationLevels.join(','),

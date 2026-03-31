@@ -564,7 +564,7 @@ function ReceivedState({
 
       {/* Hiring CTA — shown when interviews are completed */}
       {interviews.some((i: any) => completedInterviews.has(i.id) || i.status === "completed") && allCandidates.length > 0 && (
-        <CardEntrance direction="forward" delay={0.2}>
+        <CardEntrance delay={0.2}>
           <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl border border-green-200 p-5">
             <div className="flex items-center gap-3 mb-3">
               <div className="w-8 h-8 rounded-lg bg-green-100 flex items-center justify-center">

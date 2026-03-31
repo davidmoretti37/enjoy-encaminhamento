@@ -83,7 +83,7 @@ export default function PublicVagasPage() {
     if (isDev) {
       // Use tRPC data in dev
       if (trpcQuery.data) {
-        setJobs(trpcQuery.data as Job[]);
+        setJobs(trpcQuery.data as unknown as Job[]);
       }
       setIsLoading(trpcQuery.isLoading);
       setError(trpcQuery.error?.message || null);

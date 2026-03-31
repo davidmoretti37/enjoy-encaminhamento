@@ -357,6 +357,7 @@ function EmpresaPortalContent() {
                   <SelectContent>
                     <SelectItem value="estagio">Estágio</SelectItem>
                     <SelectItem value="clt">CLT</SelectItem>
+                    <SelectItem value="pj">PJ</SelectItem>
                     <SelectItem value="menor-aprendiz">Menor Aprendiz</SelectItem>
                   </SelectContent>
                 </Select>

@@ -443,7 +443,7 @@ function MatchedCandidatesList({ jobId, onGroupCreated }: { jobId: string; onGro
           </div>
 
       {/* Score filter */}
-      {data.matches.length > 5 && (
+      {data && data.matches.length > 5 && (
         <Card className="p-3 mb-3">
           <div className="flex items-center gap-3">
             <SlidersHorizontal className="h-4 w-4 text-gray-400 shrink-0" />
@@ -462,7 +462,7 @@ function MatchedCandidatesList({ jobId, onGroupCreated }: { jobId: string; onGro
               />
             </div>
             <span className="text-xs text-gray-500 shrink-0">
-              {filteredMatches.length}/{data.matches.length}
+              {filteredMatches.length}/{data?.matches.length}
             </span>
           </div>
         </Card>
@@ -1091,16 +1091,15 @@ function ConfigureContractButton({
   // Fetch available document templates for this hiring type
   const { data: templates, isLoading: templatesLoading } = trpc.agency.getDocumentTemplates.useQuery(
     { category: templateCategory },
-    {
-      enabled: open,
-      onSuccess: (data: any[]) => {
-        // Select all by default when first loaded
-        if (selectedTemplateIds.length === 0 && data.length > 0) {
-          setSelectedTemplateIds(data.map((t: any) => t.id));
-        }
-      },
-    }
+    { enabled: open }
   );
+
+  // Select all templates by default when first loaded
+  useEffect(() => {
+    if (templates && templates.length > 0 && selectedTemplateIds.length === 0) {
+      setSelectedTemplateIds(templates.map((t: any) => t.id));
+    }
+  }, [templates]);
 
   const toggleTemplate = (templateId: string) => {
     setSelectedTemplateIds((prev) =>

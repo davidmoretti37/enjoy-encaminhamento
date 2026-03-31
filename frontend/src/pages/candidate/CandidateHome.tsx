@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { useAuth } from "@/_core/hooks/useAuth";
 import DashboardLayout from "@/components/DashboardLayout";
 import ContentTransition from "@/components/ui/ContentTransition";

@@ -83,6 +83,8 @@ export default function CompanyDocumentsModal({
     date: string;
     signature: string | null;
   } | null>(null);
+  const [editingCompany, setEditingCompany] = useState(false);
+  const [editForm, setEditForm] = useState<Record<string, string>>({});
 
   const toggleSection = (section: string) => {
     setOpenSections(prev => ({ ...prev, [section]: !prev[section] }));
@@ -106,6 +108,54 @@ export default function CompanyDocumentsModal({
       setIsUploading(false);
     },
   });
+
+  const updateCompanyMutation = trpc.agency.updateCompanyProfile.useMutation({
+    onSuccess: () => {
+      toast.success("Dados da empresa atualizados!");
+      setEditingCompany(false);
+      refetch();
+    },
+    onError: (error: any) => {
+      toast.error(error.message || "Erro ao salvar");
+    },
+  });
+
+  const handleStartEdit = () => {
+    if (!displayData) return;
+    setEditForm({
+      companyName: displayData.legal_name || displayData.company_name || '',
+      businessName: displayData.business_name || '',
+      cnpj: displayData.cnpj || '',
+      email: displayData.email || '',
+      contactPerson: displayData.contact_person || '',
+      phone: displayData.contact_phone || displayData.mobile_phone || '',
+      mobilePhone: displayData.mobile_phone || '',
+      landlinePhone: displayData.landline_phone || '',
+      cep: displayData.cep || '',
+      address: displayData.address || '',
+      complement: displayData.complement || '',
+      neighborhood: displayData.neighborhood || '',
+      city: displayData.city || '',
+      state: displayData.state || '',
+      website: displayData.website || '',
+      socialMedia: displayData.social_media || '',
+      employeeCount: displayData.employee_count || '',
+      description: displayData.description || '',
+    });
+    setEditingCompany(true);
+  };
+
+  const handleSaveCompany = () => {
+    const companyId = displayData?.id || companyData?.id;
+    if (!companyId) {
+      toast.error("ID da empresa não encontrado");
+      return;
+    }
+    updateCompanyMutation.mutate({
+      companyId,
+      ...editForm,
+    });
+  };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -146,6 +196,7 @@ export default function CompanyDocumentsModal({
 
   // Use company data if form data doesn't exist (for companies that went through onboarding)
   const displayData = formData || (companyData ? {
+    id: companyData.id,
     legal_name: companyData.company_name,
     business_name: companyData.business_name,
     cnpj: companyData.cnpj,
@@ -157,6 +208,9 @@ export default function CompanyDocumentsModal({
     website: companyData.website,
     social_media: companyData.social_media,
     employee_count: companyData.employee_count,
+    company_size: companyData.company_size,
+    industry: companyData.industry,
+    description: companyData.description,
     cep: companyData.cep,
     address: companyData.address,
     complement: companyData.complement,
@@ -223,11 +277,48 @@ export default function CompanyDocumentsModal({
               {/* Company Info Section - Always visible (FIRST) */}
               {displayData ? (
                 <div className="p-4 rounded-lg border bg-white space-y-4">
-                  <div className="flex items-center gap-2 pb-2 border-b">
-                    <Building2 className="h-5 w-5 text-purple-600" />
-                    <h3 className="font-semibold">Dados da Empresa</h3>
+                  <div className="flex items-center justify-between pb-2 border-b">
+                    <div className="flex items-center gap-2">
+                      <Building2 className="h-5 w-5 text-purple-600" />
+                      <h3 className="font-semibold">Dados da Empresa</h3>
+                    </div>
+                    {!editingCompany ? (
+                      <Button variant="outline" size="sm" onClick={handleStartEdit}>
+                        <PenLine className="w-4 h-4 mr-1" /> Editar
+                      </Button>
+                    ) : (
+                      <div className="flex gap-2">
+                        <Button variant="outline" size="sm" onClick={() => setEditingCompany(false)}>Cancelar</Button>
+                        <Button size="sm" onClick={handleSaveCompany} disabled={updateCompanyMutation.isPending}>
+                          {updateCompanyMutation.isPending ? 'Salvando...' : 'Salvar'}
+                        </Button>
+                      </div>
+                    )}
                   </div>
 
+                  {editingCompany ? (
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
+                      <div><Label className="text-xs text-muted-foreground">Razão Social</Label><Input value={editForm.companyName} onChange={e => setEditForm({...editForm, companyName: e.target.value})} /></div>
+                      <div><Label className="text-xs text-muted-foreground">Nome Fantasia</Label><Input value={editForm.businessName} onChange={e => setEditForm({...editForm, businessName: e.target.value})} /></div>
+                      <div><Label className="text-xs text-muted-foreground">CNPJ/CPF</Label><Input value={editForm.cnpj} onChange={e => setEditForm({...editForm, cnpj: e.target.value})} /></div>
+                      <div><Label className="text-xs text-muted-foreground">Responsável</Label><Input value={editForm.contactPerson} onChange={e => setEditForm({...editForm, contactPerson: e.target.value})} /></div>
+                      <div><Label className="text-xs text-muted-foreground">Email</Label><Input value={editForm.email} onChange={e => setEditForm({...editForm, email: e.target.value})} /></div>
+                      <div><Label className="text-xs text-muted-foreground">Telefone</Label><Input value={editForm.phone} onChange={e => setEditForm({...editForm, phone: e.target.value})} /></div>
+                      <div><Label className="text-xs text-muted-foreground">Celular</Label><Input value={editForm.mobilePhone} onChange={e => setEditForm({...editForm, mobilePhone: e.target.value})} /></div>
+                      <div><Label className="text-xs text-muted-foreground">Fixo</Label><Input value={editForm.landlinePhone} onChange={e => setEditForm({...editForm, landlinePhone: e.target.value})} /></div>
+                      <div><Label className="text-xs text-muted-foreground">CEP</Label><Input value={editForm.cep} onChange={e => setEditForm({...editForm, cep: e.target.value})} /></div>
+                      <div><Label className="text-xs text-muted-foreground">Endereço</Label><Input value={editForm.address} onChange={e => setEditForm({...editForm, address: e.target.value})} /></div>
+                      <div><Label className="text-xs text-muted-foreground">Complemento</Label><Input value={editForm.complement} onChange={e => setEditForm({...editForm, complement: e.target.value})} /></div>
+                      <div><Label className="text-xs text-muted-foreground">Bairro</Label><Input value={editForm.neighborhood} onChange={e => setEditForm({...editForm, neighborhood: e.target.value})} /></div>
+                      <div><Label className="text-xs text-muted-foreground">Cidade</Label><Input value={editForm.city} onChange={e => setEditForm({...editForm, city: e.target.value})} /></div>
+                      <div><Label className="text-xs text-muted-foreground">Estado</Label><Input value={editForm.state} onChange={e => setEditForm({...editForm, state: e.target.value})} /></div>
+                      <div><Label className="text-xs text-muted-foreground">Website</Label><Input value={editForm.website} onChange={e => setEditForm({...editForm, website: e.target.value})} /></div>
+                      <div><Label className="text-xs text-muted-foreground">Redes Sociais</Label><Input value={editForm.socialMedia} onChange={e => setEditForm({...editForm, socialMedia: e.target.value})} /></div>
+                      <div><Label className="text-xs text-muted-foreground">Nº Funcionários</Label><Input value={editForm.employeeCount} onChange={e => setEditForm({...editForm, employeeCount: e.target.value})} /></div>
+                      <div className="col-span-2 md:col-span-3"><Label className="text-xs text-muted-foreground">Descrição</Label><Input value={editForm.description} onChange={e => setEditForm({...editForm, description: e.target.value})} /></div>
+                    </div>
+                  ) : (
+                  <>
                   {/* Basic Info */}
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
                     <div>
@@ -344,12 +435,45 @@ export default function CompanyDocumentsModal({
                   )}
 
                   {/* Website */}
-                  {displayData.website && (
-                    <div className="text-sm">
-                      <span className="text-muted-foreground">Website</span>
-                      <p className="font-medium">{displayData.website}</p>
-                    </div>
-                  )}
+                  {/* Additional Info */}
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
+                    {displayData.website && (
+                      <div>
+                        <span className="text-muted-foreground">Website</span>
+                        <p className="font-medium">{displayData.website}</p>
+                      </div>
+                    )}
+                    {displayData.social_media && (
+                      <div>
+                        <span className="text-muted-foreground">Redes Sociais</span>
+                        <p className="font-medium">{displayData.social_media}</p>
+                      </div>
+                    )}
+                    {displayData.employee_count && (
+                      <div>
+                        <span className="text-muted-foreground">Nº Funcionários</span>
+                        <p className="font-medium">{displayData.employee_count}</p>
+                      </div>
+                    )}
+                    {displayData.company_size && (
+                      <div>
+                        <span className="text-muted-foreground">Porte</span>
+                        <p className="font-medium">{displayData.company_size}</p>
+                      </div>
+                    )}
+                    {displayData.industry && (
+                      <div>
+                        <span className="text-muted-foreground">Setor</span>
+                        <p className="font-medium">{displayData.industry}</p>
+                      </div>
+                    )}
+                    {displayData.description && (
+                      <div className="col-span-2 md:col-span-3">
+                        <span className="text-muted-foreground">Descrição</span>
+                        <p className="font-medium">{displayData.description}</p>
+                      </div>
+                    )}
+                  </div>
 
                   {/* Job Info */}
                   {displayData.job_title && (
@@ -382,6 +506,8 @@ export default function CompanyDocumentsModal({
                         )}
                       </div>
                     </div>
+                  )}
+                  </>
                   )}
                 </div>
               ) : (

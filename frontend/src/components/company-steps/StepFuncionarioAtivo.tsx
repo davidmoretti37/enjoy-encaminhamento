@@ -6,7 +6,6 @@ import {
   Calendar,
   FileText,
   Clock,
-  CheckCircle,
   AlertCircle,
   BarChart,
   Briefcase,
@@ -19,12 +18,64 @@ import {
   MapPin,
 } from "lucide-react";
 import { CardEntrance } from "@/components/funnel";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { trpc } from "@/lib/trpc";
 import { format, differenceInDays, addMonths } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
 
 export default function StepFuncionarioAtivo() {
   const { selectedJob, selectedJobId, hiringProcesses } = useCompanyFunnel();
+  const [reportModalOpen, setReportModalOpen] = useState(false);
+  const [selectedEmployee, setSelectedEmployee] = useState<any>(null);
+  const [reportForm, setReportForm] = useState({
+    rating: '',
+    strengths: '',
+    improvements: '',
+    notes: '',
+  });
+
+  const utils = trpc.useUtils();
+
+  const submitReportMutation = trpc.company.submitMonthlyReport.useMutation({
+    onSuccess: () => {
+      toast.success('Relatório enviado com sucesso!');
+      setReportModalOpen(false);
+      setReportForm({ rating: '', strengths: '', improvements: '', notes: '' });
+      setSelectedEmployee(null);
+    },
+    onError: (error: any) => {
+      toast.error(error.message || 'Erro ao enviar relatório');
+    },
+  });
+
+  const handleOpenReport = (employee: any) => {
+    setSelectedEmployee(employee);
+    setReportModalOpen(true);
+  };
+
+  const handleSubmitReport = () => {
+    if (!reportForm.rating) {
+      toast.error('Selecione uma avaliação');
+      return;
+    }
+    if (!selectedEmployee) return;
+
+    const now = new Date();
+    submitReportMutation.mutate({
+      contractId: selectedEmployee.contract_id || selectedEmployee.id,
+      periodMonth: now.getMonth() + 1,
+      periodYear: now.getFullYear(),
+      rating: reportForm.rating as 'excellent' | 'good' | 'regular' | 'needs_improvement',
+      strengths: reportForm.strengths || undefined,
+      improvements: reportForm.improvements || undefined,
+      notes: reportForm.notes || undefined,
+    });
+  };
 
   // Filter active employees for selected job
   const activeEmployees = hiringProcesses.filter(
@@ -52,304 +103,282 @@ export default function StepFuncionarioAtivo() {
   }
 
   return (
-    <div className="space-y-6 relative">
-      {/* Floating decorative elements */}
-      <div className="absolute -top-20 -right-20 w-64 h-64 bg-gradient-to-br from-green-500/5 to-emerald-500/5 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute top-40 -left-32 w-80 h-80 bg-gradient-to-br from-blue-500/5 to-[#0A2342]/5 rounded-full blur-3xl pointer-events-none" />
-
-      {/* Animated guidance banner */}
-      <motion.div
-        initial={{ opacity: 0, y: -10 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-green-500/10 via-emerald-500/10 to-green-500/10 border border-green-500/20"
-      >
-        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent animate-shimmer" style={{ animationDuration: '3s' }} />
-        <div className="relative p-4 flex items-start gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center shadow-lg shrink-0">
-            <CheckCircle className="w-5 h-5 text-white" />
-          </div>
-          <div>
-            <p className="text-sm text-[#0A2342] font-medium">Funcionários Ativos</p>
-            <p className="text-xs text-slate-600 mt-0.5">
-              Gere relatórios mensais para conformidade e acompanhamento de desempenho
-            </p>
-          </div>
-        </div>
-      </motion.div>
-
-      {/* Header stats */}
+    <div className="space-y-4">
+      {/* Header */}
       <CardEntrance>
-        <div className="relative group">
-          {/* Glow effect on hover */}
-          <div className="absolute -inset-0.5 bg-gradient-to-r from-green-500 via-emerald-500 to-green-500 rounded-2xl opacity-0 group-hover:opacity-10 blur transition-opacity" />
-
-          <div className="relative bg-white/80 backdrop-blur-xl rounded-2xl border border-slate-200/50 shadow-xl overflow-hidden p-6">
-            {/* Gradient accent bar */}
-            <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-green-500 via-emerald-500 to-green-500" />
-
-            <div className="pt-2 flex items-center gap-4">
-              <motion.div
-                whileHover={{ scale: 1.05, rotate: 5 }}
-                className="relative"
-              >
-                <div className="absolute inset-0 bg-gradient-to-br from-green-500 to-emerald-600 rounded-2xl blur-lg opacity-40 animate-pulse" />
-                <div className="relative w-16 h-16 rounded-2xl bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center shadow-lg">
-                  <Briefcase className="w-8 h-8 text-white" />
-                </div>
-              </motion.div>
-
-              <div>
-                <h2 className="text-2xl font-bold text-[#0A2342] tracking-tight">
-                  Funcionários Ativos
-                </h2>
-                <p className="text-slate-600 text-sm mt-1 flex items-center gap-2">
-                  <span className="px-2 py-0.5 rounded-full bg-green-500/20 text-green-600 font-semibold">
-                    {activeEmployees.length}
-                  </span>
-                  funcionário{activeEmployees.length !== 1 ? 's' : ''} em <span className="font-semibold text-[#0A2342]">{selectedJob.title}</span>
-                </p>
-              </div>
+        <div className="bg-white rounded-xl border border-slate-200 p-5">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-green-500/10 flex items-center justify-center">
+              <Briefcase className="w-5 h-5 text-green-600" />
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold text-[#0A2342]">
+                Funcionários Ativos
+              </h2>
+              <p className="text-slate-500 text-sm">
+                <span className="text-[#0A2342] font-medium">
+                  {activeEmployees.length}
+                </span>{" "}
+                funcionário{activeEmployees.length !== 1 ? "s" : ""} em{" "}
+                <span className="font-medium text-[#0A2342]">
+                  {selectedJob.title}
+                </span>
+              </p>
             </div>
           </div>
         </div>
       </CardEntrance>
 
-      {/* Employees grid */}
-      <div className="grid gap-4">
+      {/* Employees list */}
+      <div className="space-y-2">
         {activeEmployees.map((employee: any, index: number) => (
-          <CardEntrance key={employee.id} delay={index * 0.1}>
-            <EmployeeCard employee={employee} />
+          <CardEntrance key={employee.id} delay={index * 0.05}>
+            <EmployeeCard employee={employee} onOpenReport={handleOpenReport} />
           </CardEntrance>
         ))}
       </div>
+
+      {/* Report Modal */}
+      <Dialog open={reportModalOpen} onOpenChange={setReportModalOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>Relatório Mensal</DialogTitle>
+            <DialogDescription>
+              {selectedEmployee?.candidate?.full_name} - {format(new Date(), "MMMM/yyyy", { locale: ptBR })}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div>
+              <Label>Avaliação geral *</Label>
+              <Select
+                value={reportForm.rating}
+                onValueChange={(value) => setReportForm(prev => ({ ...prev, rating: value }))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="excellent">Excelente</SelectItem>
+                  <SelectItem value="good">Bom</SelectItem>
+                  <SelectItem value="regular">Regular</SelectItem>
+                  <SelectItem value="needs_improvement">Precisa melhorar</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Pontos fortes</Label>
+              <Textarea
+                placeholder="Descreva os pontos positivos do funcionário..."
+                value={reportForm.strengths}
+                onChange={(e) => setReportForm(prev => ({ ...prev, strengths: e.target.value }))}
+              />
+            </div>
+            <div>
+              <Label>Pontos a melhorar</Label>
+              <Textarea
+                placeholder="Descreva os pontos que podem ser melhorados..."
+                value={reportForm.improvements}
+                onChange={(e) => setReportForm(prev => ({ ...prev, improvements: e.target.value }))}
+              />
+            </div>
+            <div>
+              <Label>Observações gerais</Label>
+              <Textarea
+                placeholder="Outras observações..."
+                value={reportForm.notes}
+                onChange={(e) => setReportForm(prev => ({ ...prev, notes: e.target.value }))}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setReportModalOpen(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={handleSubmitReport} disabled={submitReportMutation.isPending}>
+              {submitReportMutation.isPending ? 'Enviando...' : 'Enviar Relatório'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
 
-function EmployeeCard({ employee }: { employee: any }) {
+function EmployeeCard({ employee, onOpenReport }: { employee: any; onOpenReport: (emp: any) => void }) {
   const [showDetails, setShowDetails] = useState(false);
   const candidate = employee.candidate;
   const isEstagio = employee.hiring_type === "estagio";
   const startDate = employee.start_date ? new Date(employee.start_date) : null;
   const endDate = employee.end_date ? new Date(employee.end_date) : startDate ? addMonths(startDate, 12) : null;
 
-  // Calculate days until contract expires (for estágio)
   const daysUntilExpiry = endDate ? differenceInDays(endDate, new Date()) : null;
   const isExpiringSoon = daysUntilExpiry !== null && daysUntilExpiry <= 30;
 
+  const hiringLabel = isEstagio
+    ? "Estágio"
+    : employee.hiring_type === "clt"
+    ? "CLT"
+    : employee.hiring_type === "pj"
+    ? "PJ"
+    : employee.hiring_type === "menor_aprendiz" || employee.hiring_type === "menor-aprendiz"
+    ? "Jovem Aprendiz"
+    : employee.hiring_type;
+
   return (
-    <motion.div
-      whileHover={{ y: -4 }}
-      className="relative group"
-    >
-      {/* Glow effect */}
-      <div className={`absolute -inset-0.5 rounded-2xl opacity-0 group-hover:opacity-20 blur transition-opacity ${
-        isExpiringSoon
-          ? "bg-gradient-to-r from-amber-500 via-orange-500 to-amber-500"
-          : "bg-gradient-to-r from-green-500 via-emerald-500 to-green-500"
-      }`} />
+    <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+      {/* Expiry warning */}
+      {isEstagio && isExpiringSoon && (
+        <div className="bg-amber-50 border-b border-amber-200 px-4 py-2.5 flex items-center gap-2">
+          <AlertCircle className="w-4 h-4 text-amber-600" />
+          <span className="text-sm text-amber-700 font-medium">
+            Contrato expira em {daysUntilExpiry} dias
+          </span>
+        </div>
+      )}
 
-      <div className="relative bg-white/90 backdrop-blur-sm rounded-2xl border-2 border-slate-200/50 overflow-hidden shadow-lg">
-        {/* Contract expiry warning */}
-        {isEstagio && isExpiringSoon && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="bg-gradient-to-r from-amber-500/10 via-orange-500/10 to-amber-500/10 border-b border-amber-500/20 px-5 py-3 flex items-center gap-3"
-          >
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center shadow-md animate-pulse">
-              <AlertCircle className="w-5 h-5 text-white" />
+      {/* Main content */}
+      <div className="p-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            {/* Avatar */}
+            <div className="relative">
+              <div className="absolute -top-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-green-500 border-2 border-white z-10" />
+              <div className="w-12 h-12 rounded-full bg-[#0A2342] flex items-center justify-center">
+                {candidate?.photo_url ? (
+                  <img
+                    src={candidate.photo_url}
+                    alt={candidate.full_name}
+                    className="w-full h-full rounded-full object-cover"
+                  />
+                ) : (
+                  <span className="text-white font-semibold text-lg">
+                    {candidate?.full_name?.charAt(0) || "?"}
+                  </span>
+                )}
+              </div>
             </div>
-            <span className="text-amber-600 font-semibold flex-1">
-              ⚠️ Contrato expira em {daysUntilExpiry} dias
-            </span>
-          </motion.div>
-        )}
 
-        {/* Main content */}
-        <div className="p-5 bg-gradient-to-br from-slate-50/50 to-transparent">
-          <div className="flex items-start justify-between">
-            <div className="flex items-start gap-4">
-              {/* Avatar with enhanced gradient and active indicator */}
-              <div className="relative">
-                {/* Active status indicator */}
-                <div className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-gradient-to-br from-green-500 to-emerald-500 border-2 border-white shadow-lg z-10 flex items-center justify-center">
-                  <div className="w-2 h-2 rounded-full bg-white animate-pulse" />
+            {/* Name + badge */}
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-[#0A2342] font-semibold">
+                  {candidate?.full_name || "Funcionário"}
+                </h3>
+                <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                  isEstagio
+                    ? "bg-purple-100 text-purple-700"
+                    : "bg-blue-100 text-blue-700"
+                }`}>
+                  {hiringLabel}
+                </span>
+              </div>
+
+              {/* Start date */}
+              {startDate && (
+                <div className="flex items-center gap-1.5 mt-1 text-sm text-slate-500">
+                  <Calendar className="w-3.5 h-3.5" />
+                  <span>Início <span className="font-medium text-[#0A2342]">{format(startDate, "dd/MM/yyyy")}</span></span>
                 </div>
+              )}
+            </div>
+          </div>
 
-                <div className="absolute inset-0 bg-[#0A2342] rounded-full blur-md opacity-40 animate-pulse" />
-                <div className="relative w-16 h-16 rounded-full bg-[#0A2342] flex items-center justify-center border-4 border-white shadow-xl">
-                  {candidate?.photo_url ? (
-                    <img
-                      src={candidate.photo_url}
-                      alt={candidate.full_name}
-                      className="w-full h-full rounded-full object-cover"
-                    />
-                  ) : (
-                    <span className="text-white font-bold text-2xl">
-                      {candidate?.full_name?.charAt(0) || "?"}
+          {/* Report button */}
+          <button
+            onClick={() => onOpenReport(employee)}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#0A2342] text-white text-sm font-medium hover:bg-[#1B4D7A] transition-colors"
+          >
+            <BarChart className="w-4 h-4" />
+            Relatório Mensal
+          </button>
+        </div>
+      </div>
+
+      {/* Contract details toggle */}
+      <div className="px-4 py-3 border-t border-slate-100">
+        <button
+          onClick={() => setShowDetails(!showDetails)}
+          className="text-sm text-slate-500 hover:text-[#0A2342] font-medium transition-colors flex items-center gap-1.5"
+        >
+          <FileText className="w-4 h-4" />
+          Ver Detalhes do Contrato
+          {showDetails ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+        </button>
+
+        {showDetails && (
+          <div className="mt-3 space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="p-3 rounded-lg bg-slate-50 border border-slate-100">
+                <p className="text-xs text-slate-500">Tipo de Contrato</p>
+                <p className="text-sm font-semibold text-[#0A2342]">{hiringLabel}</p>
+              </div>
+              {employee.monthly_fee != null && (
+                <div className="p-3 rounded-lg bg-slate-50 border border-slate-100">
+                  <p className="text-xs text-slate-500 flex items-center gap-1"><DollarSign className="w-3 h-3" /> Taxa Mensal</p>
+                  <p className="text-sm font-semibold text-[#0A2342]">R$ {(employee.monthly_fee / 100).toFixed(2)}</p>
+                </div>
+              )}
+              {employee.payment_day && (
+                <div className="p-3 rounded-lg bg-slate-50 border border-slate-100">
+                  <p className="text-xs text-slate-500">Dia de Pagamento</p>
+                  <p className="text-sm font-semibold text-[#0A2342]">Dia {employee.payment_day}</p>
+                </div>
+              )}
+              {employee.duration_months && (
+                <div className="p-3 rounded-lg bg-slate-50 border border-slate-100">
+                  <p className="text-xs text-slate-500">Duração</p>
+                  <p className="text-sm font-semibold text-[#0A2342]">{employee.duration_months} meses</p>
+                </div>
+              )}
+              {isEstagio && endDate && (
+                <div className={`p-3 rounded-lg border ${
+                  isExpiringSoon ? "bg-amber-50 border-amber-100" : "bg-slate-50 border-slate-100"
+                }`}>
+                  <p className="text-xs text-slate-500 flex items-center gap-1"><Clock className="w-3 h-3" /> Término</p>
+                  <p className={`text-sm font-semibold ${isExpiringSoon ? "text-amber-600" : "text-[#0A2342]"}`}>
+                    {format(endDate, "dd/MM/yyyy")}
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Contact info */}
+            {candidate && (
+              <div className="p-3 rounded-lg bg-slate-50 border border-slate-100">
+                <p className="text-xs text-slate-500 mb-2">Contato do Funcionário</p>
+                <div className="flex flex-wrap gap-3 text-sm">
+                  {candidate.email && (
+                    <span className="flex items-center gap-1 text-slate-600">
+                      <Mail className="w-3.5 h-3.5 text-slate-400" /> {candidate.email}
+                    </span>
+                  )}
+                  {candidate.phone && (
+                    <span className="flex items-center gap-1 text-slate-600">
+                      <Phone className="w-3.5 h-3.5 text-slate-400" /> {candidate.phone}
+                    </span>
+                  )}
+                  {candidate.city && (
+                    <span className="flex items-center gap-1 text-slate-600">
+                      <MapPin className="w-3.5 h-3.5 text-slate-400" /> {candidate.city}{candidate.state ? `, ${candidate.state}` : ""}
                     </span>
                   )}
                 </div>
               </div>
+            )}
 
-              {/* Info */}
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-3">
-                  <h3 className="text-[#0A2342] font-bold text-xl truncate">
-                    {candidate?.full_name || "Funcionário"}
-                  </h3>
-                  <span className={`px-3 py-1 rounded-full text-xs font-bold ${
-                    isEstagio
-                      ? "bg-gradient-to-r from-purple-500 to-blue-500 text-white shadow-sm shadow-purple-500/20"
-                      : "bg-gradient-to-r from-blue-500 to-indigo-500 text-white shadow-sm shadow-blue-500/20"
-                  }`}>
-                    {isEstagio ? "📚 Estágio" : "💼 CLT"}
-                  </span>
-                </div>
-
-                {/* Details grid */}
-                <div className="grid grid-cols-2 gap-4 mt-4">
-                  {startDate && (
-                    <motion.div
-                      whileHover={{ scale: 1.05 }}
-                      className="p-3 rounded-xl bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200/50"
-                    >
-                      <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-500 flex items-center justify-center shadow-sm">
-                          <Calendar className="w-4 h-4 text-white" />
-                        </div>
-                        <div>
-                          <div className="text-xs text-slate-600 font-medium">Início</div>
-                          <div className="text-sm text-[#0A2342] font-bold">{format(startDate, "dd/MM/yyyy")}</div>
-                        </div>
-                      </div>
-                    </motion.div>
-                  )}
-                  {isEstagio && endDate && (
-                    <motion.div
-                      whileHover={{ scale: 1.05 }}
-                      className={`p-3 rounded-xl border ${
-                        isExpiringSoon
-                          ? "bg-gradient-to-br from-amber-50 to-orange-50 border-amber-200/50"
-                          : "bg-gradient-to-br from-green-50 to-emerald-50 border-green-200/50"
-                      }`}
-                    >
-                      <div className="flex items-center gap-2">
-                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center shadow-sm ${
-                          isExpiringSoon
-                            ? "bg-gradient-to-br from-amber-500 to-orange-500"
-                            : "bg-gradient-to-br from-green-500 to-emerald-500"
-                        }`}>
-                          <Clock className="w-4 h-4 text-white" />
-                        </div>
-                        <div>
-                          <div className="text-xs text-slate-600 font-medium">Término</div>
-                          <div className={`text-sm font-bold ${
-                            isExpiringSoon ? "text-amber-600" : "text-[#0A2342]"
-                          }`}>
-                            {format(endDate, "dd/MM/yyyy")}
-                          </div>
-                        </div>
-                      </div>
-                    </motion.div>
-                  )}
-                </div>
+            {/* Insurance for estágio */}
+            {isEstagio && (
+              <div className="p-3 rounded-lg bg-slate-50 border border-slate-100">
+                <p className="text-xs text-slate-500 flex items-center gap-1 mb-1"><Shield className="w-3 h-3" /> Seguro Estágio</p>
+                <p className="text-sm font-semibold text-[#0A2342]">
+                  {employee.insurance_status === "active" ? "Ativo" : employee.insurance_status === "expired" ? "Expirado" : "Pendente"}
+                </p>
               </div>
-            </div>
-
-            {/* Primary action - top-right */}
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={() => toast.info("Relatório mensal em desenvolvimento")}
-              className="px-6 py-3 rounded-full bg-[#0A2342] text-white font-semibold shadow-lg shadow-green-500/25 hover:shadow-green-500/40 transition-all flex items-center justify-center gap-2"
-            >
-              <BarChart className="w-5 h-5" />
-              Relatório Mensal
-            </motion.button>
+            )}
           </div>
-        </div>
-
-        {/* Contract details toggle */}
-        <div className="p-4 border-t border-slate-200/50 bg-slate-50/30">
-          <button
-            onClick={() => setShowDetails(!showDetails)}
-            className="text-sm text-slate-600 hover:text-[#0A2342] font-medium transition-all flex items-center gap-2"
-          >
-            <FileText className="w-4 h-4" />
-            Ver Detalhes do Contrato
-            {showDetails ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-          </button>
-
-          {showDetails && (
-            <div className="mt-4 space-y-3">
-              {/* Contract info */}
-              <div className="grid grid-cols-2 gap-3">
-                <div className="p-3 rounded-lg bg-white border border-slate-200">
-                  <p className="text-xs text-slate-500">Tipo de Contrato</p>
-                  <p className="text-sm font-semibold text-[#0A2342]">
-                    {isEstagio ? "Estágio" : employee.hiring_type === "clt" ? "CLT" : employee.hiring_type === "pj" ? "PJ" : employee.hiring_type === "menor_aprendiz" || employee.hiring_type === "menor-aprendiz" ? "Jovem Aprendiz" : employee.hiring_type}
-                  </p>
-                </div>
-                {employee.monthly_fee != null && (
-                  <div className="p-3 rounded-lg bg-white border border-slate-200">
-                    <p className="text-xs text-slate-500 flex items-center gap-1"><DollarSign className="w-3 h-3" /> Taxa Mensal</p>
-                    <p className="text-sm font-semibold text-[#0A2342]">R$ {(employee.monthly_fee / 100).toFixed(2)}</p>
-                  </div>
-                )}
-                {employee.payment_day && (
-                  <div className="p-3 rounded-lg bg-white border border-slate-200">
-                    <p className="text-xs text-slate-500">Dia de Pagamento</p>
-                    <p className="text-sm font-semibold text-[#0A2342]">Dia {employee.payment_day}</p>
-                  </div>
-                )}
-                {employee.duration_months && (
-                  <div className="p-3 rounded-lg bg-white border border-slate-200">
-                    <p className="text-xs text-slate-500">Duração</p>
-                    <p className="text-sm font-semibold text-[#0A2342]">{employee.duration_months} meses</p>
-                  </div>
-                )}
-              </div>
-
-              {/* Candidate contact */}
-              {candidate && (
-                <div className="p-3 rounded-lg bg-white border border-slate-200">
-                  <p className="text-xs text-slate-500 mb-2">Contato do Funcionário</p>
-                  <div className="flex flex-wrap gap-3 text-sm">
-                    {candidate.email && (
-                      <span className="flex items-center gap-1 text-slate-600">
-                        <Mail className="w-3.5 h-3.5 text-slate-400" /> {candidate.email}
-                      </span>
-                    )}
-                    {candidate.phone && (
-                      <span className="flex items-center gap-1 text-slate-600">
-                        <Phone className="w-3.5 h-3.5 text-slate-400" /> {candidate.phone}
-                      </span>
-                    )}
-                    {candidate.city && (
-                      <span className="flex items-center gap-1 text-slate-600">
-                        <MapPin className="w-3.5 h-3.5 text-slate-400" /> {candidate.city}{candidate.state ? `, ${candidate.state}` : ""}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* Insurance status for estágio */}
-              {isEstagio && (
-                <div className="p-3 rounded-lg bg-white border border-slate-200">
-                  <p className="text-xs text-slate-500 flex items-center gap-1 mb-1"><Shield className="w-3 h-3" /> Seguro Estágio</p>
-                  <p className="text-sm font-semibold text-[#0A2342]">
-                    {employee.insurance_status === "active" ? "✓ Ativo" : employee.insurance_status === "expired" ? "⚠ Expirado" : "Pendente"}
-                  </p>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
+        )}
       </div>
-    </motion.div>
+    </div>
   );
 }
 

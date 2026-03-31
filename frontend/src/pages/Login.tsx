@@ -131,7 +131,8 @@ export default function Login() {
         window.location.href = '/settings';
       }
     } catch (error: any) {
-      toast.error(error.message || 'Erro ao fazer login');
+      const msg = typeof error === 'string' ? error : error?.message || 'Email ou senha incorretos';
+      toast.error(msg);
       setLoading(false);
     }
   };

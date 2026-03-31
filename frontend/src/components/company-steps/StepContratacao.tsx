@@ -444,17 +444,32 @@ function CLTPaymentCard({ hiringProcess, onRefresh }: { hiringProcess: any; onRe
   const [receiptBase64, setReceiptBase64] = useState<string | null>(null);
   const [receiptFileName, setReceiptFileName] = useState<string | null>(null);
   const [receiptPreview, setReceiptPreview] = useState<string | null>(null);
+  const [showSigningFlow, setShowSigningFlow] = useState(false);
 
   // Fetch agency payment info
   const { data: agencyPaymentInfo } = trpc.company.getAgencyPaymentInfo.useQuery();
 
   const confirmMutation = trpc.hiring.confirmCLTPayment.useMutation({
     onSuccess: () => {
-      toast.success("Pagamento confirmado! Contratação ativada.");
+      toast.success("Pagamento confirmado!");
       onRefresh();
     },
     onError: (err) => toast.error(err.message || "Erro ao confirmar pagamento"),
   });
+
+  const confirmSignMutation = trpc.hiring.confirmCompanyAutentiqueSign.useMutation({
+    onSuccess: () => {
+      toast.success("Documentos assinados!");
+      onRefresh();
+    },
+    onError: (err) => toast.error(err.message || "Erro ao confirmar assinatura"),
+  });
+
+  const handleAllDocsSigned = () => {
+    confirmSignMutation.mutate({ hiringProcessId: hiringProcess.id });
+  };
+
+  const docCategory = hiringProcess.hiring_type === "menor-aprendiz" ? "menor_aprendiz" : hiringProcess.hiring_type;
 
   const handleReceiptUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -513,8 +528,72 @@ function CLTPaymentCard({ hiringProcess, onRefresh }: { hiringProcess: any; onRe
               </div>
             </div>
           </div>
+
+          {/* Sign documents button */}
+          {!hiringProcess.company_signed && (
+            <button
+              onClick={() => setShowSigningFlow(!showSigningFlow)}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#0A2342] text-white font-medium text-sm hover:bg-[#0A2342]/90 transition-colors"
+            >
+              <FileText className="w-4 h-4" />
+              {showSigningFlow ? "Ocultar Documentos" : "Assinar Documentos"}
+            </button>
+          )}
+          {hiringProcess.company_signed && (
+            <span className="flex items-center gap-1.5 text-sm font-medium text-green-600">
+              <CheckCircle className="w-4 h-4" />
+              Documentos assinados
+            </span>
+          )}
         </div>
       </div>
+
+      {/* Signature status */}
+      <div className="px-5 pt-4 pb-2">
+        <div className="grid grid-cols-2 gap-2">
+          <div className={`flex items-center gap-2 p-2.5 rounded-lg border ${
+            hiringProcess.company_signed ? "bg-green-50 border-green-200" : "bg-slate-50 border-slate-200"
+          }`}>
+            <div className={`w-6 h-6 rounded flex items-center justify-center ${
+              hiringProcess.company_signed ? "bg-green-100" : "bg-slate-100"
+            }`}>
+              <Building2 className={`w-3.5 h-3.5 ${hiringProcess.company_signed ? "text-green-600" : "text-slate-400"}`} />
+            </div>
+            <div>
+              <p className="text-xs font-medium text-[#0A2342]">Empresa</p>
+              <p className={`text-xs ${hiringProcess.company_signed ? "text-green-600" : "text-slate-400"}`}>
+                {hiringProcess.company_signed ? "Assinado" : "Pendente"}
+              </p>
+            </div>
+          </div>
+          <div className={`flex items-center gap-2 p-2.5 rounded-lg border ${
+            hiringProcess.candidate_signed ? "bg-green-50 border-green-200" : "bg-slate-50 border-slate-200"
+          }`}>
+            <div className={`w-6 h-6 rounded flex items-center justify-center ${
+              hiringProcess.candidate_signed ? "bg-green-100" : "bg-slate-100"
+            }`}>
+              <User className={`w-3.5 h-3.5 ${hiringProcess.candidate_signed ? "text-green-600" : "text-slate-400"}`} />
+            </div>
+            <div>
+              <p className="text-xs font-medium text-[#0A2342]">Candidato</p>
+              <p className={`text-xs ${hiringProcess.candidate_signed ? "text-green-600" : "text-slate-400"}`}>
+                {hiringProcess.candidate_signed ? "Assinado" : "Pendente"}
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Document signing flow */}
+      {showSigningFlow && !hiringProcess.company_signed && (
+        <div className="px-5 pb-4 border-t border-slate-100 pt-4">
+          <DocumentSigningFlow
+            category={docCategory}
+            hiringProcessId={hiringProcess.id}
+            onAllSigned={handleAllDocsSigned}
+          />
+        </div>
+      )}
 
       <div className="p-5 space-y-4">
         {/* Fee info */}

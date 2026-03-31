@@ -85,10 +85,10 @@ export default function CandidateGroupManagement({ jobId, companyInterviewCandid
   const { data: batches, isLoading, refetch } = trpc.batch.getBatchesByJobId.useQuery({ jobId });
 
   // Get the most recent batch
-  const currentBatch = batches?.find(b => b.status === 'draft') ||
-                       batches?.find(b => b.status === 'sent') ||
-                       batches?.find(b => b.status === 'meeting_scheduled') ||
-                       batches?.find(b => b.status === 'active') ||
+  const currentBatch = batches?.find((b: any) => b.status === 'draft') ||
+                       batches?.find((b: any) => b.status === 'sent') ||
+                       batches?.find((b: any) => b.status === 'meeting_scheduled') ||
+                       batches?.find((b: any) => b.status === 'active') ||
                        batches?.[0];
 
   // Query batch sessions for per-candidate meeting assignments

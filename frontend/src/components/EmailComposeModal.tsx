@@ -16,6 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { trpc } from "@/lib/trpc";
 import { Mail, Send, Loader2, Link2, Calendar, X } from "lucide-react";
 import { toast } from "sonner";
+import { useAuth } from "@/_core/hooks/useAuth";
 
 interface EmailComposeModalProps {
   open: boolean;
@@ -44,6 +45,7 @@ export default function EmailComposeModal({
   prefilledEmail = "",
   companyId,
 }: EmailComposeModalProps) {
+  const { user } = useAuth();
   const [recipientEmails, setRecipientEmails] = useState<string[]>([]);
   const [emailInput, setEmailInput] = useState("");
   const [subject, setSubject] = useState("Encontre os Melhores Talentos para sua Empresa");
@@ -111,8 +113,23 @@ export default function EmailComposeModal({
     }
 
     const to = finalEmails.join(',');
+    const baseUrl = window.location.origin;
+    const adminId = user?.id || '';
+
+    // Build full body with links appended
+    let fullBody = body;
+    if (includeFormLink || includeBookingLink) {
+      fullBody += '\n\n---\n';
+      if (includeFormLink) {
+        fullBody += `\n📋 Preencher formulário de cadastro:\n${baseUrl}/form/${adminId}\n`;
+      }
+      if (includeBookingLink) {
+        fullBody += `\n📅 Agendar uma reunião:\n${baseUrl}/book/${adminId}\n`;
+      }
+    }
+
     const gmailSubject = encodeURIComponent(subject);
-    const gmailBody = encodeURIComponent(body);
+    const gmailBody = encodeURIComponent(fullBody);
     window.open(
       `https://mail.google.com/mail/?view=cm&to=${encodeURIComponent(to)}&su=${gmailSubject}&body=${gmailBody}`,
       '_blank'

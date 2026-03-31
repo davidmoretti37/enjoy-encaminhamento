@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { useAuth } from "@/_core/hooks/useAuth";
 import ContentTransition from "@/components/ui/ContentTransition";
 import { PageHeaderSkeleton, SearchBarSkeleton, TableSkeleton } from "@/components/ui/skeletons";
@@ -415,7 +414,7 @@ export default function CandidatePage() {
 
   const isLoading = candidatesLoading;
 
-  if (!isLoading && (!user || !['admin', 'agency'].includes(user.role))) {
+  if (!isLoading && (!user || !['admin', 'agency'].includes(user.role as string))) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Card className="max-w-md">

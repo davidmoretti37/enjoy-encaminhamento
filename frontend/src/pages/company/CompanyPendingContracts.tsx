@@ -1,4 +1,3 @@
-// @ts-nocheck
 // Blocking page: company must sign agency's contrato_inicial templates before accessing dashboard
 import { useEffect, useState } from "react";
 import { useLocation } from "wouter";

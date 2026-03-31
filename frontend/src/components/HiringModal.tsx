@@ -486,8 +486,6 @@ export function HiringModal({
               <Label className="mb-2 block">Assinatura</Label>
               <SignaturePad
                 onSave={setSignature}
-                width={400}
-                height={150}
               />
             </div>
           </div>

@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { useAuth } from "@/_core/hooks/useAuth";
 import ContentTransition from "@/components/ui/ContentTransition";
 import { PageHeaderSkeleton, SearchBarSkeleton, TableSkeleton } from "@/components/ui/skeletons";
@@ -75,24 +74,24 @@ export default function JobPage() {
   });
 
   // AI Matching mutations and queries
-  const findCandidatesMutation = trpc.job.findCandidates.useMutation({
+  const findCandidatesMutation = (trpc.job as any).findCandidates.useMutation({
     onSuccess: () => {
       setMatchingJobId(null);
     },
-    onError: (error) => {
+    onError: (error: any) => {
       console.error('Matching error:', error);
       setMatchingJobId(null);
     }
   });
 
-  const matchesQuery = trpc.job.getMatches.useQuery(
+  const matchesQuery = (trpc.job as any).getMatches.useQuery(
     { jobId: selectedJobForMatches?.id || '' },
     { enabled: !!selectedJobForMatches?.id && showMatchesDialog }
   );
 
   const isLoading = jobsLoading;
 
-  if (!isLoading && (!user || !['admin', 'agency'].includes(user.role))) {
+  if (!isLoading && (!user || !['admin', 'agency'].includes(user.role as string))) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Card className="max-w-md">

@@ -10,9 +10,13 @@ import CompanyDocumentsModal from "@/components/CompanyDocumentsModal";
 import AddCompanyModal from "@/components/AddCompanyModal";
 import { CandidateCardModal } from "@/components/candidate-card/CandidateCard";
 import { Input } from "@/components/ui/input";
-import { Search, X } from "lucide-react";
+import { Search, X, UserPlus } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { trpc } from "@/lib/trpc";
+import { toast } from "sonner";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
@@ -26,6 +30,51 @@ export default function ManagementTab() {
   const [paymentsEntity, setPaymentsEntity] = useState<any>(null);
   const [showAddCompanyModal, setShowAddCompanyModal] = useState(false);
   const [selectedCandidate, setSelectedCandidate] = useState<any>(null);
+  const [showRegisterEmployeeModal, setShowRegisterEmployeeModal] = useState(false);
+  const [registerForm, setRegisterForm] = useState({
+    companyId: '', jobId: '', jobTitle: '', fullName: '', cpf: '', email: '',
+    phone: '', dateOfBirth: '', contractType: 'estagio', monthlySalary: '',
+    startDate: '', endDate: '',
+  });
+
+  const registerMutation = trpc.agency.registerExistingEmployee.useMutation({
+    onSuccess: (data: any) => {
+      toast.success('Funcionário registrado com sucesso!');
+      setShowRegisterEmployeeModal(false);
+      setRegisterForm({ companyId: '', jobId: '', jobTitle: '', fullName: '', cpf: '', email: '', phone: '', dateOfBirth: '', contractType: 'estagio', monthlySalary: '', startDate: '', endDate: '' });
+      refreshData();
+    },
+    onError: (error: any) => toast.error(error.message || 'Erro ao registrar funcionário'),
+  });
+
+  // Fetch jobs for selected company in register modal
+  const { data: companyJobs } = trpc.job.getByCompanyId.useQuery(
+    { companyId: registerForm.companyId },
+    { enabled: !!registerForm.companyId && showRegisterEmployeeModal }
+  );
+
+  const handleRegisterEmployee = () => {
+    if (!registerForm.companyId || !registerForm.fullName || !registerForm.cpf || !registerForm.email || !registerForm.startDate) {
+      toast.error('Preencha todos os campos obrigatórios');
+      return;
+    }
+    registerMutation.mutate({
+      companyId: registerForm.companyId,
+      jobId: registerForm.jobId || undefined,
+      jobTitle: registerForm.jobTitle || undefined,
+      candidate: {
+        full_name: registerForm.fullName,
+        cpf: registerForm.cpf,
+        email: registerForm.email,
+        phone: registerForm.phone || undefined,
+        date_of_birth: registerForm.dateOfBirth || undefined,
+      },
+      contractType: registerForm.contractType as any,
+      monthlySalary: Math.round(parseFloat(registerForm.monthlySalary || '0') * 100),
+      startDate: registerForm.startDate,
+      endDate: registerForm.endDate || undefined,
+    });
+  };
 
   // Filter entities based on search
   const filteredCompanies = companies.filter((company: any) => {
@@ -149,6 +198,14 @@ export default function ManagementTab() {
             Adicionar Empresa
           </Button>
         )}
+        <Button
+          onClick={() => setShowRegisterEmployeeModal(true)}
+          variant="outline"
+          className="shrink-0"
+        >
+          <UserPlus className="h-4 w-4 mr-1.5" />
+          Registrar Funcionário
+        </Button>
       </div>
 
       {/* Content */}
@@ -216,6 +273,116 @@ export default function ManagementTab() {
           refreshData();
         }}
       />
+
+      {/* Register Existing Employee Modal */}
+      <Dialog open={showRegisterEmployeeModal} onOpenChange={setShowRegisterEmployeeModal}>
+        <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Registrar Funcionário Existente</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-gray-500 -mt-2">
+            Cadastre um funcionário que já foi contratado pela empresa fora da plataforma.
+          </p>
+          <div className="space-y-4 pt-2">
+            {/* Company */}
+            <div>
+              <Label className="text-sm font-medium">Empresa *</Label>
+              <Select value={registerForm.companyId} onValueChange={v => setRegisterForm({...registerForm, companyId: v, jobId: ''})}>
+                <SelectTrigger><SelectValue placeholder="Selecione a empresa" /></SelectTrigger>
+                <SelectContent>
+                  {companies.map((c: any) => (
+                    <SelectItem key={c.id} value={c.id}>{c.company_name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Job */}
+            {registerForm.companyId && (
+              <div>
+                <Label className="text-sm font-medium">Vaga</Label>
+                <Select value={registerForm.jobId} onValueChange={v => setRegisterForm({...registerForm, jobId: v})}>
+                  <SelectTrigger><SelectValue placeholder="Selecione ou crie nova" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__new__">+ Criar nova vaga</SelectItem>
+                    {(companyJobs || []).map((j: any) => (
+                      <SelectItem key={j.id} value={j.id}>{j.title}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {registerForm.jobId === '__new__' && (
+                  <Input className="mt-2" placeholder="Título da vaga" value={registerForm.jobTitle} onChange={e => setRegisterForm({...registerForm, jobTitle: e.target.value})} />
+                )}
+              </div>
+            )}
+
+            <hr className="my-2" />
+            <h4 className="font-semibold text-sm">Dados do Funcionário</h4>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-xs">Nome Completo *</Label>
+                <Input value={registerForm.fullName} onChange={e => setRegisterForm({...registerForm, fullName: e.target.value})} />
+              </div>
+              <div>
+                <Label className="text-xs">CPF *</Label>
+                <Input placeholder="000.000.000-00" value={registerForm.cpf} onChange={e => setRegisterForm({...registerForm, cpf: e.target.value})} />
+              </div>
+              <div>
+                <Label className="text-xs">Email *</Label>
+                <Input type="email" value={registerForm.email} onChange={e => setRegisterForm({...registerForm, email: e.target.value})} />
+              </div>
+              <div>
+                <Label className="text-xs">Telefone</Label>
+                <Input value={registerForm.phone} onChange={e => setRegisterForm({...registerForm, phone: e.target.value})} />
+              </div>
+              <div>
+                <Label className="text-xs">Data de Nascimento</Label>
+                <Input type="date" value={registerForm.dateOfBirth} onChange={e => setRegisterForm({...registerForm, dateOfBirth: e.target.value})} />
+              </div>
+            </div>
+
+            <hr className="my-2" />
+            <h4 className="font-semibold text-sm">Dados do Contrato</h4>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-xs">Tipo de Contrato *</Label>
+                <Select value={registerForm.contractType} onValueChange={v => setRegisterForm({...registerForm, contractType: v})}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="estagio">Estágio</SelectItem>
+                    <SelectItem value="clt">CLT</SelectItem>
+                    <SelectItem value="pj">PJ</SelectItem>
+                    <SelectItem value="menor-aprendiz">Menor Aprendiz</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-xs">Salário Mensal (R$)</Label>
+                <Input type="number" step="0.01" placeholder="0.00" value={registerForm.monthlySalary} onChange={e => setRegisterForm({...registerForm, monthlySalary: e.target.value})} />
+              </div>
+              <div>
+                <Label className="text-xs">Data de Início *</Label>
+                <Input type="date" value={registerForm.startDate} onChange={e => setRegisterForm({...registerForm, startDate: e.target.value})} />
+              </div>
+              {(registerForm.contractType === 'estagio' || registerForm.contractType === 'menor-aprendiz') && (
+                <div>
+                  <Label className="text-xs">Data de Término</Label>
+                  <Input type="date" value={registerForm.endDate} onChange={e => setRegisterForm({...registerForm, endDate: e.target.value})} />
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="flex gap-2 justify-end mt-4">
+            <Button variant="outline" onClick={() => setShowRegisterEmployeeModal(false)}>Cancelar</Button>
+            <Button onClick={handleRegisterEmployee} disabled={registerMutation.isPending}>
+              {registerMutation.isPending ? 'Registrando...' : 'Registrar Funcionário'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -435,10 +602,103 @@ function CandidateList({ candidates, onDocumentsClick, onProfileClick, searchTer
 }
 
 function CompanyPaymentsModal({ company, open, onClose }: { company: any; open: boolean; onClose: () => void }) {
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [paymentForm, setPaymentForm] = useState({
+    amount: '',
+    due_date: '',
+    start_date: '',
+    end_date: '',
+    payment_day: '5',
+    payment_type: 'monthly-fee' as string,
+    notes: '',
+  });
+
+  const utils = trpc.useUtils();
+
   const { data: paymentsData, isLoading } = trpc.agency.getPaymentsGroupedByCompany.useQuery(
     undefined,
     { enabled: open }
   );
+
+  const createPaymentMutation = trpc.admin.createManualPayment.useMutation({
+    onSuccess: () => {
+      // For one-time payments, show toast here. Monthly payments handle their own toast.
+      if (paymentForm.payment_type === 'setup-fee' || paymentForm.payment_type === 'penalty') {
+        toast.success('Pagamento adicionado!');
+        setShowAddForm(false);
+        setPaymentForm({ amount: '', due_date: '', start_date: '', end_date: '', payment_day: '5', payment_type: 'monthly-fee', notes: '' });
+      }
+      utils.agency.getPaymentsGroupedByCompany.invalidate();
+    },
+    onError: (error: any) => {
+      toast.error(error.message || 'Erro ao criar pagamento');
+    },
+  });
+
+  const isRecurring = paymentForm.payment_type === 'monthly-fee' || paymentForm.payment_type === 'insurance-fee';
+
+  const handleCreatePayment = async () => {
+    if (!paymentForm.amount) {
+      toast.error('Preencha o valor');
+      return;
+    }
+
+    const amountCents = Math.round(parseFloat(paymentForm.amount) * 100);
+
+    if (isRecurring) {
+      // Monthly: generate one payment per month between start and end
+      if (!paymentForm.start_date || !paymentForm.end_date) {
+        toast.error('Preencha data de início e fim');
+        return;
+      }
+      const start = new Date(paymentForm.start_date);
+      const end = new Date(paymentForm.end_date);
+      const day = parseInt(paymentForm.payment_day) || 5;
+
+      let current = new Date(start.getFullYear(), start.getMonth(), day);
+      if (current < start) current.setMonth(current.getMonth() + 1);
+
+      let count = 0;
+      while (current <= end) {
+        const dueDate = current.toISOString().split('T')[0];
+        const period = `${String(current.getMonth() + 1).padStart(2, '0')}/${current.getFullYear()}`;
+        try {
+          await createPaymentMutation.mutateAsync({
+            company_id: company.id,
+            amount: amountCents,
+            due_date: dueDate,
+            billing_period: period,
+            payment_type: paymentForm.payment_type as any,
+            notes: paymentForm.notes || undefined,
+          });
+          count++;
+        } catch (e) {
+          // stop on error, already toasted by onError
+          break;
+        }
+        current.setMonth(current.getMonth() + 1);
+      }
+      if (count > 0) {
+        toast.success(`${count} pagamento(s) criado(s)!`);
+        setShowAddForm(false);
+        setPaymentForm({ amount: '', due_date: '', start_date: '', end_date: '', payment_day: '5', payment_type: 'monthly-fee', notes: '' });
+        utils.agency.getPaymentsGroupedByCompany.invalidate();
+      }
+    } else {
+      // One-time payment
+      if (!paymentForm.due_date) {
+        toast.error('Preencha a data de vencimento');
+        return;
+      }
+      createPaymentMutation.mutate({
+        company_id: company.id,
+        amount: amountCents,
+        due_date: paymentForm.due_date,
+        payment_type: paymentForm.payment_type as any,
+        notes: paymentForm.notes || undefined,
+      });
+    }
+  };
 
   if (!company) return null;
 
@@ -471,7 +731,7 @@ function CompanyPaymentsModal({ company, open, onClose }: { company: any; open: 
               <Skeleton key={i} className="h-12 w-full rounded-lg" />
             ))}
           </div>
-        ) : !hasPayments ? (
+        ) : !hasPayments && !showAddForm ? (
           <div className="flex flex-col items-center justify-center py-10 text-center">
             <div className="w-16 h-16 rounded-2xl bg-gray-100 flex items-center justify-center mb-4">
               <DollarSign className="w-8 h-8 text-gray-400" />
@@ -487,6 +747,9 @@ function CompanyPaymentsModal({ company, open, onClose }: { company: any; open: 
               <ArrowRight className="h-3 w-3" />
               <span className="px-2 py-1 bg-gray-100 rounded">Pagamentos gerados</span>
             </div>
+            <Button className="mt-4" variant="outline" size="sm" onClick={() => setShowAddForm(true)}>
+              <Plus className="w-4 h-4 mr-1" /> Adicionar Pagamento Manual
+            </Button>
           </div>
         ) : (
           <div className="space-y-4">
@@ -546,6 +809,84 @@ function CompanyPaymentsModal({ company, open, onClose }: { company: any; open: 
                   </div>
                 );
               })}
+            </div>
+            <Button className="mt-3 w-full" variant="outline" size="sm" onClick={() => setShowAddForm(true)}>
+              <Plus className="w-4 h-4 mr-1" /> Adicionar Pagamento
+            </Button>
+          </div>
+        )}
+
+        {/* Add Payment Form */}
+        {showAddForm && (
+          <div className="border-t pt-4 mt-4 space-y-3">
+            <h4 className="font-semibold text-sm">Novo Pagamento</h4>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-xs">Tipo *</Label>
+                <Select value={paymentForm.payment_type} onValueChange={v => setPaymentForm({...paymentForm, payment_type: v})}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="monthly-fee">Mensalidade</SelectItem>
+                    <SelectItem value="insurance-fee">Seguro Mensal</SelectItem>
+                    <SelectItem value="setup-fee">Taxa Única</SelectItem>
+                    <SelectItem value="penalty">Multa</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-xs">Valor (R$) *</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  placeholder="150.00"
+                  value={paymentForm.amount}
+                  onChange={e => setPaymentForm({...paymentForm, amount: e.target.value})}
+                />
+              </div>
+
+              {isRecurring ? (
+                <>
+                  <div>
+                    <Label className="text-xs">Início *</Label>
+                    <Input type="date" value={paymentForm.start_date} onChange={e => setPaymentForm({...paymentForm, start_date: e.target.value})} />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Fim *</Label>
+                    <Input type="date" value={paymentForm.end_date} onChange={e => setPaymentForm({...paymentForm, end_date: e.target.value})} />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Dia do Vencimento</Label>
+                    <Input type="number" min="1" max="28" value={paymentForm.payment_day} onChange={e => setPaymentForm({...paymentForm, payment_day: e.target.value})} />
+                  </div>
+                </>
+              ) : (
+                <div>
+                  <Label className="text-xs">Vencimento *</Label>
+                  <Input type="date" value={paymentForm.due_date} onChange={e => setPaymentForm({...paymentForm, due_date: e.target.value})} />
+                </div>
+              )}
+
+              <div className={isRecurring ? "" : "col-span-2"}>
+                <Label className="text-xs">Observação</Label>
+                <Input
+                  placeholder="Ex: Seguro de vida - João Otávio"
+                  value={paymentForm.notes}
+                  onChange={e => setPaymentForm({...paymentForm, notes: e.target.value})}
+                />
+              </div>
+            </div>
+
+            {isRecurring && paymentForm.start_date && paymentForm.end_date && (
+              <p className="text-xs text-gray-500">
+                Serão criados pagamentos mensais de R$ {paymentForm.amount || '0'} no dia {paymentForm.payment_day} de cada mês
+              </p>
+            )}
+
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" size="sm" onClick={() => setShowAddForm(false)}>Cancelar</Button>
+              <Button size="sm" onClick={handleCreatePayment} disabled={createPaymentMutation.isPending}>
+                {createPaymentMutation.isPending ? 'Salvando...' : isRecurring ? 'Gerar Pagamentos' : 'Criar Pagamento'}
+              </Button>
             </div>
           </div>
         )}

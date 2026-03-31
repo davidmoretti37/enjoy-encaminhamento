@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { useState } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import ContentTransition from "@/components/ui/ContentTransition";
@@ -82,7 +81,7 @@ export default function CandidateJobs() {
   const appliedJobIds = new Set((applicationsQuery.data || []).map((a: any) => a.job_id));
 
   // Get unique cities for filter
-  const cities = [...new Set(jobs.map((j: any) => j.location).filter(Boolean))];
+  const cities: string[] = [...new Set(jobs.map((j: any) => j.location).filter(Boolean))] as string[];
 
   // Filter jobs
   const filteredJobs = jobs.filter((job: any) => {

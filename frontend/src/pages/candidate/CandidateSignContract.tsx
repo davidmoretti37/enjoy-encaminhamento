@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { useRef, useState } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Skeleton } from "@/components/ui/skeleton";

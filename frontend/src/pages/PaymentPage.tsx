@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { useAuth } from "@/_core/hooks/useAuth";
 import ContentTransition from "@/components/ui/ContentTransition";
 import { StatsCardsSkeleton, TableSkeleton } from "@/components/ui/skeletons";
@@ -35,6 +34,7 @@ import {
   Pencil,
   Plus,
   Trash2,
+  Upload,
 } from "lucide-react";
 import DashboardLayout from "@/components/DashboardLayout";
 import { useState, useMemo } from "react";
@@ -102,6 +102,18 @@ export default function PaymentPage() {
   // Group payments by company (server-side for both admin and agency)
   const companyGroups = groupedPaymentsQuery.data || [];
 
+  // Upload receipt mutation
+  const uploadReceiptMutation = trpc.admin.uploadPaymentReceipt.useMutation({
+    onSuccess: () => {
+      toast.success('Comprovante enviado!');
+      refetchPayments();
+      groupedPaymentsQuery.refetch();
+    },
+    onError: (error: any) => {
+      toast.error(error.message || 'Erro ao enviar comprovante');
+    },
+  });
+
   // Mutations (admin only - for receipt review)
   const reviewReceiptMutation = trpc.admin.reviewPaymentReceipt.useMutation({
     onSuccess: (_, variables) => {
@@ -155,7 +167,7 @@ export default function PaymentPage() {
     },
   });
 
-  if (!authLoading && (!user || !['admin', 'agency'].includes(user.role))) {
+  if (!authLoading && (!user || !['admin', 'agency'].includes(user.role as string))) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Card className="max-w-md">
@@ -669,7 +681,32 @@ export default function PaymentPage() {
                                           {getReceiptStatusBadge(payment.receipt_status)}
                                         </button>
                                       ) : (
-                                        <span className="text-xs text-gray-400">-</span>
+                                        <label className="cursor-pointer inline-flex items-center gap-1 px-2 py-1 rounded text-xs bg-gray-100 hover:bg-gray-200 text-gray-600 transition-colors">
+                                          <Upload className="h-3 w-3" />
+                                          Enviar
+                                          <input
+                                            type="file"
+                                            accept="image/*,.pdf"
+                                            className="hidden"
+                                            onChange={(e) => {
+                                              const file = e.target.files?.[0];
+                                              if (!file) return;
+                                              const reader = new FileReader();
+                                              reader.onload = () => {
+                                                const base64 = (reader.result as string).split(',')[1];
+                                                uploadReceiptMutation.mutate({
+                                                  paymentId: payment.id,
+                                                  companyId: payment.company_id,
+                                                  fileName: file.name,
+                                                  fileData: base64,
+                                                  contentType: file.type,
+                                                });
+                                              };
+                                              reader.readAsDataURL(file);
+                                              e.target.value = '';
+                                            }}
+                                          />
+                                        </label>
                                       )}
                                     </TableCell>
                                     <TableCell>

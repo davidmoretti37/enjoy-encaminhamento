@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { useState, useEffect, useMemo } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { FunnelLayout, CardEntrance } from "@/components/funnel";
@@ -43,6 +42,18 @@ const EDUCATION_LEVELS = [
   { value: 'mestrado', label: 'Mestrado' },
   { value: 'doutorado', label: 'Doutorado' },
 ];
+
+// Map DB enum values back to display values (onboarding maps medio_completo → medio, etc.)
+function normalizeEducationLevel(dbValue: string | null | undefined): string {
+  if (!dbValue) return '';
+  const reverseMap: Record<string, string> = {
+    'fundamental': 'fundamental_completo',
+    'medio': 'medio_completo',
+    'superior': 'superior_completo',
+    'pos-graduacao': 'pos_graduacao',
+  };
+  return reverseMap[dbValue] || dbValue;
+}
 
 const BRAZILIAN_STATES = [
   'AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA',
@@ -172,7 +183,7 @@ export default function CandidateSettingsScreen() {
         date_of_birth: profile.date_of_birth || '',
         city: profile.city || '',
         state: profile.state || '',
-        education_level: profile.education_level || '',
+        education_level: normalizeEducationLevel(profile.education_level),
         currently_studying: profile.currently_studying || false,
         institution: profile.institution || '',
         course: profile.course || '',

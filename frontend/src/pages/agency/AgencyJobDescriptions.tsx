@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * Agency Job Descriptions Page
  *
@@ -605,10 +604,11 @@ function MatchedCandidatesList({ jobId }: { jobId: string }) {
 // Component to show AI matching status for a job
 function MatchingStatusCard({ jobId }: { jobId: string }) {
   const utils = trpc.useUtils();
-  const { data: progress, isLoading } = trpc.job.getMatchingProgress.useQuery(
+  const { data: progressRaw, isLoading } = trpc.job.getMatchingProgress.useQuery(
     { jobId },
-    { refetchInterval: (data) => data?.status === 'running' ? 3000 : false }
+    { refetchInterval: ((data: any) => data?.status === 'running' ? 3000 : false) as any }
   );
+  const progress = progressRaw as any;
 
   const triggerMatchingMutation = trpc.job.triggerMatchingForAgency.useMutation({
     onSuccess: () => {

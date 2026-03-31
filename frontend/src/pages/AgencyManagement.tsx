@@ -1,4 +1,3 @@
-// @ts-nocheck
 // Type checking disabled: tRPC type inference issues with franchises endpoint
 import { useAuth } from "@/_core/hooks/useAuth";
 import ContentTransition from "@/components/ui/ContentTransition";
@@ -65,7 +64,7 @@ export default function AgencyManagement() {
 
   const { data: agencies, isLoading, refetch } = trpc.agency.getAll.useQuery();
   const { data: invitations, refetch: refetchInvitations } = trpc.invitation.list.useQuery();
-  const { data: franchises } = trpc.invitation.getFranchises.useQuery();
+  const { data: franchises } = (trpc.invitation as any).getFranchises.useQuery();
 
   const updateStatusMutation = trpc.agency.updateStatus.useMutation({
     onSuccess: () => {
@@ -146,7 +145,7 @@ export default function AgencyManagement() {
       return;
     }
 
-    await createInvitationMutation.mutateAsync({
+    await (createInvitationMutation as any).mutateAsync({
       email: inviteEmail,
       franchiseId: selectedFranchise,
     });
@@ -218,7 +217,7 @@ export default function AgencyManagement() {
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-semibold text-emerald-900 mb-1">
-                {agencies?.filter(s => s.status === 'active').length || 0}
+                {agencies?.filter((s: any) => s.status === 'active').length || 0}
               </div>
               <p className="text-xs text-emerald-600">
                 Aprovadas e operando
@@ -233,7 +232,7 @@ export default function AgencyManagement() {
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-semibold text-blue-900 mb-1">
-                {new Set(agencies?.map(s => s.city).filter(Boolean)).size || 0}
+                {new Set(agencies?.map((s: any) => s.city).filter(Boolean)).size || 0}
               </div>
               <p className="text-xs text-blue-600">
                 Cidades diferentes
@@ -504,7 +503,7 @@ export default function AgencyManagement() {
             </DialogHeader>
 
             {selectedAgency && (() => {
-              const agency = agencies?.find(s => s.id === selectedAgency);
+              const agency = agencies?.find((s: any) => s.id === selectedAgency);
               if (!agency) return <div>Agência não encontrada</div>;
 
               return (

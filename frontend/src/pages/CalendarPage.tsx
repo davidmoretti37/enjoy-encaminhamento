@@ -1,4 +1,3 @@
-// @ts-nocheck
 // Type checking disabled: tRPC type inference issues with useQuery options
 import { useAuth } from "@/_core/hooks/useAuth";
 import ContentTransition from "@/components/ui/ContentTransition";
@@ -132,11 +131,11 @@ export default function CalendarPage() {
     { agencyId: currentAgency?.id },
     { enabled: !!user?.id, staleTime: 0 }
   );
-  const { data: adminSettings, refetch: refetchSettings } = trpc.outreach.getAdminSettings.useQuery(
+  const { data: adminSettings, refetch: refetchSettings } = (trpc.outreach.getAdminSettings as any).useQuery(
     { agencyId: currentAgency?.id },
     {
       enabled: !!user?.id,
-      onSuccess: (data) => {
+      onSuccess: (data: any) => {
         if (data?.meeting_duration_minutes) {
           setMeetingDuration(data.meeting_duration_minutes);
         }
@@ -368,14 +367,14 @@ export default function CalendarPage() {
       for (const date of blockerSelectedDates) {
         if (slot.blocked) {
           // Unblock the slot
-          await unblockSlotMutation.mutateAsync({
+          await (unblockSlotMutation as any).mutateAsync({
             startTime,
             endTime,
             specificDate: format(date, 'yyyy-MM-dd'),
           });
         } else {
           // Block the slot
-          await blockSlotMutation.mutateAsync({
+          await (blockSlotMutation as any).mutateAsync({
             startTime,
             endTime,
             specificDate: format(date, 'yyyy-MM-dd'),

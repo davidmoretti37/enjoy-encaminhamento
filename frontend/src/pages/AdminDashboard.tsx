@@ -307,7 +307,7 @@ export default function AdminDashboard() {
                 </div>
               ) : companies && companies.length > 0 ? (
                 <div className="space-y-3">
-                  {companies.slice(0, 5).map((company) => (
+                  {companies.slice(0, 5).map((company: any) => (
                     <div
                       key={company.id}
                       className="flex items-center justify-between p-4 border-2 rounded-xl hover:border-blue-300 hover:bg-blue-50/50 transition-all duration-200 cursor-pointer group"

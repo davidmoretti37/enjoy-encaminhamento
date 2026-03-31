@@ -10,6 +10,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { Button } from "@/components/ui/button";
 import { trpc } from "@/lib/trpc";
 import {
   Building2,
@@ -56,6 +58,40 @@ export default function CompanySettingsScreen() {
   const [newUserRole, setNewUserRole] = useState('member');
 
   const createUserInviteMutation = trpc.company.createUserInvitation.useMutation();
+
+  // Report modal state
+  const [reportModalOpen, setReportModalOpen] = useState(false);
+  const [selectedReportEmployee, setSelectedReportEmployee] = useState<any>(null);
+  const [reportForm, setReportForm] = useState({ rating: '', strengths: '', improvements: '', notes: '' });
+
+  const submitReportMutation = trpc.company.submitMonthlyReport.useMutation({
+    onSuccess: () => {
+      toast.success('Relatório enviado com sucesso!');
+      setReportModalOpen(false);
+      setReportForm({ rating: '', strengths: '', improvements: '', notes: '' });
+    },
+    onError: (error: any) => toast.error(error.message || 'Erro ao enviar relatório'),
+  });
+
+  const handleOpenReport = (employee: any) => {
+    setSelectedReportEmployee(employee);
+    setReportModalOpen(true);
+  };
+
+  const handleSubmitReport = () => {
+    if (!reportForm.rating) { toast.error('Selecione uma avaliação'); return; }
+    if (!selectedReportEmployee) return;
+    const now = new Date();
+    submitReportMutation.mutate({
+      contractId: selectedReportEmployee.contract_id || selectedReportEmployee.id,
+      periodMonth: now.getMonth() + 1,
+      periodYear: now.getFullYear(),
+      rating: reportForm.rating as 'excellent' | 'good' | 'regular' | 'needs_improvement',
+      strengths: reportForm.strengths || undefined,
+      improvements: reportForm.improvements || undefined,
+      notes: reportForm.notes || undefined,
+    });
+  };
 
   const utils = trpc.useUtils();
 
@@ -451,7 +487,7 @@ export default function CompanySettingsScreen() {
                 <div className="space-y-4">
                   {activeEmployees.map((employee: any, index: number) => (
                     <CardEntrance key={employee.id} delay={index * 0.05}>
-                      <SettingsEmployeeCard employee={employee} />
+                      <SettingsEmployeeCard employee={employee} onOpenReport={handleOpenReport} />
                     </CardEntrance>
                   ))}
                 </div>
@@ -590,6 +626,50 @@ export default function CompanySettingsScreen() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Monthly Report Modal */}
+      <Dialog open={reportModalOpen} onOpenChange={setReportModalOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>Relatório Mensal</DialogTitle>
+            <DialogDescription>
+              {selectedReportEmployee?.candidate?.full_name || "Funcionário"}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div>
+              <Label>Avaliação geral *</Label>
+              <Select value={reportForm.rating} onValueChange={(v) => setReportForm(prev => ({ ...prev, rating: v }))}>
+                <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="excellent">Excelente</SelectItem>
+                  <SelectItem value="good">Bom</SelectItem>
+                  <SelectItem value="regular">Regular</SelectItem>
+                  <SelectItem value="needs_improvement">Precisa melhorar</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Pontos fortes</Label>
+              <Textarea placeholder="Descreva os pontos positivos..." value={reportForm.strengths} onChange={(e) => setReportForm(prev => ({ ...prev, strengths: e.target.value }))} />
+            </div>
+            <div>
+              <Label>Pontos a melhorar</Label>
+              <Textarea placeholder="Descreva os pontos que podem ser melhorados..." value={reportForm.improvements} onChange={(e) => setReportForm(prev => ({ ...prev, improvements: e.target.value }))} />
+            </div>
+            <div>
+              <Label>Observações gerais</Label>
+              <Textarea placeholder="Outras observações..." value={reportForm.notes} onChange={(e) => setReportForm(prev => ({ ...prev, notes: e.target.value }))} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setReportModalOpen(false)}>Cancelar</Button>
+            <Button onClick={handleSubmitReport} disabled={submitReportMutation.isPending}>
+              {submitReportMutation.isPending ? 'Enviando...' : 'Enviar Relatório'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </FunnelLayout>
   );
 }
@@ -621,6 +701,9 @@ function CompanyDataTab({ companyInfo, isLoading, onSaved }: { companyInfo: any;
     if (companyInfo) {
       setForm({
         companyName: companyInfo.company_name || '',
+        cnpj: companyInfo.cnpj || '',
+        email: companyInfo.email || '',
+        contactPerson: companyInfo.contact_person || '',
         phone: companyInfo.phone || '',
         address: companyInfo.address || '',
         city: companyInfo.city || '',
@@ -629,6 +712,7 @@ function CompanyDataTab({ companyInfo, isLoading, onSaved }: { companyInfo: any;
         website: companyInfo.website || '',
         industry: companyInfo.industry || '',
         companySize: companyInfo.company_size || '',
+        employeeCount: companyInfo.employee_count || '',
         description: companyInfo.description || '',
       });
     }
@@ -663,13 +747,17 @@ function CompanyDataTab({ companyInfo, isLoading, onSaved }: { companyInfo: any;
 
           <div className="grid grid-cols-2 gap-4">
             <div><Label>Razão Social</Label><Input value={form.companyName} onChange={e => setForm({...form, companyName: e.target.value})} /></div>
+            <div><Label>CNPJ</Label><Input value={form.cnpj} onChange={e => setForm({...form, cnpj: e.target.value})} /></div>
+            <div><Label>Email</Label><Input value={form.email} onChange={e => setForm({...form, email: e.target.value})} /></div>
+            <div><Label>Responsável</Label><Input value={form.contactPerson} onChange={e => setForm({...form, contactPerson: e.target.value})} /></div>
             <div><Label>Telefone</Label><Input value={form.phone} onChange={e => setForm({...form, phone: e.target.value})} /></div>
-            <div><Label>Endereço</Label><Input value={form.address} onChange={e => setForm({...form, address: e.target.value})} /></div>
             <div><Label>CEP</Label><Input value={form.zipCode} onChange={e => setForm({...form, zipCode: e.target.value})} /></div>
+            <div><Label>Endereço</Label><Input value={form.address} onChange={e => setForm({...form, address: e.target.value})} /></div>
             <div><Label>Cidade</Label><Input value={form.city} onChange={e => setForm({...form, city: e.target.value})} /></div>
             <div><Label>Estado</Label><Input value={form.state} onChange={e => setForm({...form, state: e.target.value})} /></div>
             <div><Label>Site</Label><Input value={form.website} onChange={e => setForm({...form, website: e.target.value})} /></div>
             <div><Label>Setor</Label><Input value={form.industry} onChange={e => setForm({...form, industry: e.target.value})} /></div>
+            <div><Label>Nº de Funcionários</Label><Input value={form.employeeCount} onChange={e => setForm({...form, employeeCount: e.target.value})} /></div>
             <div><Label>Porte da Empresa</Label>
               <Select value={form.companySize} onValueChange={v => setForm({...form, companySize: v})}>
                 <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
@@ -770,7 +858,7 @@ function CompanyDataTab({ companyInfo, isLoading, onSaved }: { companyInfo: any;
   );
 }
 
-function SettingsEmployeeCard({ employee }: { employee: any }) {
+function SettingsEmployeeCard({ employee, onOpenReport }: { employee: any; onOpenReport: (emp: any) => void }) {
   const candidate = employee.candidate;
   const job = employee.job;
   const isEstagio = employee.hiring_type === "estagio";
@@ -858,6 +946,7 @@ function SettingsEmployeeCard({ employee }: { employee: any }) {
 
           {/* Action */}
           <button
+            onClick={() => onOpenReport(employee)}
             className="px-4 py-2 rounded-lg bg-white border-2 border-slate-200 hover:border-[#FF6B35]/50 hover:bg-slate-50 transition-all text-sm font-medium text-[#0A2342] flex items-center gap-2 shrink-0"
           >
             <BarChart className="w-4 h-4" />

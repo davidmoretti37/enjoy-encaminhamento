@@ -1,4 +1,3 @@
-// @ts-nocheck
 // Type checking disabled: GSAP Tween type mismatch with callback
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'wouter';
@@ -87,7 +86,7 @@ const PillNav = ({
           y: 10,
           duration: 0.2,
           ease,
-          onComplete: () => gsap.set(menu, { visibility: 'hidden' })
+          onComplete: (() => gsap.set(menu, { visibility: 'hidden' })) as any
         });
       }
     }

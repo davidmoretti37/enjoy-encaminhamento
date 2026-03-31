@@ -1,4 +1,3 @@
-// @ts-nocheck
 // Displays signed documents for a company (used by both agency and company views)
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";

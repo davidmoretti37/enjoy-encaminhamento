@@ -1,4 +1,3 @@
-// @ts-nocheck
 // Reusable document signing flow component
 // Shows PDF pages rendered inline with signature overlay on last page
 import { useState, useRef, useCallback, useEffect } from "react";
@@ -27,16 +26,18 @@ import {
 
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
-interface DocumentSigningFlowProps {
-  category: "contrato_inicial" | "clt" | "estagio" | "menor_aprendiz";
+export interface DocumentSigningFlowProps {
+  category: "contrato_inicial" | "clt" | "pj" | "estagio" | "menor_aprendiz";
   contractId?: string;
   candidateId?: string;
+  hiringProcessId?: string;
   onAllSigned?: () => void;
 }
 
 const categoryLabels: Record<string, string> = {
   contrato_inicial: "Contrato Inicial",
   clt: "Documentos CLT",
+  pj: "Documentos PJ",
   estagio: "Documentos Estágio",
   menor_aprendiz: "Documentos Jovem Aprendiz",
 };
@@ -142,13 +143,13 @@ export default function DocumentSigningFlow({
 
   const utils = trpc.useUtils();
 
-  const { data, isLoading } = trpc.contract.getDocumentsToSign.useQuery({
+  const { data, isLoading } = (trpc.contract.getDocumentsToSign as any).useQuery({
     category,
     contractId,
     candidateId,
   }, {
     // Poll every 5s when there are pending Autentique docs (user may be signing in another tab)
-    refetchInterval: (query) => {
+    refetchInterval: (query: any) => {
       const d = query.state.data as any;
       if (!d) return false;
       const hasPendingAutentique = d.templates?.some(
@@ -173,7 +174,7 @@ export default function DocumentSigningFlow({
       setSignerCpf("");
       setAcceptedTerms(false);
       sigPadRef.current?.clear();
-      utils.contract.getDocumentsToSign.invalidate({ category, contractId, candidateId });
+      (utils.contract.getDocumentsToSign as any).invalidate({ category, contractId, candidateId });
 
       if (result.allSigned && onAllSigned) {
         onAllSigned();

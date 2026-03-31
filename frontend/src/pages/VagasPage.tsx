@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * Vagas Page - Job Matches View
  *
@@ -26,20 +25,21 @@ export default function VagasPage() {
   const pageSize = 50;
 
   // Get matching progress (polls every 2 seconds)
-  const { data: progress, isLoading: progressLoading } = trpc.job.getMatchingProgress.useQuery(
+  const { data: progressRaw, isLoading: progressLoading } = trpc.job.getMatchingProgress.useQuery(
     { jobId: jobId! },
     {
       enabled: !!jobId,
       refetchInterval: 2000, // Poll every 2 seconds for real-time updates
     }
   );
+  const progress = progressRaw as any;
 
   // Get matched candidates
   const {
-    data: matchData,
+    data: matchDataRaw,
     isLoading: matchesLoading,
     refetch: refetchMatches,
-  } = trpc.job.getMatchesForJob.useQuery(
+  } = (trpc.job.getMatchesForJob as any).useQuery(
     {
       jobId: jobId!,
       page: currentPage,
@@ -50,9 +50,10 @@ export default function VagasPage() {
       enabled: !!jobId,
     }
   );
+  const matchData = matchDataRaw as any;
 
   // Get job details
-  const { data: job } = trpc.job.getById.useQuery(
+  const { data: job } = (trpc.job.getById as any).useQuery(
     { id: parseInt(jobId!) },
     { enabled: !!jobId }
   );
@@ -160,7 +161,7 @@ export default function VagasPage() {
         ) : matchData && matchData.matches.length > 0 ? (
           <>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-              {matchData.matches.map((match) => (
+              {matchData.matches.map((match: any) => (
                 <CandidateMatchCard key={match.matchId} match={match} />
               ))}
             </div>
