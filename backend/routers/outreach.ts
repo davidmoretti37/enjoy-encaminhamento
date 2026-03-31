@@ -1378,7 +1378,8 @@ export const outreachRouter = router({
       const buffer = Buffer.from(input.fileBase64, 'base64');
 
       // Generate unique key
-      const key = `contracts/signed/${meeting.id}/${Date.now()}-${input.fileName}`;
+      const sanitizedFileName = input.fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const key = `contracts/signed/${meeting.id}/${Date.now()}-${sanitizedFileName}`;
 
       // Upload to storage
       const { storagePut } = await import('../storage');
