@@ -2,11 +2,18 @@ import { useState } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { useLocation } from "wouter";
 import { AnimatePresence, motion } from "framer-motion";
-import { FunnelLayout, CardEntrance } from "@/components/funnel";
+import { FunnelLayout, type FunnelStep, CardEntrance } from "@/components/funnel";
 import {
   CompanyFunnelProvider,
   useCompanyFunnel,
+  COMPANY_STEPS,
 } from "@/contexts/CompanyFunnelContext";
+
+// Step Components
+import StepPreferencia from "@/components/company-steps/StepPreferencia";
+import StepEntrevista from "@/components/company-steps/StepEntrevista";
+import StepContratacao from "@/components/company-steps/StepContratacao";
+import StepFuncionarioAtivo from "@/components/company-steps/StepFuncionarioAtivo";
 import { Skeleton } from "@/components/ui/skeleton";
 import { FunnelContentSkeleton } from "@/components/ui/skeletons";
 import { WorkSchedulePicker } from "@/components/ui/WorkSchedulePicker";
@@ -31,7 +38,6 @@ import {
 import { toast } from "sonner";
 
 // Step Components
-import HorizontalAccordion from "@/components/company-steps/HorizontalAccordion";
 import FinanceiroTab from "@/components/company-steps/FinanceiroTab";
 
 function EmptyJobsState({ onCreateJob }: { onCreateJob: () => void }) {
@@ -248,6 +254,23 @@ function EmpresaPortalContent() {
     sublabel: job.contract_type || "",
   }));
 
+  // Step components (3 steps + active employee view)
+  const STEP_COMPONENTS = [
+    StepPreferencia,      // Step 0: Preferência
+    StepEntrevista,       // Step 1: Entrevista
+    StepContratacao,      // Step 2: Contratação
+  ];
+
+  // Get step component — if allComplete, show employee view
+  const StepComponent = allComplete ? StepFuncionarioAtivo : (STEP_COMPONENTS[viewingStep] || StepPreferencia);
+
+  // Convert steps to FunnelStep format
+  const funnelSteps: FunnelStep[] = COMPANY_STEPS.map((step) => ({
+    id: step.id,
+    label: step.label,
+    shortLabel: step.shortLabel,
+  }));
+
   // Tabs configuration
   const tabs = [
     { id: "recrutamento", label: "Recrutamento" },
@@ -280,7 +303,7 @@ function EmpresaPortalContent() {
         tabs={tabs}
         activeTab={activeTab}
         onTabChange={(id) => setActiveTab(id as "recrutamento" | "financeiro")}
-        steps={undefined}
+        steps={activeTab === "recrutamento" && !allComplete ? funnelSteps : undefined}
         currentStep={currentStep}
         viewingStep={viewingStep}
         onStepClick={setViewingStep}
@@ -295,7 +318,7 @@ function EmpresaPortalContent() {
           jobs.length === 0 ? (
             <EmptyJobsState onCreateJob={() => setIsModalOpen(true)} />
           ) : (
-            <HorizontalAccordion currentStep={currentStep} allComplete={allComplete} />
+            <StepComponent />
           )
         ) : (
           <FinanceiroTab />
