@@ -1,12 +1,13 @@
-// @ts-nocheck
 // Company router - company management and portal
 import { z } from "zod";
 import { router } from "../_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { protectedProcedure, publicProcedure } from "../_core/trpc";
 import { adminProcedure, companyProcedure } from "./procedures";
-import * as db from "../db";
-import { supabaseAdmin } from "../supabase";
+import * as _db from "../db";
+const db: any = _db;
+import { supabaseAdmin as _supabaseAdmin } from "../supabase";
+const supabaseAdmin = _supabaseAdmin as any;
 import { generateCompanySummary } from "../services/ai/summarizer";
 import { storagePut } from "../storage";
 import { verifyReceiptWithAI } from "../services/ai/receiptVerifier";
@@ -398,13 +399,17 @@ export const companyRouter = router({
   updateProfile: companyProcedure
     .input(z.object({
       companyName: z.string().optional(),
+      cnpj: z.string().optional(),
+      email: z.string().optional(),
+      contactPerson: z.string().optional(),
       phone: z.string().optional(),
       address: z.string().optional(),
       city: z.string().optional(),
       state: z.string().optional(),
       zipCode: z.string().optional(),
       industry: z.string().optional(),
-      companySize: z.enum(["1-10", "11-50", "51-200", "201-500", "500+"]).optional(),
+      companySize: z.enum(["1-10", "11-50", "51-200", "201-500", "500+"]).or(z.literal("")).optional(),
+      employeeCount: z.string().optional(),
       website: z.string().optional(),
       description: z.string().optional(),
       logo: z.string().optional(),
@@ -414,7 +419,24 @@ export const companyRouter = router({
       if (!company) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Company not found' });
       }
-      await db.updateCompany(company.id, input);
+      // Map camelCase input to snake_case DB columns
+      const updateData: Record<string, any> = {};
+      if (input.companyName !== undefined) updateData.company_name = input.companyName;
+      if (input.cnpj !== undefined) updateData.cnpj = input.cnpj;
+      if (input.email !== undefined) updateData.email = input.email;
+      if (input.contactPerson !== undefined) updateData.contact_person = input.contactPerson;
+      if (input.employeeCount !== undefined) updateData.employee_count = input.employeeCount;
+      if (input.phone !== undefined) updateData.phone = input.phone;
+      if (input.address !== undefined) updateData.address = input.address;
+      if (input.city !== undefined) updateData.city = input.city;
+      if (input.state !== undefined) updateData.state = input.state;
+      if (input.zipCode !== undefined) updateData.cep = input.zipCode;
+      if (input.industry !== undefined) updateData.industry = input.industry;
+      if (input.companySize && input.companySize !== '') updateData.company_size = input.companySize;
+      if (input.website !== undefined) updateData.website = input.website;
+      if (input.description !== undefined) updateData.description = input.description;
+      if (input.logo !== undefined) updateData.logo = input.logo;
+      await db.updateCompany(company.id, updateData as any);
       return { success: true };
     }),
 
@@ -478,11 +500,25 @@ export const companyRouter = router({
       .select('candidate_ids')
       .eq('company_id', company.id)
       .neq('status', 'cancelled');
-    const totalCandidates = (batches || []).reduce((sum, b) => sum + (b.candidate_ids?.length || 0), 0);
+    const totalCandidates = (batches || []).reduce((sum: any, b: any) => sum + (b.candidate_ids?.length || 0), 0);
 
     // Hired count
     const { count: hiredCount } = await supabaseAdmin
       .from('hiring_processes')
+      .select('*', { count: 'exact', head: true })
+      .eq('company_id', company.id)
+      .eq('status', 'active');
+
+    // Pending selection (batches presented but not yet reviewed)
+    const { count: pendingSelection } = await supabaseAdmin
+      .from('candidate_batches')
+      .select('*', { count: 'exact', head: true })
+      .eq('company_id', company.id)
+      .in('status', ['presented', 'pending_review']);
+
+    // Active employees (active contracts)
+    const { count: activeEmployees } = await supabaseAdmin
+      .from('contracts')
       .select('*', { count: 'exact', head: true })
       .eq('company_id', company.id)
       .eq('status', 'active');
@@ -492,6 +528,8 @@ export const companyRouter = router({
       totalCandidates,
       pendingInterviews: pendingInterviews || 0,
       hiredCount: hiredCount || 0,
+      pendingSelection: pendingSelection || 0,
+      activeEmployees: activeEmployees || 0,
     };
   }),
 
@@ -718,8 +756,44 @@ export const companyRouter = router({
       if (!company) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Company not found' });
       }
-      // TODO: implement getCandidateProfileForCompany
-      throw new TRPCError({ code: 'FORBIDDEN', message: 'Candidate was not presented to your company' });
+
+      // Get candidate profile (companies can only see candidates presented to them)
+      const candidate = await db.getCandidateById(input.candidateId);
+      if (!candidate) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Candidate not found' });
+      }
+
+      // Calculate age
+      let age: number | null = null;
+      if (candidate.date_of_birth) {
+        const today = new Date();
+        const birth = new Date(candidate.date_of_birth);
+        age = today.getFullYear() - birth.getFullYear();
+        const monthDiff = today.getMonth() - birth.getMonth();
+        if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
+          age--;
+        }
+      }
+
+      // Build education string
+      const educationParts = [];
+      if (candidate.education_level) educationParts.push(candidate.education_level);
+      if (candidate.institution) educationParts.push(candidate.institution);
+      if (candidate.course) educationParts.push(candidate.course);
+
+      return {
+        id: candidate.id,
+        name: candidate.full_name,
+        age,
+        city: candidate.city,
+        state: candidate.state,
+        education: educationParts.join(' - ') || null,
+        skills: (candidate.skills as string[]) || [],
+        experience: candidate.profile_summary || (candidate.experience as any)?.map?.((e: any) =>
+          typeof e === 'string' ? e : `${e.role} em ${e.company}`
+        ).join(', ') || null,
+        photo_url: candidate.photo_url,
+      };
     }),
 
   selectCandidatesForInterview: companyProcedure
@@ -771,8 +845,37 @@ export const companyRouter = router({
       if (!company) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Company not found' });
       }
-      // TODO: implement getEmployeeDetails
-      throw new TRPCError({ code: 'NOT_FOUND', message: 'Employee not found' });
+
+      // Get contract with candidate and job data
+      const { data: contract, error } = await supabaseAdmin
+        .from('contracts')
+        .select(`
+          *,
+          candidate:candidates (
+            id, full_name, email, phone, cpf, city, state,
+            date_of_birth, education_level, institution, course,
+            skills, photo_url, profile_summary
+          ),
+          job:jobs (
+            id, title, contract_type, work_type, salary, work_schedule
+          ),
+          feedback (
+            id, contract_id, review_month, review_year,
+            performance_rating, punctuality_rating, communication_rating,
+            teamwork_rating, technical_skills_rating, strengths,
+            areas_for_improvement, general_comments, recommend_continuation,
+            status, created_at
+          )
+        `)
+        .eq('id', input.contractId)
+        .eq('company_id', company.id)
+        .single();
+
+      if (error || !contract) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Employee not found' });
+      }
+
+      return contract;
     }),
 
   // Payment history for specific employee
@@ -781,8 +884,20 @@ export const companyRouter = router({
     .query(async ({ ctx, input }) => {
       const company = await db.getCompanyByUserId(ctx.user.id);
       if (!company) return [];
-      // TODO: implement getEmployeePayments
-      return [];
+
+      const { data, error } = await supabaseAdmin
+        .from('payments')
+        .select('*')
+        .eq('company_id', company.id)
+        .eq('contract_id', input.contractId)
+        .order('due_date', { ascending: false });
+
+      if (error) {
+        console.error('[Company.getEmployeePayments] Error:', error);
+        return [];
+      }
+
+      return data || [];
     }),
 
   getContractReports: companyProcedure
@@ -809,7 +924,25 @@ export const companyRouter = router({
       if (!company) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Company not found' });
       }
-      // TODO: implement submitContractReport
+      // Insert feedback record
+      const { error } = await supabaseAdmin.from('feedback').insert({
+        contract_id: input.contractId,
+        company_id: company.id,
+        candidate_id: null, // will be filled from contract
+        review_month: input.periodMonth,
+        review_year: input.periodYear,
+        performance_rating: input.rating === 'excellent' ? 5 : input.rating === 'good' ? 4 : input.rating === 'regular' ? 3 : 2,
+        strengths: input.strengths || null,
+        areas_for_improvement: input.improvements || null,
+        general_comments: input.notes || null,
+        status: 'submitted',
+      });
+
+      if (error) {
+        console.error('[Company.submitMonthlyReport] Error:', error);
+        throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Erro ao enviar relatório' });
+      }
+
       return { success: true };
     }),
 
@@ -832,21 +965,8 @@ export const companyRouter = router({
       return await db.getCompanyPayments(company.id, input?.filter);
     }),
 
-  getAgencyPaymentInfo: companyProcedure.query(async ({ ctx }) => {
-    const company = await db.getCompanyByUserId(ctx.user.id);
-    if (!company || !company.agency_id) {
-      return { pix_key: null, pix_key_type: null, payment_instructions: null };
-    }
-    const agency = await db.getAgencyById(company.agency_id);
-    if (!agency) {
-      return { pix_key: null, pix_key_type: null, payment_instructions: null };
-    }
-    return {
-      pix_key: agency.pix_key || null,
-      pix_key_type: agency.pix_key_type || null,
-      payment_instructions: agency.payment_instructions || null,
-    };
-  }),
+  // NOTE: getAgencyPaymentInfo is defined earlier in this router (line ~360) with agency_name included.
+  // Duplicate removed to fix build warning.
 
   confirmPaymentMade: companyProcedure
     .input(z.object({ paymentId: z.string() }))

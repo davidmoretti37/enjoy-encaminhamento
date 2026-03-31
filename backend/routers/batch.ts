@@ -1,13 +1,116 @@
-// @ts-nocheck
 // Batch router - candidate batch management and payment
 import { z } from "zod";
 import { router } from "../_core/trpc";
 import { TRPCError } from "@trpc/server";
-import { agencyProcedure, companyProcedure, adminProcedure } from "./procedures";
-import * as db from "../db";
-import * as batchDb from "../db/batches";
+import { agencyProcedure, companyProcedure, adminProcedure, candidateProcedure } from "./procedures";
+import * as _db from "../db";
+import * as _batchDb from "../db/batches";
+const db: any = _db;
+const batchDb: any = _batchDb;
+import { supabaseAdmin as _supabaseAdmin } from "../supabase";
+const supabaseAdmin = _supabaseAdmin as any;
+import { generateCandidateCardPdf } from "../lib/candidateCardPdf";
 
 export const batchRouter = router({
+  // Get meeting info for a candidate's batch (candidate access)
+  getCandidateMeetingInfo: candidateProcedure
+    .input(z.object({ jobId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      const candidate = await db.getCandidateByUserId(ctx.user.id);
+      if (!candidate) return null;
+
+      // Find batches for this job that include this candidate
+      const { data: batches } = await supabaseAdmin
+        .from('candidate_batches')
+        .select('id, meeting_scheduled_at, meeting_link, meeting_notes, status')
+        .eq('job_id', input.jobId)
+        .contains('candidate_ids', [candidate.id])
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+      if (!batches || batches.length === 0) return null;
+
+      const batch = batches[0];
+      return {
+        meeting_scheduled_at: batch.meeting_scheduled_at,
+        meeting_link: batch.meeting_link,
+        meeting_notes: batch.meeting_notes,
+      };
+    }),
+
+  // Get candidate card details for company interview view
+  getCandidateCard: companyProcedure
+    .input(z.object({
+      candidateId: z.string().uuid(),
+      batchId: z.string().uuid(),
+    }))
+    .query(async ({ ctx, input }) => {
+      const candidate = await db.getCandidateById(input.candidateId);
+      if (!candidate) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Candidate not found' });
+      }
+
+      // Calculate age
+      let age = null;
+      if (candidate.date_of_birth) {
+        const today = new Date();
+        const birth = new Date(candidate.date_of_birth);
+        age = today.getFullYear() - birth.getFullYear();
+        const m = today.getMonth() - birth.getMonth();
+        if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
+      }
+
+      // Get interview session for this batch + candidate
+      const { data: participation } = await supabaseAdmin
+        .from('interview_participants')
+        .select('*, session:interview_sessions(*)')
+        .eq('candidate_id', input.candidateId)
+        .eq('session.batch_id', input.batchId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      const session = (participation as any)?.session;
+
+      // Get match score from job_matches
+      const { data: batch } = await supabaseAdmin
+        .from('candidate_batches')
+        .select('job_id')
+        .eq('id', input.batchId)
+        .single();
+
+      let matchScore = null;
+      if (batch?.job_id) {
+        const { data: match } = await supabaseAdmin
+          .from('job_matches')
+          .select('final_score')
+          .eq('job_id', batch.job_id)
+          .eq('candidate_id', input.candidateId)
+          .maybeSingle();
+        matchScore = match?.final_score ?? null;
+      }
+
+      return {
+        profile: {
+          ...candidate,
+          age,
+          name: candidate.full_name,
+          has_work_experience: Array.isArray(candidate.experience) && candidate.experience.length > 0,
+        },
+        interview: session ? {
+          id: session.id,
+          interview_type: session.interview_type,
+          scheduled_at: session.scheduled_at,
+          duration_minutes: session.duration_minutes,
+          meeting_link: session.meeting_link,
+          location_address: session.location_address,
+          location_city: session.location_city,
+          location_state: session.location_state,
+        } : null,
+        matchScore,
+      };
+    }),
+
   // ============================================
   // AGENCY ENDPOINTS
   // ============================================
@@ -500,7 +603,7 @@ export const batchRouter = router({
 
       // Determine which employee types are in the batch
       const employeeTypes = new Set<string>();
-      candidates.forEach((c) => {
+      candidates.forEach((c: any) => {
         if (c.available_for_internship) employeeTypes.add("estagio");
         if (c.available_for_clt) employeeTypes.add("clt");
         if (c.available_for_apprentice) employeeTypes.add("menor-aprendiz");
@@ -814,5 +917,92 @@ export const batchRouter = router({
         });
         return { success: true, sessionsCreated: 1 };
       }
+    }),
+
+  /**
+   * Generate a candidate card PDF for download
+   */
+  generateCandidateCardPdf: companyProcedure
+    .input(z.object({
+      candidateId: z.string().uuid(),
+      batchId: z.string().uuid(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const batch = await batchDb.getBatchById(input.batchId);
+      if (!batch) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Batch not found" });
+      }
+
+      // Verify company owns this batch
+      const company = await db.getCompanyByUserId(ctx.user.id);
+      if (!company || batch.company_id !== company.id) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Access denied" });
+      }
+
+      // Verify candidate is in this batch
+      if (!batch.candidate_ids?.includes(input.candidateId)) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Candidate not in batch" });
+      }
+
+      const candidate = await db.getCandidateById(input.candidateId);
+      if (!candidate) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Candidate not found" });
+      }
+
+      // Get interview session for this batch/candidate
+      const sessions = await db.getInterviewSessionsByBatch(input.batchId);
+      const session = sessions.find((s: any) =>
+        s.participants?.some((p: any) => p.candidate_id === input.candidateId)
+      );
+
+      // Calculate age
+      let age = null;
+      const birthDate = candidate.birth_date || candidate.date_of_birth;
+      if (birthDate) {
+        const bd = new Date(birthDate);
+        const today = new Date();
+        age = today.getFullYear() - bd.getFullYear();
+        const monthDiff = today.getMonth() - bd.getMonth();
+        if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < bd.getDate())) {
+          age--;
+        }
+      }
+
+      const pdfBytes = await generateCandidateCardPdf({
+        name: candidate.full_name,
+        city: candidate.city,
+        state: candidate.state,
+        age,
+        education: candidate.education_level,
+        institution: candidate.institution,
+        course: candidate.course,
+        skills: candidate.skills,
+        languages: candidate.languages,
+        experience: candidate.experience,
+        summary: candidate.summary || candidate.profile_summary,
+        disc_dominante: candidate.disc_dominante,
+        disc_influente: candidate.disc_influente,
+        disc_estavel: candidate.disc_estavel,
+        disc_conforme: candidate.disc_conforme,
+        pdp_top_10_competencies: candidate.pdp_top_10_competencies,
+        pdp_develop_competencies: candidate.pdp_develop_competencies,
+        interview: session ? {
+          interview_type: session.interview_type,
+          scheduled_at: session.scheduled_at,
+          duration_minutes: session.duration_minutes,
+          location_address: session.location_address,
+          location_city: session.location_city,
+          location_state: session.location_state,
+          meeting_link: session.meeting_link,
+        } : null,
+        matchScore: null,
+        jobTitle: batch.job?.title || null,
+      });
+
+      const safeName = candidate.full_name?.replace(/[^a-zA-Z0-9]/g, "_") || "candidato";
+      return {
+        base64: Buffer.from(pdfBytes).toString("base64"),
+        filename: `${safeName}_ficha.pdf`,
+      };
     }),
 });

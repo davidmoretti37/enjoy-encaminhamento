@@ -1,4 +1,3 @@
-// @ts-nocheck
 // Auth router - authentication endpoints
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
@@ -43,7 +42,7 @@ export const authRouter = router({
       let agencyId: string | null = null;
 
       // Check for pending company invitation by email
-      const { data: invitation } = await supabaseAdmin
+      const { data: invitation } = await (supabaseAdmin as any)
         .from("company_invitations")
         .select("*, companies(id, agency_id)")
         .eq("email", ctx.user.email)
@@ -59,7 +58,7 @@ export const authRouter = router({
 
       // Check for agency invitation if no company invitation found
       if (!invitation) {
-        const { data: agencyInvitation } = await supabaseAdmin
+        const { data: agencyInvitation } = await (supabaseAdmin as any)
           .from("agency_invitations")
           .select("*")
           .eq("email", ctx.user.email)
@@ -84,7 +83,7 @@ export const authRouter = router({
 
       const { error } = await db.createUserProfile({
         id: ctx.user.id,
-        email: ctx.user.email,
+        email: ctx.user.email || "",
         name: input.name || null,
         role,
         agency_id: agencyId,

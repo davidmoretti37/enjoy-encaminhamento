@@ -1,4 +1,3 @@
-// @ts-nocheck
 // Candidate router - candidate management
 import { z } from "zod";
 import { router } from "../_core/trpc";
@@ -6,6 +5,7 @@ import { TRPCError } from "@trpc/server";
 import { protectedProcedure } from "../_core/trpc";
 import { adminProcedure, candidateProcedure, agencyProcedure } from "./procedures";
 import * as db from "../db";
+import { supabaseAdmin } from "../supabase";
 import { generateCandidateSummary } from "../services/ai/summarizer";
 import { generateCandidateEmbedding, findMatchingJobs } from "../services/matching";
 
@@ -155,7 +155,7 @@ export const candidateRouter = router({
           city: input.city,
           state: input.state,
           agency_id: agencyId,
-        });
+        } as any);
         candidate = await db.getCandidateById(candidateId);
         if (candidate) {
           // Update with all the other fields
@@ -332,7 +332,7 @@ export const candidateRouter = router({
       }
       const updateData = { ...input };
       if (updateData.date_of_birth === '') delete updateData.date_of_birth;
-      await db.updateCandidate(candidate.id, updateData);
+      await db.updateCandidate(candidate.id, updateData as any);
       return { success: true };
     }),
 
@@ -429,7 +429,7 @@ export const candidateRouter = router({
 
   // Get candidate by ID
   getById: protectedProcedure
-    .input(z.object({ id: z.number() }))
+    .input(z.object({ id: z.string().uuid() }))
     .query(async ({ input }) => {
       return await db.getCandidateById(input.id);
     }),
@@ -539,7 +539,7 @@ export const candidateRouter = router({
         throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Não foi possível processar a busca' });
       }
 
-      const { data, error } = await supabaseAdmin.rpc('search_candidates_by_embedding', {
+      const { data, error } = await (supabaseAdmin as any).rpc('search_candidates_by_embedding', {
         query_embedding: formatEmbeddingForPostgres(embedding),
         match_threshold: 0.3,
         match_count: 50,
@@ -600,7 +600,7 @@ export const candidateRouter = router({
     }))
     .mutation(async ({ ctx, input }) => {
       const { candidateId, ...updateData } = input;
-      await db.updateCandidate(candidateId, updateData);
+      await db.updateCandidate(candidateId, updateData as any);
       return { success: true };
     }),
 });

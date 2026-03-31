@@ -1,13 +1,15 @@
-// @ts-nocheck
 // Candidate database operations
 import { supabase, supabaseAdmin } from "../supabase";
 import type { Candidate, InsertCandidate } from "./types";
 import { generateCandidateSummary } from "../services/ai/summarizer";
 import { generateCandidateEmbedding } from "../services/matching";
 
+// Cast to any to work around TS 5.9 overload resolution issues with Supabase client
+const db = supabaseAdmin as any;
+
 export async function createCandidate(candidate: InsertCandidate): Promise<string> {
   // Use admin client to bypass RLS during candidate creation (e.g., during onboarding)
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("candidates")
     .insert(candidate)
     .select("id")
@@ -18,7 +20,7 @@ export async function createCandidate(candidate: InsertCandidate): Promise<strin
 }
 
 export async function getCandidateByUserId(userId: string): Promise<Candidate | undefined> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("candidates")
     .select("*")
     .eq("user_id", userId)
@@ -30,7 +32,7 @@ export async function getCandidateByUserId(userId: string): Promise<Candidate | 
 
 export async function getCandidateById(id: string): Promise<Candidate | undefined> {
   // Use admin client to bypass RLS (needed during onboarding flow)
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("candidates")
     .select("*")
     .eq("id", id)
@@ -43,7 +45,7 @@ export async function getCandidateById(id: string): Promise<Candidate | undefine
 export async function getCandidatesByIds(ids: string[]): Promise<Candidate[]> {
   if (!ids || ids.length === 0) return [];
 
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("candidates")
     .select("*")
     .in("id", ids);
@@ -58,7 +60,7 @@ export async function getCandidatesByIds(ids: string[]): Promise<Candidate[]> {
 
 export async function getAllCandidates(): Promise<Candidate[]> {
   // Use admin client to bypass RLS (called from admin-only routes)
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("candidates")
     .select("*")
     .order("created_at", { ascending: false });
@@ -69,7 +71,7 @@ export async function getAllCandidates(): Promise<Candidate[]> {
 
 export async function updateCandidate(id: string, data: Partial<InsertCandidate>): Promise<void> {
   // Use admin client to bypass RLS (needed during onboarding flow)
-  const { error } = await supabaseAdmin.from("candidates").update(data).eq("id", id);
+  const { error } = await db.from("candidates").update(data).eq("id", id);
 
   if (error) throw error;
 }
@@ -82,7 +84,7 @@ export async function searchCandidates(filters: {
   status?: string;
 }): Promise<Candidate[]> {
   // Use admin client to bypass RLS (called from admin/company-only routes)
-  let query = supabaseAdmin.from("candidates").select("*");
+  let query = db.from("candidates").select("*");
 
   if (filters.educationLevel) {
     query = query.eq("education_level", filters.educationLevel);
@@ -115,7 +117,7 @@ export async function searchCandidates(filters: {
  * Used by: Background matching service
  */
 export async function getAllActiveCandidates(affiliateId: string): Promise<Candidate[]> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("candidates")
     .select("*")
     .eq("affiliate_id", affiliateId)
@@ -135,7 +137,7 @@ export async function getAllActiveCandidates(affiliateId: string): Promise<Candi
  * Used by: Background matching service for agency-based job matching
  */
 export async function getAllActiveCandidatesByAgency(agencyId: string): Promise<Candidate[]> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("candidates")
     .select("*")
     .eq("agency_id", agencyId)
@@ -155,7 +157,7 @@ export async function getAllActiveCandidatesByAgency(agencyId: string): Promise<
  * Used by: BackgroundMatchingService context
  */
 export async function getCandidateContracts(candidateId: string): Promise<any[]> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("contracts")
     .select("*")
     .eq("candidate_id", candidateId)
@@ -170,7 +172,7 @@ export async function getCandidateContracts(candidateId: string): Promise<any[]>
  * Used by: BackgroundMatchingService context
  */
 export async function getCandidateFeedback(candidateId: string): Promise<any[]> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("feedback")
     .select("*")
     .eq("candidate_id", candidateId)
@@ -185,7 +187,7 @@ export async function getCandidateFeedback(candidateId: string): Promise<any[]> 
  * Used by: BackgroundMatchingService context
  */
 export async function getCandidateInterviews(candidateId: string): Promise<any[]> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("scheduled_meetings")
     .select("*")
     .eq("candidate_id", candidateId)
@@ -200,7 +202,7 @@ export async function getCandidateInterviews(candidateId: string): Promise<any[]
  * Used by: BackgroundMatchingService context
  */
 export async function getCandidateApplications(candidateId: string): Promise<any[]> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("applications")
     .select("*")
     .eq("candidate_id", candidateId)
@@ -214,7 +216,7 @@ export async function getCandidateApplications(candidateId: string): Promise<any
  * Get candidate by CPF
  */
 export async function getCandidateByCpf(cpf: string): Promise<Candidate | null> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("candidates")
     .select("*")
     .eq("cpf", cpf.replace(/\D/g, ''))
@@ -228,7 +230,7 @@ export async function getCandidateByCpf(cpf: string): Promise<Candidate | null> 
  * Get candidate by email
  */
 export async function getCandidateByEmail(email: string): Promise<Candidate | null> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("candidates")
     .select("*")
     .eq("email", email.toLowerCase().trim())
@@ -308,7 +310,7 @@ export async function bulkCreateCandidates(
       }
 
       // Create auth user for the candidate
-      const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
+      const { data: authData, error: authError } = await db.auth.admin.createUser({
         email: candidate.email,
         email_confirm: true,
         user_metadata: {
@@ -326,7 +328,7 @@ export async function bulkCreateCandidates(
       }
 
       // Create user record
-      const { error: userError } = await supabaseAdmin.from("users").insert({
+      const { error: userError } = await db.from("users").insert({
         id: authData.user.id,
         email: candidate.email,
         name: candidate.full_name,
@@ -336,7 +338,7 @@ export async function bulkCreateCandidates(
 
       if (userError) {
         // Rollback auth user
-        await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
+        await db.auth.admin.deleteUser(authData.user.id);
         errors.push({
           email: candidate.email,
           message: userError.message,
@@ -384,7 +386,7 @@ export async function bulkCreateCandidates(
       if (candidate.pdp_interpersonal) candidateData.pdp_interpersonal = candidate.pdp_interpersonal;
 
       // Insert the candidate
-      const { data, error } = await supabaseAdmin
+      const { data, error } = await db
         .from("candidates")
         .insert(candidateData)
         .select("id")
@@ -392,8 +394,8 @@ export async function bulkCreateCandidates(
 
       if (error) {
         // Rollback user records
-        await supabaseAdmin.from("users").delete().eq("id", authData.user.id);
-        await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
+        await db.from("users").delete().eq("id", authData.user.id);
+        await db.auth.admin.deleteUser(authData.user.id);
         errors.push({
           email: candidate.email,
           message: error.message,
@@ -421,7 +423,7 @@ export async function bulkCreateCandidates(
           pdpInterpersonal: candidate.pdp_interpersonal,
         }).then(async (summary) => {
           if (summary) {
-            await supabaseAdmin
+            await db
               .from('candidates')
               .update({
                 summary,
@@ -457,7 +459,7 @@ export async function getCandidateProfileForCompany(
   companyId: string
 ): Promise<any | null> {
   // Check if candidate is in an unlocked batch for this company
-  const { data: batches, error: batchError } = await supabaseAdmin
+  const { data: batches, error: batchError } = await db
     .from("candidate_batches")
     .select("candidate_ids")
     .eq("company_id", companyId)
@@ -466,14 +468,14 @@ export async function getCandidateProfileForCompany(
   if (batchError || !batches) return null;
 
   // Check if candidateId is in any of the batches
-  const isInBatch = batches.some(batch =>
+  const isInBatch = batches.some((batch: any) =>
     batch.candidate_ids?.includes(candidateId)
   );
 
   if (!isInBatch) return null;
 
   // Get full candidate profile
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("candidates")
     .select("*")
     .eq("id", candidateId)

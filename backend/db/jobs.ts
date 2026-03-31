@@ -1,12 +1,15 @@
-// @ts-nocheck
 // Job database operations
 import { supabase, supabaseAdmin } from "../supabase";
 import type { Job, InsertJob } from "./types";
 import { generateJobSummary } from "../services/ai/summarizer";
 import { generateJobEmbedding } from "../services/matching";
 
+// Cast to any to work around TS 5.9 overload resolution issues with Supabase client
+const db = supabaseAdmin as any;
+const dbAnon = supabase as any;
+
 export async function createJob(job: InsertJob): Promise<string> {
-  const { data, error } = await supabase
+  const { data, error } = await dbAnon
     .from("jobs")
     .insert(job)
     .select("id")
@@ -17,7 +20,7 @@ export async function createJob(job: InsertJob): Promise<string> {
 }
 
 export async function getJobById(id: string): Promise<Job | undefined> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("jobs")
     .select("*")
     .eq("id", id)
@@ -28,7 +31,7 @@ export async function getJobById(id: string): Promise<Job | undefined> {
 }
 
 export async function getJobsByCompanyId(companyId: string): Promise<Job[]> {
-  const { data, error } = await supabase
+  const { data, error } = await dbAnon
     .from("jobs")
     .select("*")
     .eq("company_id", companyId)
@@ -39,7 +42,7 @@ export async function getJobsByCompanyId(companyId: string): Promise<Job[]> {
 }
 
 export async function getAllOpenJobs(): Promise<Job[]> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("jobs")
     .select("*")
     .eq("status", "open")
@@ -50,7 +53,7 @@ export async function getAllOpenJobs(): Promise<Job[]> {
 }
 
 export async function updateJob(id: string, data: Partial<InsertJob>): Promise<void> {
-  const { error } = await supabaseAdmin.from("jobs").update(data).eq("id", id);
+  const { error } = await db.from("jobs").update(data).eq("id", id);
 
   if (error) throw error;
 }
@@ -61,7 +64,7 @@ export async function searchJobs(filters: {
   city?: string;
   status?: string;
 }): Promise<Job[]> {
-  let query = supabase.from("jobs").select("*");
+  let query = dbAnon.from("jobs").select("*");
 
   if (filters.contractType) {
     query = query.eq("contract_type", filters.contractType);
@@ -83,7 +86,7 @@ export async function searchJobs(filters: {
 }
 
 export async function getAllJobs(): Promise<any[]> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("jobs")
     .select(`
       *,
@@ -117,7 +120,7 @@ export async function updateJobStatus(
     }
   }
 
-  const { error } = await supabaseAdmin.from("jobs").update(updates).eq("id", id);
+  const { error } = await db.from("jobs").update(updates).eq("id", id);
 
   if (error) {
     console.error("[Database] Failed to update job status:", error);
@@ -147,7 +150,7 @@ export async function createJobForOnboarding(
     agency_id: string;
   }
 ): Promise<string> {
-  const { data: job, error } = await supabaseAdmin
+  const { data: job, error } = await db
     .from("jobs")
     .insert({
       company_id: companyId,
@@ -189,7 +192,7 @@ export async function createJobForOnboarding(
     salary: data.salary ? `R$ ${data.salary}` : undefined,
   }).then(async (summary) => {
     if (summary) {
-      await supabaseAdmin
+      await db
         .from("jobs")
         .update({
           summary,

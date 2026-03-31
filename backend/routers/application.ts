@@ -1,4 +1,3 @@
-// @ts-nocheck
 // Application router - job application management
 import { z } from "zod";
 import { router, protectedProcedure } from "../_core/trpc";
@@ -19,6 +18,15 @@ export const applicationRouter = router({
       const candidate = await db.getCandidateByUserId(ctx.user.id);
       if (!candidate) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Candidate profile not found' });
+      }
+
+      // Verify the job exists and is open
+      const job = await db.getJobById(input.job_id);
+      if (!job) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Job not found' });
+      }
+      if (job.status !== 'open' && job.status !== 'pending_review') {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'This job is no longer accepting applications' });
       }
 
       // Check if already applied
@@ -70,7 +78,7 @@ export const applicationRouter = router({
     const batches = await getBatchesByCandidateId(candidate.id);
 
     // Get candidate's interview participations to determine real funnel position
-    const { data: participations } = await supabaseAdmin
+    const { data: participations } = await (supabaseAdmin as any)
       .from('interview_participants')
       .select('candidate_id, status, interview_session_id, session:interview_sessions(id, interview_stage, status, scheduled_at, interview_type, batch_id)')
       .eq('candidate_id', candidate.id);
@@ -157,7 +165,7 @@ export const applicationRouter = router({
       // Company: verify they own the job
       if (ctx.user.role === 'company') {
         const company = await db.getCompanyByUserId(ctx.user.id);
-        if (job.companyId !== company?.id) {
+        if (job.company_id !== company?.id) {
           throw new TRPCError({ code: 'FORBIDDEN' });
         }
         return await db.getApplicationsByJobId(input.jobId);
@@ -166,7 +174,7 @@ export const applicationRouter = router({
       // Agency: verify the job belongs to their agency
       if (ctx.user.role === 'agency') {
         const agency = await db.getAgencyByUserId(ctx.user.id);
-        if (!agency || job.agency_id !== agency.id) {
+        if (!agency || (job as any).agency_id !== agency.id) {
           throw new TRPCError({ code: 'FORBIDDEN' });
         }
         return await db.getApplicationsByJobId(input.jobId);
@@ -218,10 +226,10 @@ export const applicationRouter = router({
 
         if (ctx.user.role === 'company') {
           const company = await db.getCompanyByUserId(ctx.user.id);
-          if (job.companyId !== company?.id) throw new TRPCError({ code: 'FORBIDDEN' });
+          if (job.company_id !== company?.id) throw new TRPCError({ code: 'FORBIDDEN' });
         } else if (ctx.user.role === 'agency') {
           const agency = await db.getAgencyByUserId(ctx.user.id);
-          if (!agency || job.agency_id !== agency.id) throw new TRPCError({ code: 'FORBIDDEN' });
+          if (!agency || (job as any).agency_id !== agency.id) throw new TRPCError({ code: 'FORBIDDEN' });
         } else {
           throw new TRPCError({ code: 'FORBIDDEN' });
         }

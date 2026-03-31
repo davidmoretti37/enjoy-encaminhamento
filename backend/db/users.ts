@@ -1,4 +1,3 @@
-// @ts-nocheck
 // User database operations
 import { supabase, supabaseAdmin } from "../supabase";
 import type { User, InsertUser } from "./types";
@@ -19,7 +18,7 @@ export async function getUserById(id: string): Promise<User | undefined> {
 }
 
 export async function upsertUser(user: InsertUser): Promise<void> {
-  const { error } = await supabaseAdmin
+  const { error } = await (supabaseAdmin as any)
     .from("users")
     .upsert(user, { onConflict: "id" });
 
@@ -36,8 +35,8 @@ export async function createUserProfile(profile: {
   name: string | null;
   role: "company" | "candidate";
   agency_id: string | null;
-}): Promise<{ error: any }> {
-  const { error } = await supabaseAdmin.from("users").upsert({
+}): Promise<{ error: Error | null }> {
+  const { error } = await (supabaseAdmin as any).from("users").upsert({
     id: profile.id,
     email: profile.email,
     name: profile.name,

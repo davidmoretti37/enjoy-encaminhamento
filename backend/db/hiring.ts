@@ -1,8 +1,10 @@
-// @ts-nocheck
 // Hiring process database operations
 // Handles the flow from interview completion to employee management
 
 import { supabase, supabaseAdmin } from "../supabase";
+
+const db = supabaseAdmin as any;
+const dbAnon = supabase as any;
 
 // ============================================
 // TYPES
@@ -100,7 +102,7 @@ export async function createHiringProcess(params: {
   paymentDay?: number;
   contractDurationMonths?: number;
 }): Promise<HiringProcess> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("hiring_processes")
     .insert({
       application_id: params.applicationId,
@@ -135,7 +137,7 @@ export async function createHiringProcess(params: {
  * Get hiring process by ID with full details
  */
 export async function getHiringProcessById(id: string): Promise<any | null> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("hiring_processes")
     .select(`
       *,
@@ -162,7 +164,7 @@ export async function getHiringProcessById(id: string): Promise<any | null> {
  * Get hiring processes by job ID (for agency visibility)
  */
 export async function getHiringProcessesByJobId(jobId: string): Promise<any[]> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("hiring_processes")
     .select(`
       id, status, hiring_type, created_at, start_date, end_date,
@@ -185,7 +187,7 @@ export async function getHiringProcessesByJobId(jobId: string): Promise<any[]> {
  * Get hiring process by application ID
  */
 export async function getHiringProcessByApplication(applicationId: string): Promise<HiringProcess | null> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("hiring_processes")
     .select("*")
     .eq("application_id", applicationId)
@@ -207,7 +209,7 @@ export async function getHiringProcessesByCompany(
   companyId: string,
   status?: string
 ): Promise<any[]> {
-  let query = supabaseAdmin
+  let query = db
     .from("hiring_processes")
     .select(`
       *,
@@ -238,7 +240,7 @@ export async function updateHiringProcess(
   id: string,
   updates: Partial<HiringProcess>
 ): Promise<void> {
-  const { error } = await supabaseAdmin
+  const { error } = await db
     .from("hiring_processes")
     .update(updates)
     .eq("id", id);
@@ -253,7 +255,7 @@ export async function updateHiringProcess(
  * Count active estágio contracts for a company (for first intern check)
  */
 export async function countActiveEstagioContracts(companyId: string): Promise<number> {
-  const { count, error } = await supabaseAdmin
+  const { count, error } = await db
     .from("hiring_processes")
     .select("id", { count: "exact", head: true })
     .eq("company_id", companyId)
@@ -277,7 +279,7 @@ export async function recordCompanySignature(
   signerCpf: string,
   signature: string
 ): Promise<void> {
-  const { error } = await supabaseAdmin
+  const { error } = await db
     .from("hiring_processes")
     .update({
       company_signed: true,
@@ -301,7 +303,7 @@ export async function recordCandidateSignature(
   hiringProcessId: string,
   signerCpf: string
 ): Promise<void> {
-  const { error } = await supabaseAdmin
+  const { error } = await db
     .from("hiring_processes")
     .update({
       candidate_signed: true,
@@ -324,7 +326,7 @@ export async function recordParentSignature(
   signerName: string,
   signerCpf: string
 ): Promise<void> {
-  const { error } = await supabaseAdmin
+  const { error } = await db
     .from("hiring_processes")
     .update({
       parent_signed: true,
@@ -348,7 +350,7 @@ export async function recordSchoolSignature(
   signerName: string,
   signerContact: string
 ): Promise<void> {
-  const { error } = await supabaseAdmin
+  const { error } = await db
     .from("hiring_processes")
     .update({
       school_signed: true,
@@ -378,13 +380,22 @@ export async function checkAllSignaturesComplete(hiringProcessId: string): Promi
     return { complete: false, signed: 0, total: 0, missing: [] };
   }
 
-  if (process.hiring_type === "clt") {
-    // CLT only needs company signature
+  if (process.hiring_type === "clt" || process.hiring_type === "pj") {
+    // CLT/PJ needs company + candidate signatures
+    const missing: string[] = [];
+    let signed = 0;
+
+    if (process.company_signed) signed++;
+    else missing.push("company");
+
+    if (process.candidate_signed) signed++;
+    else missing.push("candidate");
+
     return {
-      complete: process.company_signed,
-      signed: process.company_signed ? 1 : 0,
-      total: 1,
-      missing: process.company_signed ? [] : ["company"],
+      complete: signed === 2,
+      signed,
+      total: 2,
+      missing,
     };
   }
 
@@ -426,7 +437,7 @@ export async function createSigningInvitation(params: {
   signerEmail: string;
   signerPhone?: string;
 }): Promise<SigningInvitation> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("signing_invitations")
     .insert({
       hiring_process_id: params.hiringProcessId,
@@ -450,7 +461,7 @@ export async function createSigningInvitation(params: {
  * Get signing invitation by ID
  */
 export async function getSigningInvitationById(id: string): Promise<any | null> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("signing_invitations")
     .select(`
       *,
@@ -477,7 +488,7 @@ export async function getSigningInvitationById(id: string): Promise<any | null> 
  * Get signing invitation by token
  */
 export async function getSigningInvitationByToken(token: string): Promise<any | null> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("signing_invitations")
     .select(`
       *,
@@ -504,7 +515,7 @@ export async function getSigningInvitationByToken(token: string): Promise<any | 
  * Mark invitation as viewed
  */
 export async function markInvitationViewed(invitationId: string): Promise<void> {
-  const { error } = await supabaseAdmin
+  const { error } = await db
     .from("signing_invitations")
     .update({ viewed_at: new Date().toISOString() })
     .eq("id", invitationId)
@@ -524,7 +535,7 @@ export async function completeSigningInvitation(
   signerCpf: string,
   signerIp?: string
 ): Promise<void> {
-  const { error } = await supabaseAdmin
+  const { error } = await db
     .from("signing_invitations")
     .update({
       signed_at: new Date().toISOString(),
@@ -544,7 +555,7 @@ export async function completeSigningInvitation(
  * Update email sent timestamp
  */
 export async function markInvitationEmailSent(invitationId: string): Promise<void> {
-  const { error } = await supabaseAdmin
+  const { error } = await db
     .from("signing_invitations")
     .update({ email_sent_at: new Date().toISOString() })
     .eq("id", invitationId);
@@ -558,7 +569,7 @@ export async function markInvitationEmailSent(invitationId: string): Promise<voi
  * Get all signing invitations for a hiring process
  */
 export async function getSigningInvitationsByHiringProcess(hiringProcessId: string): Promise<any[]> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("signing_invitations")
     .select("*")
     .eq("hiring_process_id", hiringProcessId);
@@ -574,7 +585,7 @@ export async function getSigningInvitationsByHiringProcess(hiringProcessId: stri
  * Get unsent invitations for a hiring process (not yet emailed, not yet signed)
  */
 export async function getUnsentInvitations(hiringProcessId: string): Promise<any[]> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("signing_invitations")
     .select(`
       *,
@@ -601,7 +612,7 @@ export async function getUnsentInvitations(hiringProcessId: string): Promise<any
  * Get pending invitations for a hiring process
  */
 export async function getPendingInvitations(hiringProcessId: string): Promise<SigningInvitation[]> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("signing_invitations")
     .select("*")
     .eq("hiring_process_id", hiringProcessId)
@@ -672,7 +683,7 @@ export async function createEstagioFollowUps(
     type: "contract_expiring",
   });
 
-  const { error } = await supabaseAdmin
+  const { error } = await db
     .from("follow_up_schedule")
     .insert(followUps);
 
@@ -695,7 +706,7 @@ export async function createCLTFollowUp(
   const followUpDate = new Date(startDate);
   followUpDate.setDate(followUpDate.getDate() + 30);
 
-  const { error } = await supabaseAdmin
+  const { error } = await db
     .from("follow_up_schedule")
     .insert({
       hiring_process_id: hiringProcessId,
@@ -717,7 +728,7 @@ export async function getUpcomingFollowUps(
   companyId: string,
   limit: number = 10
 ): Promise<FollowUp[]> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("follow_up_schedule")
     .select(`
       *,
@@ -749,7 +760,7 @@ export async function completeFollowUp(
   notes?: string,
   feedbackReceived: boolean = false
 ): Promise<void> {
-  const { error } = await supabaseAdmin
+  const { error } = await db
     .from("follow_up_schedule")
     .update({
       completed_at: new Date().toISOString(),

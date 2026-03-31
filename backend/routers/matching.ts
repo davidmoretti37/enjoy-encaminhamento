@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * Matching Router - Advanced AI-powered candidate-job matching
  */
@@ -38,7 +37,7 @@ export const matchingRouter = router({
     }))
     .mutation(async ({ ctx, input }) => {
       // Verify agency has access to this job
-      const agency = await db.getAgencyForUserContext(ctx.user.id, ctx.user.role);
+      const agency = await db.getAgencyForUserContext(ctx.user.id, ctx.user.role ?? '');
       if (!agency) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Agency not found' });
       }
@@ -74,7 +73,7 @@ export const matchingRouter = router({
       includeExplanations: z.boolean().default(true),
     }))
     .query(async ({ ctx, input }) => {
-      const agency = await db.getAgencyForUserContext(ctx.user.id, ctx.user.role);
+      const agency = await db.getAgencyForUserContext(ctx.user.id, ctx.user.role ?? '');
       if (!agency) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Agency not found' });
       }
@@ -98,13 +97,13 @@ export const matchingRouter = router({
       candidateId: z.string().uuid(),
     }))
     .query(async ({ ctx, input }) => {
-      const agency = await db.getAgencyForUserContext(ctx.user.id, ctx.user.role);
+      const agency = await db.getAgencyForUserContext(ctx.user.id, ctx.user.role ?? '');
       if (!agency) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Agency not found' });
       }
 
       // Get the match record
-      const { data, error } = await supabaseAdmin
+      const { data, error } = await (supabaseAdmin as any)
         .from('job_matches')
         .select('*')
         .eq('job_id', input.jobId)
@@ -169,7 +168,7 @@ export const matchingRouter = router({
       jobId: z.string().uuid(),
     }))
     .query(async ({ input }) => {
-      const { data: job, error } = await supabaseAdmin
+      const { data: job, error } = await (supabaseAdmin as any)
         .from('jobs')
         .select('title, description, contract_type, required_skills')
         .eq('id', input.jobId)
@@ -204,7 +203,7 @@ export const matchingRouter = router({
       vectorThreshold: z.number().min(0).max(1).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
-      const agency = await db.getAgencyForUserContext(ctx.user.id, ctx.user.role);
+      const agency = await db.getAgencyForUserContext(ctx.user.id, ctx.user.role ?? '');
       if (!agency) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Agency not found' });
       }
@@ -212,7 +211,7 @@ export const matchingRouter = router({
       const { jobId, ...config } = input;
 
       // Upsert configuration
-      const { error } = await supabaseAdmin
+      const { error } = await (supabaseAdmin as any)
         .from('job_matching_config')
         .upsert({
           job_id: jobId,
@@ -244,7 +243,7 @@ export const matchingRouter = router({
       jobId: z.string().uuid(),
     }))
     .query(async ({ input }) => {
-      const { data, error } = await supabaseAdmin
+      const { data, error } = await (supabaseAdmin as any)
         .from('job_matching_config')
         .select('*')
         .eq('job_id', input.jobId)
@@ -284,7 +283,7 @@ export const matchingRouter = router({
       endDate: z.string().datetime().optional(),
     }))
     .query(async ({ input }) => {
-      let query = supabaseAdmin
+      let query = (supabaseAdmin as any)
         .from('job_matches')
         .select('composite_score, llm_refined_score, llm_recommendation, algorithm_version, created_at');
 
@@ -312,15 +311,15 @@ export const matchingRouter = router({
 
       // Calculate statistics
       const totalMatches = data.length;
-      const compositeScores = data.map(d => d.composite_score).filter(s => s != null);
-      const llmScores = data.map(d => d.llm_refined_score).filter(s => s != null);
+      const compositeScores = data.map((d: any) => d.composite_score).filter((s: any): s is number => s != null);
+      const llmScores = data.map((d: any) => d.llm_refined_score).filter((s: any): s is number => s != null);
 
       const averageCompositeScore = compositeScores.length > 0
-        ? compositeScores.reduce((a, b) => a + b, 0) / compositeScores.length
+        ? compositeScores.reduce((a: number, b: number) => a + b, 0) / compositeScores.length
         : 0;
 
       const averageLLMScore = llmScores.length > 0
-        ? llmScores.reduce((a, b) => a + b, 0) / llmScores.length
+        ? llmScores.reduce((a: number, b: number) => a + b, 0) / llmScores.length
         : 0;
 
       const recommendationDistribution: Record<string, number> = {};

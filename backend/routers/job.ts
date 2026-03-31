@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * Job Router - Job management
  */
@@ -7,8 +6,10 @@ import { router } from "../_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { publicProcedure, protectedProcedure } from "../_core/trpc";
 import { adminProcedure, companyProcedure, candidateProcedure, agencyProcedure } from "./procedures";
-import * as db from "../db";
-import { supabaseAdmin, withRetry } from "../supabase";
+import * as _db from "../db";
+const db: any = _db;
+import { supabaseAdmin as _supabaseAdmin, withRetry } from "../supabase";
+const supabaseAdmin = _supabaseAdmin as any;
 import { generateJobSummary } from "../services/ai/summarizer";
 import { generateJobEmbedding, findMatchingCandidates } from "../services/matching";
 
@@ -632,6 +633,16 @@ export const jobRouter = router({
     return await db.getJobsByCompanyId(company.id);
   }),
 
+  // Get jobs by company ID (agency/admin access) - simple version
+  getByCompanyIdSimple: protectedProcedure
+    .input(z.object({ companyId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      if (ctx.user.role !== 'admin' && ctx.user.role !== 'super_admin' && ctx.user.role !== 'agency') {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Acesso negado' });
+      }
+      return await db.getJobsByCompanyId(input.companyId);
+    }),
+
   // Get open jobs for public display (no auth required)
   getPublicJobs: publicProcedure
     .input(z.object({
@@ -640,9 +651,9 @@ export const jobRouter = router({
     .query(async ({ input }) => {
       const jobs = await db.getAllOpenJobs();
       const filtered = input?.contractType
-        ? jobs.filter(j => j.contract_type === input.contractType)
+        ? jobs.filter((j: any) => j.contract_type === input.contractType)
         : jobs;
-      return filtered.map(job => ({
+      return filtered.map((job: any) => ({
         id: job.id,
         title: job.title,
         contract_type: job.contract_type,
@@ -663,7 +674,7 @@ export const jobRouter = router({
   getOpenJobsForCandidates: candidateProcedure.query(async () => {
     const jobs = await db.getAllOpenJobs();
     // Strip company information - candidates should not see company names until hired
-    return jobs.map(job => ({
+    return jobs.map((job: any) => ({
       id: job.id,
       title: job.title,
       description: job.description,
@@ -751,7 +762,7 @@ export const jobRouter = router({
     return data || [];
   }),
 
-  // Get jobs for a specific company (agency/admin access)
+  // Get jobs for a specific company (agency/admin access) - detailed version with company info
   getByCompanyId: protectedProcedure
     .input(z.object({
       companyId: z.string(),

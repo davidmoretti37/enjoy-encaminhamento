@@ -1,4 +1,3 @@
-// @ts-nocheck
 // Agency context router for admin agency switching
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
@@ -39,6 +38,6 @@ export const agencyContextRouter = router({
 
   // Get all available agencies for this admin
   getAvailable: adminProcedure.query(async ({ ctx }) => {
-    return await db.getAgenciesForAdmin(ctx.user.id, ctx.user.role);
+    return await db.getAgenciesForAdmin(ctx.user.id, ctx.user.role!);
   }),
 });

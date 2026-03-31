@@ -1,4 +1,3 @@
-// @ts-nocheck
 // Company invitation router - invite imported companies to access the platform
 import { z } from "zod";
 import { router, publicProcedure, protectedProcedure } from "../_core/trpc";
@@ -62,7 +61,7 @@ export const companyInvitationRouter = router({
     }))
     .mutation(async ({ ctx, input }) => {
       // Get company details
-      const { data: company, error: companyError } = await supabaseAdmin
+      const { data: company, error: companyError } = await (supabaseAdmin as any)
         .from("companies")
         .select("id, company_name, email, user_id, agency_id")
         .eq("id", input.companyId)
@@ -130,7 +129,7 @@ export const companyInvitationRouter = router({
     }))
     .mutation(async ({ ctx, input }) => {
       // Get company details
-      const { data: company, error: companyError } = await supabaseAdmin
+      const { data: company, error: companyError } = await (supabaseAdmin as any)
         .from("companies")
         .select("id, company_name, email, user_id")
         .eq("id", input.companyId)
@@ -181,7 +180,7 @@ export const companyInvitationRouter = router({
   validate: publicProcedure
     .input(z.object({ token: z.string() }))
     .query(async ({ input }) => {
-      const { data: row } = await supabaseAdmin
+      const { data: row } = await (supabaseAdmin as any)
         .from("company_invitations")
         .select("*")
         .eq("token", input.token)
@@ -205,7 +204,7 @@ export const companyInvitationRouter = router({
   accept: protectedProcedure
     .input(z.object({ token: z.string() }))
     .mutation(async ({ ctx, input }) => {
-      const { data: invitation } = await supabaseAdmin
+      const { data: invitation } = await (supabaseAdmin as any)
         .from("company_invitations")
         .select("*")
         .eq("token", input.token)
@@ -221,7 +220,7 @@ export const companyInvitationRouter = router({
         throw new TRPCError({ code: "BAD_REQUEST", message: "Invitation expired" });
       }
 
-      const { error: acceptError } = await supabaseAdmin
+      const { error: acceptError } = await (supabaseAdmin as any)
         .from("company_invitations")
         .update({ accepted_at: new Date().toISOString() })
         .eq("token", input.token);
@@ -230,7 +229,7 @@ export const companyInvitationRouter = router({
         throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to accept invitation" });
       }
 
-      const { error: userUpdateError } = await supabaseAdmin
+      const { error: userUpdateError } = await (supabaseAdmin as any)
         .from("users")
         .update({ company_id: invitation.company_id })
         .eq("id", ctx.user.id);
@@ -250,7 +249,7 @@ export const companyInvitationRouter = router({
       name: z.string(),
     }))
     .mutation(async ({ input }) => {
-      const { data: invitation } = await supabaseAdmin
+      const { data: invitation } = await (supabaseAdmin as any)
         .from("company_invitations")
         .select("*")
         .eq("token", input.token)
@@ -270,7 +269,7 @@ export const companyInvitationRouter = router({
         throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: authError?.message || "Failed to create user" });
       }
 
-      const { error: insertError } = await supabaseAdmin
+      const { error: insertError } = await (supabaseAdmin as any)
         .from("users")
         .insert({
           id: newUser.user.id,
@@ -289,7 +288,7 @@ export const companyInvitationRouter = router({
         });
       }
 
-      const { error: acceptError } = await supabaseAdmin
+      const { error: acceptError } = await (supabaseAdmin as any)
         .from("company_invitations")
         .update({ accepted_at: new Date().toISOString() })
         .eq("token", input.token);
@@ -313,7 +312,7 @@ export const companyInvitationRouter = router({
     }))
     .query(async ({ input }) => {
       // Check if company has user linked
-      const { data: company } = await supabaseAdmin
+      const { data: company } = await (supabaseAdmin as any)
         .from("companies")
         .select("user_id")
         .eq("id", input.companyId)

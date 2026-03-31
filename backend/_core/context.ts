@@ -29,7 +29,7 @@ function setCachedUser(token: string, user: User) {
   // Evict old entries periodically
   if (authCache.size > 500) {
     const now = Date.now();
-    for (const [key, val] of authCache) {
+    for (const [key, val] of Array.from(authCache.entries())) {
       if (now >= val.expiresAt) authCache.delete(key);
     }
   }

@@ -1,4 +1,3 @@
-// @ts-nocheck
 // Interview router - interview scheduling and management
 import { z } from "zod";
 import { router } from "../_core/trpc";
@@ -87,13 +86,13 @@ export const interviewRouter = router({
 
       // Use company address for in-person if not provided
       const locationAddress = input.interviewType === "in_person"
-        ? (input.locationAddress || company.address)
+        ? (input.locationAddress || (company as any).address || undefined)
         : undefined;
       const locationCity = input.interviewType === "in_person"
-        ? (input.locationCity || company.city)
+        ? (input.locationCity || (company as any).city || undefined)
         : undefined;
       const locationState = input.interviewType === "in_person"
-        ? (input.locationState || company.state)
+        ? (input.locationState || (company as any).state || undefined)
         : undefined;
 
       // Create interview session
@@ -127,7 +126,7 @@ export const interviewRouter = router({
         await db.updateBatch(input.batchId, {
           status: "meeting_scheduled",
           selected_candidate_ids: input.candidateIds,
-        });
+        } as any);
       }
 
       // Format date for notifications

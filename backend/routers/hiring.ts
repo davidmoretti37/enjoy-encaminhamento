@@ -1,4 +1,3 @@
-// @ts-nocheck
 // Hiring router - handles the flow from interview to employee
 // Different processes for Estágio (4-party signing, recurring) vs CLT (one-time payment)
 
@@ -6,9 +5,12 @@ import { z } from "zod";
 import { router, publicProcedure } from "../_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { companyProcedure, candidateProcedure, agencyProcedure } from "./procedures";
-import * as db from "../db";
-import * as hiringDb from "../db/hiring";
-import { supabaseAdmin } from "../supabase";
+import * as _db from "../db";
+import * as _hiringDb from "../db/hiring";
+const db: any = _db;
+const hiringDb: any = _hiringDb;
+import { supabaseAdmin as _supabaseAdmin } from "../supabase";
+const supabaseAdmin = _supabaseAdmin as any;
 import { sendEmail } from "./email";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -205,6 +207,16 @@ export const hiringRouter = router({
 
       const hiringType = job.contract_type as string;
       const startDate = new Date(input.startDate);
+
+      // Validate start date is not in the past
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      if (startDate < today) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "A data de início não pode ser no passado",
+        });
+      }
 
       // Calculate fee
       let isFirstIntern = false;
@@ -832,6 +844,13 @@ export const hiringRouter = router({
         await handleEstagioSignaturesComplete(input.hiringProcessId, process, company);
       }
 
+      // For CLT/PJ, activate when both company + candidate have signed
+      if (signatureStatus.complete && (process.hiring_type === "clt" || process.hiring_type === "pj")) {
+        await hiringDb.updateHiringProcess(input.hiringProcessId, {
+          status: "active",
+        });
+      }
+
       return { success: true, signatureStatus };
     }),
 
@@ -1056,11 +1075,28 @@ export const hiringRouter = router({
         receiptUrl = url;
       }
 
-      // Update hiring process to active (with receipt URL if uploaded)
-      await hiringDb.updateHiringProcess(input.hiringProcessId, {
-        status: "active",
-        ...(receiptUrl ? { receipt_url: receiptUrl } : {}),
-      });
+      // Record payment receipt — keep pending_signatures (need company + candidate to sign documents first)
+      // Don't activate yet; the DB trigger or signAsCandidate/confirmCompanyAutentiqueSign will activate
+      // when both parties have signed
+      const updates: any = {};
+      if (process.status === "pending_payment") {
+        updates.status = "pending_signatures";
+      }
+      if (Object.keys(updates).length > 0) {
+        await hiringDb.updateHiringProcess(input.hiringProcessId, updates);
+      }
+
+      // Update the payment record with receipt
+      if (receiptUrl) {
+        await supabaseAdmin
+          .from("payments")
+          .update({ receipt_url: receiptUrl, status: "paid" })
+          .eq("company_id", company.id)
+          .eq("status", "pending")
+          .ilike("notes", `%${process.candidate?.full_name || "CLT"}%`)
+          .order("created_at", { ascending: false })
+          .limit(1);
+      }
 
       // AI receipt verification (async — doesn't block confirmation)
       if (receiptUrl && process.calculated_fee) {
@@ -1090,13 +1126,13 @@ export const hiringRouter = router({
         // Follow-up may already exist from initiateHiring
       }
 
-      // Notify candidate
+      // Notify candidate that documents are ready for signing
       if (process.candidate?.user_id) {
         await db.createNotification({
           user_id: process.candidate.user_id,
-          title: "Contratação confirmada!",
-          message: `Sua contratação para a vaga "${process.job?.title}" foi confirmada. Boa sorte!`,
-          type: "success",
+          title: "Documentos prontos para assinatura",
+          message: `Os documentos da vaga "${process.job?.title}" estão prontos. Acesse sua candidatura para assinar.`,
+          type: "info",
           related_to_type: "hiring",
           related_to_id: input.hiringProcessId,
         });
@@ -1422,20 +1458,27 @@ export const hiringRouter = router({
         await db.createNotification({
           user_id: company.user_id,
           title: "Candidato assinou o contrato",
-          message: `${candidate.full_name} assinou o contrato de estágio para a vaga "${process.job?.title}".`,
+          message: `${candidate.full_name} assinou o contrato para a vaga "${process.job?.title}".`,
           type: "success",
           related_to_type: "hiring",
           related_to_id: input.hiringProcessId,
         });
       }
 
-      // If all signatures complete, send completion notifications
+      // If all signatures complete, send completion notifications and activate
       if (signatureStatus.complete) {
         await sendSignaturesCompleteNotifications(
           input.hiringProcessId,
           process,
           company
         );
+
+        // For CLT/PJ, activate when both company + candidate have signed
+        if (process.hiring_type === "clt" || process.hiring_type === "pj") {
+          await hiringDb.updateHiringProcess(input.hiringProcessId, {
+            status: "active",
+          });
+        }
       }
 
       return { success: true, signatureStatus };

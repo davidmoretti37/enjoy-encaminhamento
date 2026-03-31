@@ -1,4 +1,3 @@
-// @ts-nocheck
 // Notification database operations
 import { supabase } from "../supabase";
 import type { Notification } from "./types";
@@ -27,7 +26,7 @@ export async function getUnreadNotificationsCount(userId: string): Promise<numbe
 }
 
 export async function markNotificationAsRead(id: string): Promise<void> {
-  const { error } = await supabase
+  const { error } = await (supabase as any)
     .from("notifications")
     .update({ is_read: true, read_at: new Date().toISOString() })
     .eq("id", id);
@@ -36,7 +35,7 @@ export async function markNotificationAsRead(id: string): Promise<void> {
 }
 
 export async function markAllNotificationsAsRead(userId: string): Promise<void> {
-  const { error } = await supabase
+  const { error } = await (supabase as any)
     .from("notifications")
     .update({ is_read: true, read_at: new Date().toISOString() })
     .eq("user_id", userId)
@@ -53,7 +52,7 @@ export async function createNotification(params: {
   related_to_type?: string;
   related_to_id?: string;
 }): Promise<string> {
-  const { data, error } = await supabase
+  const { data, error } = await (supabase as any)
     .from("notifications")
     .insert({
       user_id: params.user_id,

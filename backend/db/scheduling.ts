@@ -1,6 +1,7 @@
-// @ts-nocheck
 // Scheduling and meeting database operations
 import { supabaseAdmin } from "../supabase";
+
+const db = supabaseAdmin as any;
 
 // ============ Email Outreach ============
 
@@ -12,7 +13,7 @@ export async function createEmailOutreach(input: {
   subject?: string;
   bodyPreview?: string;
 }): Promise<any> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("email_outreach")
     .insert({
       sender_id: input.senderId,
@@ -37,7 +38,7 @@ export async function getEmailOutreachHistory(
   senderId: string,
   companyId?: string
 ): Promise<any[]> {
-  let query = supabaseAdmin
+  let query = db
     .from("email_outreach")
     .select("*")
     .eq("sender_id", senderId)
@@ -74,12 +75,13 @@ export async function getCompanyFullHistory(
   agencyContract: { type: string; pdfUrl?: string | null; html?: string | null } | null;
   phoneNumbers: { label: string; phone_number: string }[];
   companyEmails: { label: string; email: string; is_primary: boolean }[];
+  signedContratoInicial: any[];
   hiringProcesses: any[];
   signingInvitations: any[];
 }> {
   let meeting = null;
 
-  const { data: meetingByAdmin } = await supabaseAdmin
+  const { data: meetingByAdmin } = await db
     .from("scheduled_meetings")
     .select("*")
     .eq("admin_id", adminId)
@@ -91,7 +93,7 @@ export async function getCompanyFullHistory(
   meeting = meetingByAdmin;
 
   if (!meeting && agencyId) {
-    const { data: meetingByAgency } = await supabaseAdmin
+    const { data: meetingByAgency } = await db
       .from("scheduled_meetings")
       .select("*")
       .eq("agency_id", agencyId)
@@ -102,7 +104,7 @@ export async function getCompanyFullHistory(
     meeting = meetingByAgency;
   }
 
-  const { data: form } = await supabaseAdmin
+  const { data: form } = await db
     .from("company_forms")
     .select("*")
     .eq("email", companyEmail)
@@ -110,14 +112,14 @@ export async function getCompanyFullHistory(
     .limit(1)
     .single();
 
-  const { data: emails } = await supabaseAdmin
+  const { data: emails } = await db
     .from("email_outreach")
     .select("*")
     .eq("sender_id", adminId)
     .eq("recipient_email", companyEmail)
     .order("sent_at", { ascending: false });
 
-  const { data: company } = await supabaseAdmin
+  const { data: company } = await db
     .from("companies")
     .select("*")
     .eq("email", companyEmail)
@@ -131,7 +133,7 @@ export async function getCompanyFullHistory(
   let hiringProcesses: any[] = [];
   let signingInvitations: any[] = [];
   if (company?.id) {
-    const { data: companyContracts } = await supabaseAdmin
+    const { data: companyContracts } = await db
       .from("contracts")
       .select(
         `
@@ -144,7 +146,7 @@ export async function getCompanyFullHistory(
       .order("created_at", { ascending: false });
     contracts = companyContracts || [];
 
-    const { data: companyJobs } = await supabaseAdmin
+    const { data: companyJobs } = await db
       .from("jobs")
       .select("*")
       .eq("company_id", company.id)
@@ -152,7 +154,7 @@ export async function getCompanyFullHistory(
     jobs = companyJobs || [];
 
     // Fetch phone numbers for this company (ignore errors if table doesn't exist yet)
-    const { data: companyPhones, error: phonesError } = await supabaseAdmin
+    const { data: companyPhones, error: phonesError } = await db
       .from("company_phone_numbers")
       .select("label, phone_number")
       .eq("company_id", company.id)
@@ -162,7 +164,7 @@ export async function getCompanyFullHistory(
     }
 
     // Fetch emails for this company (ignore errors if table doesn't exist yet)
-    const { data: companyEmailsData, error: emailsError } = await supabaseAdmin
+    const { data: companyEmailsData, error: emailsError } = await db
       .from("company_emails")
       .select("label, email, is_primary")
       .eq("company_id", company.id)
@@ -173,7 +175,7 @@ export async function getCompanyFullHistory(
     }
 
     // Fetch signed contrato_inicial documents
-    const { data: signedDocs } = await supabaseAdmin
+    const { data: signedDocs } = await db
       .from("signed_documents")
       .select("*, template:agency_document_templates(id, name, file_url, category)")
       .eq("company_id", company.id)
@@ -184,7 +186,7 @@ export async function getCompanyFullHistory(
     // Fallback: if no docs found by company_id, try by signer_user_id
     // (handles case where company_id was null at signing time)
     if (signedContratoInicial.length === 0 && company.user_id) {
-      const { data: docsByUser } = await supabaseAdmin
+      const { data: docsByUser } = await db
         .from("signed_documents")
         .select("*, template:agency_document_templates(id, name, file_url, category)")
         .eq("signer_user_id", company.user_id)
@@ -194,7 +196,7 @@ export async function getCompanyFullHistory(
     }
 
     // Fetch hiring processes for this company
-    const { data: hp } = await supabaseAdmin
+    const { data: hp } = await db
       .from("hiring_processes")
       .select(`
         *,
@@ -208,7 +210,7 @@ export async function getCompanyFullHistory(
     // Fetch signing invitations for these hiring processes
     const hpIds = hiringProcesses.map((h: any) => h.id);
     if (hpIds.length > 0) {
-      const { data: invitations } = await supabaseAdmin
+      const { data: invitations } = await db
         .from("signing_invitations")
         .select("*")
         .in("hiring_process_id", hpIds);
@@ -290,7 +292,7 @@ export async function getCompanyFullHistory(
   }
 
   if (agencyIdToUse) {
-    const { data: agency } = await supabaseAdmin
+    const { data: agency } = await db
       .from("agencies")
       .select("contract_type, contract_pdf_url, contract_html")
       .eq("id", agencyIdToUse)
@@ -359,7 +361,7 @@ export interface CompanyFormData {
 }
 
 export async function createCompanyForm(data: CompanyFormData): Promise<any> {
-  const { data: result, error } = await supabaseAdmin
+  const { data: result, error } = await db
     .from("company_forms")
     .upsert(
       {
@@ -415,7 +417,7 @@ export async function getCompanyFormByEmail(
   adminId: string,
   email: string
 ): Promise<any | null> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("company_forms")
     .select("*")
     .eq("admin_id", adminId)
@@ -434,7 +436,7 @@ export async function getCompanyFormByEmail(
 }
 
 export async function getCompanyFormByEmailOnly(email: string): Promise<any | null> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("company_forms")
     .select("*")
     .eq("email", email)
@@ -457,7 +459,7 @@ export async function updateCompanyFormStatus(
   formId: string,
   status: "pending" | "accepted" | "rejected"
 ): Promise<void> {
-  const { error } = await supabaseAdmin
+  const { error } = await db
     .from("company_forms")
     .update({ status })
     .eq("id", formId);
@@ -469,7 +471,7 @@ export async function updateCompanyFormStatus(
 }
 
 export async function deleteCompanyForm(formId: string): Promise<void> {
-  const { error } = await supabaseAdmin.from("company_forms").delete().eq("id", formId);
+  const { error } = await db.from("company_forms").delete().eq("id", formId);
 
   if (error) {
     console.error("Error deleting company form:", error);
@@ -481,7 +483,7 @@ export async function getCompanyFormsByAdmin(
   adminId: string,
   agencyId?: string
 ): Promise<any[]> {
-  let query = supabaseAdmin
+  let query = db
     .from("company_forms")
     .select("*")
     .eq("admin_id", adminId)
@@ -500,7 +502,7 @@ export async function getCompanyFormsByAdmin(
 // ============ Admin Availability ============
 
 export async function getAdminAvailability(adminId: string, agencyId?: string): Promise<any[]> {
-  let query = supabaseAdmin
+  let query = db
     .from("admin_availability")
     .select("*")
     .eq("admin_id", adminId)
@@ -530,7 +532,7 @@ export async function createAdminAvailability(input: {
   isBlocked?: boolean;
   label?: string;
 }): Promise<any> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("admin_availability")
     .insert({
       admin_id: input.adminId,
@@ -554,7 +556,7 @@ export async function createAdminAvailability(input: {
 }
 
 export async function deleteAdminAvailability(id: string, adminId: string, agencyId?: string): Promise<void> {
-  let query = supabaseAdmin
+  let query = db
     .from("admin_availability")
     .delete()
     .eq("id", id)
@@ -574,7 +576,7 @@ export async function getAdminSettings(
   adminId: string,
   agencyId?: string
 ): Promise<{ meeting_duration_minutes: number; agency_id?: string } | null> {
-  let query = supabaseAdmin.from("admin_settings").select("*").eq("admin_id", adminId);
+  let query = db.from("admin_settings").select("*").eq("admin_id", adminId);
 
   if (agencyId) {
     query = query.eq("agency_id", agencyId);
@@ -594,7 +596,7 @@ export async function saveAdminSettings(
   settings: { meeting_duration_minutes: number },
   agencyId?: string
 ): Promise<void> {
-  const { error } = await supabaseAdmin.from("admin_settings").upsert({
+  const { error } = await db.from("admin_settings").upsert({
     admin_id: adminId,
     agency_id: agencyId,
     meeting_duration_minutes: settings.meeting_duration_minutes,
@@ -619,7 +621,7 @@ export async function getBlockedSlots(
   const dateObj = new Date(Date.UTC(year, month - 1, day));
   const dayOfWeek = dateObj.getUTCDay();
 
-  let query = supabaseAdmin
+  let query = db
     .from("admin_availability")
     .select("*")
     .eq("admin_id", adminId)
@@ -648,7 +650,7 @@ export async function blockTimeSlot(input: {
   dayOfWeek?: number;
   agencyId?: string;
 }): Promise<any> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("admin_availability")
     .insert({
       admin_id: input.adminId,
@@ -675,7 +677,7 @@ export async function unblockTimeSlot(
   adminId: string,
   agencyId?: string
 ): Promise<void> {
-  let query = supabaseAdmin
+  let query = db
     .from("admin_availability")
     .delete()
     .eq("id", id)
@@ -701,7 +703,7 @@ export async function getScheduledMeetings(
   status?: string,
   agencyId?: string
 ): Promise<any[]> {
-  let query = supabaseAdmin
+  let query = db
     .from("scheduled_meetings")
     .select("*, agencies:agency_id(id, agency_name)")
     .order("scheduled_at", { ascending: true });
@@ -709,19 +711,19 @@ export async function getScheduledMeetings(
   if (agencyId) {
     query = query.eq("agency_id", agencyId);
   } else {
-    const { data: affiliate } = await supabaseAdmin
+    const { data: affiliate } = await db
       .from("affiliates")
       .select("id")
       .eq("user_id", adminId)
       .single();
 
     if (affiliate) {
-      const { data: agencies } = await supabaseAdmin
+      const { data: agencies } = await db
         .from("agencies")
         .select("id")
         .eq("affiliate_id", affiliate.id);
 
-      const agencyIds = agencies?.map((s) => s.id) || [];
+      const agencyIds = agencies?.map((s: any) => s.id) || [];
 
       if (agencyIds.length > 0) {
         query = query.or(`agency_id.in.(${agencyIds.join(",")}),admin_id.eq.${adminId}`);
@@ -744,7 +746,7 @@ export async function getScheduledMeetings(
     throw error;
   }
 
-  return (data || []).map((meeting) => ({
+  return (data || []).map((meeting: any) => ({
     ...meeting,
     agency_name: meeting.agencies?.agency_name || null,
   }));
@@ -760,7 +762,7 @@ export async function createScheduledMeeting(input: {
   contactPhone?: string;
   notes?: string;
 }): Promise<any> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("scheduled_meetings")
     .insert({
       admin_id: input.adminId,
@@ -802,7 +804,7 @@ export async function updateMeetingStatus(
     }
   }
 
-  let query = supabaseAdmin.from("scheduled_meetings").update(updateData).eq("id", id);
+  let query = db.from("scheduled_meetings").update(updateData).eq("id", id);
 
   if (agencyId) {
     query = query.eq("agency_id", agencyId);
@@ -823,7 +825,7 @@ export async function getMeetingById(
   adminId: string,
   agencyId?: string
 ): Promise<any | null> {
-  let query = supabaseAdmin.from("scheduled_meetings").select("*").eq("id", id);
+  let query = db.from("scheduled_meetings").select("*").eq("id", id);
 
   if (agencyId) {
     query = query.eq("agency_id", agencyId);
@@ -847,7 +849,7 @@ export async function rescheduleMeeting(
   newScheduledAt: string,
   agencyId?: string
 ): Promise<void> {
-  let query = supabaseAdmin
+  let query = db
     .from("scheduled_meetings")
     .update({
       scheduled_at: newScheduledAt,
@@ -879,7 +881,7 @@ export async function updateMeetingLink(
   },
   agencyId?: string
 ): Promise<void> {
-  let query = supabaseAdmin
+  let query = db
     .from("scheduled_meetings")
     .update({
       meeting_link: data.meetingLink,
@@ -903,7 +905,7 @@ export async function updateMeetingLink(
 }
 
 export async function getMeetingByToken(token: string): Promise<any> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("scheduled_meetings")
     .select("*")
     .eq("confirmation_token", token)
@@ -918,7 +920,7 @@ export async function getMeetingByToken(token: string): Promise<any> {
 }
 
 export async function cancelMeetingByToken(token: string, reason?: string): Promise<void> {
-  const { error } = await supabaseAdmin
+  const { error } = await db
     .from("scheduled_meetings")
     .update({
       status: "cancelled",
@@ -935,7 +937,7 @@ export async function cancelMeetingByToken(token: string, reason?: string): Prom
 }
 
 export async function confirmMeetingByToken(token: string): Promise<void> {
-  const { error } = await supabaseAdmin
+  const { error } = await db
     .from("scheduled_meetings")
     .update({
       status: "confirmed",
@@ -949,7 +951,7 @@ export async function confirmMeetingByToken(token: string): Promise<void> {
 }
 
 export async function getScheduledMeetingById(meetingId: string): Promise<any | null> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("scheduled_meetings")
     .select("*")
     .eq("id", meetingId)
@@ -975,7 +977,7 @@ export async function sendContractToMeeting(meetingId: string, agencyId?: string
     updateData.agency_id = agencyId;
   }
 
-  const { error } = await supabaseAdmin
+  const { error } = await db
     .from("scheduled_meetings")
     .update(updateData)
     .eq("id", meetingId);
@@ -992,7 +994,7 @@ export async function updateScheduledMeeting(
   meetingId: string,
   updates: Record<string, any>
 ): Promise<void> {
-  const { error } = await supabaseAdmin
+  const { error } = await db
     .from("scheduled_meetings")
     .update(updates)
     .eq("id", meetingId);
@@ -1004,7 +1006,7 @@ export async function updateScheduledMeeting(
 }
 
 export async function getMeetingByContractToken(token: string): Promise<any | null> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("scheduled_meetings")
     .select("*")
     .eq("contract_token", token)
@@ -1024,7 +1026,7 @@ export async function signMeetingContract(input: {
   signerName: string;
   signerCpf: string;
 }): Promise<{ company_email: string; company_name: string | null }> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("scheduled_meetings")
     .update({
       contract_signature: input.signature,
@@ -1047,7 +1049,7 @@ export async function signMeetingContract(input: {
 // ============ Admin Agency Context ============
 
 export async function getAdminAgencyContext(adminId: string): Promise<string | null> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("admin_agency_context")
     .select("agency_id")
     .eq("admin_id", adminId)
@@ -1064,7 +1066,7 @@ export async function setAdminAgencyContext(
   adminId: string,
   agencyId: string | null
 ): Promise<void> {
-  const { error } = await supabaseAdmin.from("admin_agency_context").upsert(
+  const { error } = await db.from("admin_agency_context").upsert(
     {
       admin_id: adminId,
       agency_id: agencyId,
@@ -1083,7 +1085,7 @@ export async function setAdminAgencyContext(
 
 export async function getAgenciesForAdmin(adminId: string, userRole: string): Promise<any[]> {
   if (userRole === "admin") {
-    const { data, error } = await supabaseAdmin
+    const { data, error } = await db
       .from("agencies")
       .select("id, agency_name, city, status")
       .eq("status", "active")
@@ -1094,7 +1096,7 @@ export async function getAgenciesForAdmin(adminId: string, userRole: string): Pr
       return [];
     }
 
-    return (data || []).map((s) => ({ id: s.id, name: s.agency_name, city: s.city }));
+    return (data || []).map((s: any) => ({ id: s.id, name: s.agency_name, city: s.city }));
   }
 
   return [];
@@ -1115,7 +1117,7 @@ export async function getAvailableSlots(
   const settings = await getAdminSettings(adminId, agencyId);
   const SLOT_DURATION = settings?.meeting_duration_minutes || 30;
 
-  let availQuery = supabaseAdmin
+  let availQuery = db
     .from("admin_availability")
     .select("*")
     .eq("admin_id", adminId)
@@ -1129,7 +1131,7 @@ export async function getAvailableSlots(
     throw availError;
   }
 
-  let blockQuery = supabaseAdmin
+  let blockQuery = db
     .from("admin_availability")
     .select("*")
     .eq("admin_id", adminId)
@@ -1141,7 +1143,7 @@ export async function getAvailableSlots(
   const startOfDay = `${date}T00:00:00`;
   const endOfDay = `${date}T23:59:59`;
 
-  let meetQuery = supabaseAdmin
+  let meetQuery = db
     .from("scheduled_meetings")
     .select("scheduled_at, duration_minutes")
     .eq("admin_id", adminId)
@@ -1185,13 +1187,13 @@ export async function getAvailableSlots(
       const slotStartMs = new Date(slotStartIso).getTime();
       const slotEndMs = new Date(slotEndIso).getTime();
 
-      const isBooked = (meetings || []).some((meeting) => {
+      const isBooked = (meetings || []).some((meeting: any) => {
         const meetingStart = new Date(meeting.scheduled_at).getTime();
         const meetingEnd = meetingStart + (meeting.duration_minutes || SLOT_DURATION) * 60000;
         return slotStartMs < meetingEnd && slotEndMs > meetingStart;
       });
 
-      const isBlocked = (blockedSlots || []).some((block) => {
+      const isBlocked = (blockedSlots || []).some((block: any) => {
         const [blockStartH, blockStartM] = block.start_time.split(":").map(Number);
         const [blockEndH, blockEndM] = block.end_time.split(":").map(Number);
         const blockStartMins = blockStartH * 60 + blockStartM;
@@ -1240,7 +1242,7 @@ export async function getAllSlotsForDate(
   const settings = await getAdminSettings(adminId, agencyId);
   const SLOT_DURATION = settings?.meeting_duration_minutes || 30;
 
-  let availQuery = supabaseAdmin
+  let availQuery = db
     .from("admin_availability")
     .select("*")
     .eq("admin_id", adminId)
@@ -1254,7 +1256,7 @@ export async function getAllSlotsForDate(
     throw availError;
   }
 
-  let blockQuery = supabaseAdmin
+  let blockQuery = db
     .from("admin_availability")
     .select("*")
     .eq("admin_id", adminId)
@@ -1289,7 +1291,7 @@ export async function getAllSlotsForDate(
       const slotStartIso = brtToIso(slotH, slotM);
       const slotEndIso = brtToIso(endH, endM);
 
-      const isBlocked = (blockedSlots || []).some((block) => {
+      const isBlocked = (blockedSlots || []).some((block: any) => {
         const [blockStartH, blockStartM] = block.start_time.split(":").map(Number);
         const [blockEndH, blockEndM] = block.end_time.split(":").map(Number);
         const blockStartMins = blockStartH * 60 + blockStartM;
@@ -1318,7 +1320,7 @@ export async function getScheduledMeetingByEmail(
   adminId: string,
   companyEmail: string
 ): Promise<any | null> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("scheduled_meetings")
     .select("*")
     .eq("admin_id", adminId)
@@ -1340,13 +1342,13 @@ export async function createMeetingForCompany(
   companyEmail: string
 ): Promise<any> {
   // Get company info if exists
-  const { data: company } = await supabaseAdmin
+  const { data: company } = await db
     .from("companies")
     .select("company_name, phone")
     .eq("email", companyEmail)
     .single();
 
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("scheduled_meetings")
     .insert({
       admin_id: adminId,
@@ -1376,7 +1378,7 @@ export async function updateMeetingContract(
     contract_signer_name?: string | null;
   }
 ): Promise<void> {
-  const { error } = await supabaseAdmin
+  const { error } = await db
     .from("scheduled_meetings")
     .update(data)
     .eq("id", meetingId);

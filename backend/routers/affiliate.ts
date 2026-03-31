@@ -1,4 +1,3 @@
-// @ts-nocheck
 // Affiliate router - affiliate management
 import { z } from "zod";
 import { router } from "../_core/trpc";
@@ -486,7 +485,7 @@ export const affiliateRouter = router({
       }
 
       // Bulk create candidates linked to the agency
-      const result = await db.bulkCreateCandidates(input.candidates, input.agencyId);
+      const result = await db.bulkCreateCandidates(input.candidates as any, input.agencyId);
 
       return {
         created: result.created.length,

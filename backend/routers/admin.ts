@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * Admin Router - Admin dashboard and management
  * Endpoints marked with agencyProcedure are accessible to both admin and agency users.
@@ -9,9 +8,10 @@ import { router } from "../_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { adminProcedure, agencyProcedure } from "./procedures";
 import * as db from "../db";
+import type { User } from "../db/types";
 
 // Helper: get agency ID for scoping. Returns null for admins (meaning "all").
-async function getAgencyScope(ctx: any): Promise<string | null> {
+async function getAgencyScope(ctx: { user: User }): Promise<string | null> {
   if (ctx.user.role === 'agency') {
     const agency = await db.getAgencyForUserContext(ctx.user.id, ctx.user.role);
     if (!agency) throw new TRPCError({ code: 'NOT_FOUND', message: 'Agency not found' });
@@ -40,7 +40,7 @@ async function verifyContractBelongsToAgency(contractId: string, agencyId: strin
     throw new TRPCError({ code: 'NOT_FOUND', message: 'Contract not found' });
   }
   const company = await db.getCompanyById(contract.company_id);
-  if (!company || company.agency_id !== agencyId) {
+  if (!company || (company as any).agency_id !== agencyId) {
     throw new TRPCError({ code: 'FORBIDDEN', message: 'Contract does not belong to your agency' });
   }
   return { contract, company };
@@ -92,7 +92,7 @@ export const adminRouter = router({
         const contract = await db.getContractWithDetails(input.id);
         if (contract && contract.company_id) {
           const company = await db.getCompanyById(contract.company_id);
-          if (company?.agency_id && contract.contract_type) {
+          if ((company as any)?.agency_id && contract.contract_type) {
             // Map contract_type enum to document category
             const categoryMap: Record<string, string> = {
               'clt': 'clt',
@@ -102,8 +102,8 @@ export const adminRouter = router({
             const category = categoryMap[contract.contract_type];
             if (category) {
               const status = await db.checkAllDocumentsSigned({
-                agencyId: company.agency_id,
-                companyId: company.id,
+                agencyId: (company as any).agency_id,
+                companyId: company!.id,
                 category,
                 contractId: input.id,
               });
@@ -218,7 +218,7 @@ export const adminRouter = router({
       if (agencyId) {
         // Verify company belongs to agency
         const company = await db.getCompanyById(input.company_id);
-        if (!company || company.agency_id !== agencyId) {
+        if (!company || (company as any).agency_id !== agencyId) {
           throw new TRPCError({ code: 'FORBIDDEN', message: 'Company does not belong to your agency' });
         }
       }
@@ -281,6 +281,31 @@ export const adminRouter = router({
       }
       await db.updatePayment(input.paymentId, updates);
       return { success: true };
+    }),
+
+  // Upload receipt for a payment (agency)
+  uploadPaymentReceipt: agencyProcedure
+    .input(z.object({
+      paymentId: z.string().uuid(),
+      companyId: z.string().uuid(),
+      fileName: z.string(),
+      fileData: z.string(), // base64
+      contentType: z.string(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const { storagePut } = await import('../storage');
+
+      const fileBuffer = Buffer.from(input.fileData, 'base64');
+      const storageKey = `receipts/${input.companyId}/${input.paymentId}/${input.fileName}`;
+      const { url } = await storagePut(storageKey, fileBuffer, input.contentType);
+
+      await db.updatePayment(input.paymentId, {
+        receipt_url: url,
+        receipt_status: 'pending-review',
+        receipt_uploaded_at: new Date().toISOString(),
+      });
+
+      return { success: true, receiptUrl: url };
     }),
 
   // Feedback management (admin-only — platform oversight)

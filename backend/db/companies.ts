@@ -1,13 +1,14 @@
-// @ts-nocheck
 // Company database operations
 import { supabaseAdmin } from "../supabase";
 import type { Company, InsertCompany } from "./types";
+
+const db = supabaseAdmin as any;
 import { generateCompanySummary, generateJobSummary } from "../services/ai/summarizer";
 import { generateJobEmbedding } from "../services/matching";
 
 export async function createCompany(company: InsertCompany): Promise<string> {
   // Use admin client to bypass RLS during company creation (e.g., during onboarding)
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("companies")
     .insert(company)
     .select("id")
@@ -19,7 +20,7 @@ export async function createCompany(company: InsertCompany): Promise<string> {
 
 export async function getCompanyByUserId(userId: string): Promise<Company | undefined> {
   // Use admin client to bypass RLS (needed during onboarding flow)
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("companies")
     .select("*")
     .eq("user_id", userId)
@@ -35,7 +36,7 @@ export async function getCompanyByUserId(userId: string): Promise<Company | unde
 
 export async function getCompanyById(id: string): Promise<Company | undefined> {
   // Use admin client to bypass RLS (needed after company creation during onboarding)
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("companies")
     .select("*")
     .eq("id", id)
@@ -46,7 +47,7 @@ export async function getCompanyById(id: string): Promise<Company | undefined> {
 }
 
 export async function getCompanyByEmail(email: string): Promise<Company | null> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("companies")
     .select("*")
     .eq("email", email)
@@ -61,7 +62,7 @@ export async function createCompanyForExistingUser(
   companyName: string
 ): Promise<Company | null> {
   // 1. Get the user by email
-  const { data: userData, error: userError } = await supabaseAdmin
+  const { data: userData, error: userError } = await db
     .from("users")
     .select("id, email, role")
     .eq("email", userEmail)
@@ -80,7 +81,7 @@ export async function createCompanyForExistingUser(
   }
 
   // 3. Create the company record
-  const { data: companyData, error: companyError } = await supabaseAdmin
+  const { data: companyData, error: companyError } = await db
     .from("companies")
     .insert({
       user_id: userData.id,
@@ -101,7 +102,7 @@ export async function createCompanyForExistingUser(
 }
 
 export async function getAllCompanies(): Promise<Company[]> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("companies")
     .select(
       `
@@ -137,7 +138,7 @@ export async function updateCompanyStatus(
     updates.suspended_by = updatedBy;
   }
 
-  const { error } = await supabaseAdmin.from("companies").update(updates).eq("id", id);
+  const { error } = await db.from("companies").update(updates).eq("id", id);
 
   if (error) {
     console.error("[Database] Failed to update company status:", error);
@@ -147,7 +148,7 @@ export async function updateCompanyStatus(
 
 export async function updateCompany(id: string, data: Partial<InsertCompany>): Promise<void> {
   // Use admin client to bypass RLS (needed for contract signing during onboarding)
-  const { error } = await supabaseAdmin.from("companies").update(data).eq("id", id);
+  const { error } = await db.from("companies").update(data).eq("id", id);
 
   if (error) throw error;
 }
@@ -156,7 +157,7 @@ export async function updateCompanyPipelineStatus(
   companyId: string,
   pipelineStatus: string
 ): Promise<void> {
-  const { error } = await supabaseAdmin
+  const { error } = await db
     .from("companies")
     .update({ pipeline_status: pipelineStatus })
     .eq("id", companyId);
@@ -171,7 +172,7 @@ export async function createCompanyRegistrationToken(companyId: string): Promise
   const token = crypto.randomUUID();
   const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
 
-  const { error } = await supabaseAdmin
+  const { error } = await db
     .from("companies")
     .update({
       registration_token: token,
@@ -188,7 +189,7 @@ export async function createCompanyRegistrationToken(companyId: string): Promise
 }
 
 export async function getCompanyByRegistrationToken(token: string): Promise<any | null> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("companies")
     .select("*")
     .eq("registration_token", token)
@@ -223,13 +224,13 @@ export async function completeCompanyRegistration(input: {
     throw new Error("Registration token has expired");
   }
 
-  const { data: existingUsers } = await supabaseAdmin.auth.admin.listUsers();
+  const { data: existingUsers } = await db.auth.admin.listUsers();
   const existingUser = existingUsers?.users?.find((u: any) => u.email === company.email);
 
   let authData;
   if (existingUser) {
     const { data: updateData, error: updateError } =
-      await supabaseAdmin.auth.admin.updateUserById(existingUser.id, {
+      await db.auth.admin.updateUserById(existingUser.id, {
         password: input.password,
       });
 
@@ -240,7 +241,7 @@ export async function completeCompanyRegistration(input: {
 
     authData = { user: updateData.user };
   } else {
-    const { data: createData, error: authError } = await supabaseAdmin.auth.admin.createUser({
+    const { data: createData, error: authError } = await db.auth.admin.createUser({
       email: company.email,
       password: input.password,
       email_confirm: true,
@@ -254,7 +255,7 @@ export async function completeCompanyRegistration(input: {
     authData = createData;
   }
 
-  await supabaseAdmin.from("users").upsert(
+  await db.from("users").upsert(
     {
       id: authData.user.id,
       email: company.email,
@@ -264,7 +265,7 @@ export async function completeCompanyRegistration(input: {
     { onConflict: "id" }
   );
 
-  const { error: companyError } = await supabaseAdmin
+  const { error: companyError } = await db
     .from("companies")
     .update({
       user_id: authData.user.id,
@@ -304,7 +305,7 @@ export async function createCompanyWithUser(input: {
   contractSignedAt?: string;
 }): Promise<{ email: string; userId: string; companyId: string }> {
   // Check if auth user already exists (handles partial registration retries)
-  const { data: existingUsers } = await supabaseAdmin.auth.admin.listUsers();
+  const { data: existingUsers } = await db.auth.admin.listUsers();
   const existingAuthUser = existingUsers?.users?.find((u: any) => u.email === input.email);
 
   let userId: string;
@@ -312,7 +313,7 @@ export async function createCompanyWithUser(input: {
   if (existingAuthUser) {
     // Reuse existing auth user — update password so they can log in
     console.log("[createCompanyWithUser] Reusing existing auth user:", existingAuthUser.id);
-    const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
+    const { error: updateError } = await db.auth.admin.updateUserById(
       existingAuthUser.id,
       { password: input.password }
     );
@@ -322,7 +323,7 @@ export async function createCompanyWithUser(input: {
     }
     userId = existingAuthUser.id;
   } else {
-    const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
+    const { data: authData, error: authError } = await db.auth.admin.createUser({
       email: input.email,
       password: input.password,
       email_confirm: true,
@@ -340,7 +341,7 @@ export async function createCompanyWithUser(input: {
   }
 
   // Upsert user record (handles both new and retry cases)
-  const { error: userError } = await supabaseAdmin.from("users").upsert(
+  const { error: userError } = await db.from("users").upsert(
     {
       id: userId,
       email: input.email,
@@ -353,7 +354,7 @@ export async function createCompanyWithUser(input: {
   if (userError) {
     console.error("Error upserting user record:", userError);
     if (!existingAuthUser) {
-      await supabaseAdmin.auth.admin.deleteUser(userId);
+      await db.auth.admin.deleteUser(userId);
     }
     throw userError;
   }
@@ -396,7 +397,7 @@ export async function createCompanyWithUser(input: {
 
   console.log('[createCompanyWithUser] inserting company fields:', Object.keys(companyData));
 
-  const { data: companyResult, error: companyError } = await supabaseAdmin
+  const { data: companyResult, error: companyError } = await db
     .from("companies")
     .insert(companyData)
     .select()
@@ -405,8 +406,8 @@ export async function createCompanyWithUser(input: {
   if (companyError) {
     console.error("Error creating company record:", companyError);
     if (!existingAuthUser) {
-      await supabaseAdmin.from("users").delete().eq("id", userId);
-      await supabaseAdmin.auth.admin.deleteUser(userId);
+      await db.from("users").delete().eq("id", userId);
+      await db.auth.admin.deleteUser(userId);
     }
     throw companyError;
   }
@@ -419,7 +420,7 @@ export async function createCompanyWithUser(input: {
     state: input.state,
   }).then(async (summary) => {
     if (summary) {
-      await supabaseAdmin
+      await db
         .from("companies")
         .update({
           summary,
@@ -635,7 +636,7 @@ export async function bulkCreateCompanies(
       if (company.notes) companyData.notes = company.notes;
 
       // Insert the company
-      const { data, error } = await supabaseAdmin
+      const { data, error } = await db
         .from("companies")
         .insert(companyData)
         .select("id")
@@ -665,7 +666,7 @@ export async function bulkCreateCompanies(
             is_primary: e.isPrimary ?? false,
           }));
 
-          await supabaseAdmin
+          await db
             .from('company_emails')
             .insert(emailRecords);
         }
@@ -682,7 +683,7 @@ export async function bulkCreateCompanies(
           // Parse openings count, default to 1
           const openingsCount = company.job.openings ? parseInt(company.job.openings, 10) : 1;
 
-          const { data: jobData, error: jobError } = await supabaseAdmin.from('jobs').insert({
+          const { data: jobData, error: jobError } = await db.from('jobs').insert({
             company_id: data.id,
             agency_id: agencyId || null,
             title: company.job.title,
@@ -719,7 +720,7 @@ export async function bulkCreateCompanies(
                 companyName: company.company_name,
               }).then(async (summary) => {
                 if (summary) {
-                  await supabaseAdmin
+                  await db
                     .from("jobs")
                     .update({
                       summary,
@@ -756,7 +757,7 @@ export async function bulkCreateCompanies(
           notes: company.notes,
         }).then(async (summary) => {
           if (summary) {
-            await supabaseAdmin
+            await db
               .from("companies")
               .update({
                 summary,
@@ -785,7 +786,7 @@ export async function bulkCreateCompanies(
  */
 export async function getCompanyUsers(companyId: string) {
   // Get the company to find the owner user_id
-  const { data: company, error: companyError } = await supabaseAdmin
+  const { data: company, error: companyError } = await db
     .from("companies")
     .select("user_id")
     .eq("id", companyId)
@@ -797,38 +798,38 @@ export async function getCompanyUsers(companyId: string) {
   }
 
   // Get owner user
-  const { data: ownerData, error: ownerError } = await supabaseAdmin
+  const { data: ownerData, error: ownerError } = await db
     .from("users")
     .select("id, name, email, role, created_at")
     .eq("id", company.user_id);
 
   if (ownerError) throw ownerError;
-  const owners = (ownerData ?? []).map(u => ({ ...u, isOwner: true }));
+  const owners = (ownerData ?? []).map((u: any) => ({ ...u, isOwner: true }));
 
   // Get all invited users (accepted + pending)
-  const { data: invitations } = await supabaseAdmin
+  const { data: invitations } = await db
     .from("company_user_invitations")
     .select("email, name, role, status, accepted_at")
     .eq("company_id", companyId)
     .in("status", ["accepted", "pending"]);
 
   if (invitations && invitations.length > 0) {
-    const acceptedEmails = invitations.filter(i => i.status === 'accepted').map(i => i.email);
-    const pendingInvites = invitations.filter(i => i.status === 'pending');
+    const acceptedEmails = invitations.filter((i: any) => i.status === 'accepted').map((i: any) => i.email);
+    const pendingInvites = invitations.filter((i: any) => i.status === 'pending');
 
     // Get users from users table for accepted invites
     const matchedEmails = new Set<string>();
     if (acceptedEmails.length > 0) {
-      const { data: invitedUsers } = await supabaseAdmin
+      const { data: invitedUsers } = await db
         .from("users")
         .select("id, name, email, role, created_at")
         .in("email", acceptedEmails);
 
       if (invitedUsers) {
-        const ownerIds = new Set(owners.map(o => o.id));
+        const ownerIds = new Set(owners.map((o: any) => o.id));
         for (const u of invitedUsers) {
           if (ownerIds.has(u.id)) continue;
-          const inv = invitations.find(i => i.email === u.email);
+          const inv = invitations.find((i: any) => i.email === u.email);
           owners.push({ ...u, isOwner: false, companyRole: inv?.role || 'member' });
           matchedEmails.add(u.email);
         }
@@ -838,7 +839,7 @@ export async function getCompanyUsers(companyId: string) {
     // Add all invitations not yet matched (pending OR accepted without user profile)
     for (const inv of invitations) {
       if (matchedEmails.has(inv.email)) continue;
-      const ownerEmails = new Set(owners.map(o => o.email));
+      const ownerEmails = new Set(owners.map((o: any) => o.email));
       if (ownerEmails.has(inv.email)) continue;
       owners.push({
         id: `invite-${inv.email}`,
@@ -865,7 +866,7 @@ export async function getCompanyJobsWithStatus(
   matching_status?: string;
   match_count?: number;
 }>> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from('jobs')
     .select('*')
     .eq('company_id', companyId)
@@ -878,8 +879,8 @@ export async function getCompanyJobsWithStatus(
 
   // Fetch match counts for each job
   const jobsWithCounts = await Promise.all(
-    (data || []).map(async (job) => {
-      const { count } = await supabaseAdmin
+    (data || []).map(async (job: any) => {
+      const { count } = await db
         .from('job_matches')
         .select('*', { count: 'exact', head: true })
         .eq('job_id', job.id);
@@ -902,7 +903,7 @@ export async function createJobRequest(params: {
   requestedByUserId: string;
   details: string;
 }): Promise<string> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from('job_requests')
     .insert({
       company_id: params.companyId,

@@ -1,13 +1,15 @@
-// @ts-nocheck
 // Company invitation database operations
 import { supabaseAdmin } from "../supabase";
+
+// Table not yet in generated Database types — use untyped client for queries
+const db = supabaseAdmin as any;
 
 export async function createCompanyInvitation(
   companyId: string,
   email: string,
   createdBy: string
 ): Promise<{ id: string; token: string }> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("company_invitations")
     .insert({
       company_id: companyId,
@@ -27,7 +29,7 @@ export async function createCompanyInvitation(
 }
 
 export async function getCompanyInvitationByToken(token: string): Promise<any | null> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("company_invitations")
     .select(`
       *,
@@ -56,7 +58,7 @@ export async function getCompanyInvitationByToken(token: string): Promise<any | 
 }
 
 export async function getCompanyInvitationByCompanyId(companyId: string): Promise<any | null> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("company_invitations")
     .select("*")
     .eq("company_id", companyId)
@@ -111,7 +113,7 @@ export async function acceptCompanyInvitation(
   const userId = authData.user.id;
 
   // Create user profile
-  const { error: userError } = await supabaseAdmin
+  const { error: userError } = await (supabaseAdmin as any)
     .from("users")
     .insert({
       id: userId,
@@ -127,7 +129,7 @@ export async function acceptCompanyInvitation(
   }
 
   // Link user_id to the existing company record
-  const { data: updatedCompany, error: companyError } = await supabaseAdmin
+  const { data: updatedCompany, error: companyError } = await (supabaseAdmin as any)
     .from("companies")
     .update({
       user_id: userId,
@@ -143,7 +145,7 @@ export async function acceptCompanyInvitation(
   }
 
   // Update invitation status
-  await supabaseAdmin
+  await db
     .from("company_invitations")
     .update({
       status: "accepted",
@@ -155,7 +157,7 @@ export async function acceptCompanyInvitation(
 }
 
 export async function getCompanyInvitationsByAgency(agencyId: string): Promise<any[]> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("company_invitations")
     .select(`
       *,
@@ -177,7 +179,7 @@ export async function getCompanyInvitationsByAgency(agencyId: string): Promise<a
 }
 
 export async function revokeCompanyInvitation(token: string): Promise<void> {
-  const { error } = await supabaseAdmin
+  const { error } = await db
     .from("company_invitations")
     .update({
       status: "revoked",

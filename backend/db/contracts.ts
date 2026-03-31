@@ -1,10 +1,9 @@
-// @ts-nocheck
 // Contract database operations
 import { supabase, supabaseAdmin } from "../supabase";
 import type { Contract, InsertContract } from "./types";
 
 export async function createContract(contract: InsertContract): Promise<string> {
-  const { data, error } = await supabase
+  const { data, error } = await (supabase as any)
     .from("contracts")
     .insert(contract)
     .select("id")
@@ -48,7 +47,7 @@ export async function getAllActiveContracts(): Promise<Contract[]> {
 }
 
 export async function updateContract(id: string, data: Partial<InsertContract>): Promise<void> {
-  const { error } = await supabase.from("contracts").update(data).eq("id", id);
+  const { error } = await (supabase as any).from("contracts").update(data).eq("id", id);
 
   if (error) throw error;
 }

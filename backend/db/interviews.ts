@@ -1,4 +1,3 @@
-// @ts-nocheck
 // Interview scheduling database operations
 import { supabaseAdmin } from "../supabase";
 import type {
@@ -7,6 +6,9 @@ import type {
   InterviewParticipant,
   InsertInterviewParticipant
 } from "./types";
+
+// Cast to any to work around TS 5.9 overload resolution issues with Supabase client
+const db = supabaseAdmin as any;
 
 // ============================================
 // INTERVIEW SESSIONS
@@ -33,7 +35,7 @@ export async function createInterviewSession(params: {
   candidateApplications: Array<{ candidateId: string; applicationId: string }>;
 }): Promise<InterviewSession> {
   // Create the session
-  const { data: session, error: sessionError } = await supabaseAdmin
+  const { data: session, error: sessionError } = await db
     .from("interview_sessions")
     .insert({
       batch_id: params.batchId,
@@ -67,14 +69,14 @@ export async function createInterviewSession(params: {
     status: "pending" as const,
   }));
 
-  const { error: participantsError } = await supabaseAdmin
+  const { error: participantsError } = await db
     .from("interview_participants")
     .insert(participants);
 
   if (participantsError) {
     console.error("[Database] Failed to create interview participants:", participantsError);
     // Rollback session if participants fail
-    await supabaseAdmin.from("interview_sessions").delete().eq("id", session.id);
+    await db.from("interview_sessions").delete().eq("id", session.id);
     throw participantsError;
   }
 
@@ -101,7 +103,7 @@ export async function createPreSelectionSession(params: {
   notes?: string;
   candidates: Array<{ candidateId: string; applicationId: string | null }>;
 }): Promise<InterviewSession> {
-  const { data: session, error: sessionError } = await supabaseAdmin
+  const { data: session, error: sessionError } = await db
     .from("interview_sessions")
     .insert({
       batch_id: params.batchId,
@@ -134,13 +136,13 @@ export async function createPreSelectionSession(params: {
     status: "pending" as const,
   }));
 
-  const { error: participantsError } = await supabaseAdmin
+  const { error: participantsError } = await db
     .from("interview_participants")
     .insert(participants);
 
   if (participantsError) {
     console.error("[Database] Failed to create pre-selection participants:", participantsError);
-    await supabaseAdmin.from("interview_sessions").delete().eq("id", session.id);
+    await db.from("interview_sessions").delete().eq("id", session.id);
     throw participantsError;
   }
 
@@ -151,7 +153,7 @@ export async function createPreSelectionSession(params: {
  * Get interview session by ID with full details
  */
 export async function getInterviewSessionById(sessionId: string): Promise<any | null> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("interview_sessions")
     .select(`
       *,
@@ -214,7 +216,7 @@ export async function getInterviewSessionsByCompany(
  * Returns pending, confirmed, and recent completed interviews
  */
 export async function getInterviewsByCandidate(candidateId: string): Promise<any[]> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("interview_participants")
     .select(`
       *,
@@ -242,7 +244,7 @@ export async function updateInterviewSession(
   sessionId: string,
   updates: Partial<InsertInterviewSession>
 ): Promise<void> {
-  const { error } = await supabaseAdmin
+  const { error } = await db
     .from("interview_sessions")
     .update(updates)
     .eq("id", sessionId);
@@ -268,7 +270,7 @@ export async function cancelInterviewSession(sessionId: string): Promise<void> {
  * Get participant by ID
  */
 export async function getParticipantById(participantId: string): Promise<any | null> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("interview_participants")
     .select(`
       *,
@@ -308,7 +310,7 @@ export async function updateParticipantStatus(
     updates.reschedule_reason = rescheduleReason;
   }
 
-  const { error } = await supabaseAdmin
+  const { error } = await db
     .from("interview_participants")
     .update(updates)
     .eq("id", participantId);
@@ -326,7 +328,7 @@ export async function getParticipantByCandidateAndSession(
   candidateId: string,
   sessionId: string
 ): Promise<InterviewParticipant | null> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("interview_participants")
     .select("*")
     .eq("candidate_id", candidateId)
@@ -347,7 +349,7 @@ export async function getParticipantByCandidateAndSession(
  * Used by agencies to see per-candidate meeting assignments
  */
 export async function getInterviewSessionsByBatch(batchId: string): Promise<any[]> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("interview_sessions")
     .select(`
       *,
@@ -372,7 +374,7 @@ export async function getInterviewSessionsByBatch(batchId: string): Promise<any[
  * Get all participants for a session
  */
 export async function getSessionParticipants(sessionId: string): Promise<any[]> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("interview_participants")
     .select(`
       *,
@@ -393,7 +395,7 @@ export async function getSessionParticipants(sessionId: string): Promise<any[]> 
  * Used to retrieve the interviews the agency scheduled between company and candidates
  */
 export async function getCompanyInterviewSessionsByBatch(batchId: string): Promise<any[]> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("interview_sessions")
     .select(`
       *,
@@ -420,7 +422,7 @@ export async function markSessionAttendance(
   attendance: Array<{ participantId: string; status: "attended" | "no_show" }>
 ): Promise<void> {
   for (const entry of attendance) {
-    const { error } = await supabaseAdmin
+    const { error } = await db
       .from("interview_participants")
       .update({ status: entry.status })
       .eq("id", entry.participantId)
@@ -432,7 +434,7 @@ export async function markSessionAttendance(
   }
 
   // Mark session as completed
-  await supabaseAdmin
+  await db
     .from("interview_sessions")
     .update({ status: "completed" })
     .eq("id", sessionId);

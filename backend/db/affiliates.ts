@@ -1,6 +1,7 @@
-// @ts-nocheck
 // Affiliate database operations
 import { supabaseAdmin } from "../supabase";
+
+const db = supabaseAdmin as any;
 
 export async function createAgencyInvitation(
   email: string,
@@ -8,7 +9,7 @@ export async function createAgencyInvitation(
   createdBy: string,
   notes?: string
 ): Promise<{ id: string; token: string }> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("agency_invitations")
     .insert({
       email,
@@ -29,7 +30,7 @@ export async function createAgencyInvitation(
 }
 
 export async function getAgencyInvitationByToken(token: string): Promise<any | null> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("agency_invitations")
     .select("*")
     .eq("token", token)
@@ -45,7 +46,7 @@ export async function getAgencyInvitationByToken(token: string): Promise<any | n
   // Fetch affiliate data separately to avoid PostgREST relationship inference issues
   let affiliateData = null;
   if (data.affiliate_id) {
-    const { data: affiliate } = await supabaseAdmin
+    const { data: affiliate } = await db
       .from("affiliates")
       .select("id, name")
       .eq("id", data.affiliate_id)
@@ -86,7 +87,7 @@ export async function acceptAgencyInvitation(
   let userId: string;
   let isExistingUser = false;
 
-  const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
+  const { data: authData, error: authError } = await db.auth.admin.createUser({
     email: invitation.email,
     password: password,
     email_confirm: true,
@@ -100,13 +101,13 @@ export async function acceptAgencyInvitation(
     const msg = authError.message || "";
     if (msg.includes("already been registered") || msg.includes("already exists")) {
       console.log("[Database] User already exists, converting to agency:", invitation.email);
-      const { data: listData } = await supabaseAdmin.auth.admin.listUsers();
+      const { data: listData } = await db.auth.admin.listUsers();
       const existingUser = listData?.users?.find((u: any) => u.email === invitation.email);
       if (!existingUser) {
         throw new Error("User exists in auth but could not be found by email");
       }
       // Update their auth metadata role to agency
-      await supabaseAdmin.auth.admin.updateUserById(existingUser.id, {
+      await db.auth.admin.updateUserById(existingUser.id, {
         user_metadata: { role: "agency" },
       });
       userId = existingUser.id;
@@ -120,7 +121,7 @@ export async function acceptAgencyInvitation(
   }
 
   // Create or update user profile (upsert handles existing users)
-  const { error: userError } = await supabaseAdmin
+  const { error: userError } = await db
     .from("users")
     .upsert({
       id: userId,
@@ -133,13 +134,13 @@ export async function acceptAgencyInvitation(
     console.error("[Database] Failed to upsert user profile:", userError);
     // Clean up auth user if we just created it
     if (!isExistingUser) {
-      await supabaseAdmin.auth.admin.deleteUser(userId).catch(() => {});
+      await db.auth.admin.deleteUser(userId).catch(() => {});
     }
     throw userError;
   }
 
   // Create agency record
-  const { data: agency, error: agencyError } = await supabaseAdmin
+  const { data: agency, error: agencyError } = await db
     .from("agencies")
     .insert({
       user_id: userId,
@@ -160,15 +161,15 @@ export async function acceptAgencyInvitation(
     console.error("[Database] Failed to create agency:", agencyError);
     // Clean up: revert user profile role if existing user, or delete new user
     if (isExistingUser) {
-      await supabaseAdmin.from("users").update({ role: "company" }).eq("id", userId).catch(() => {});
+      await db.from("users").update({ role: "company" }).eq("id", userId).catch(() => {});
     } else {
-      await supabaseAdmin.auth.admin.deleteUser(userId).catch(() => {});
+      await db.auth.admin.deleteUser(userId).catch(() => {});
     }
     throw agencyError;
   }
 
   // Update invitation status
-  await supabaseAdmin
+  await db
     .from("agency_invitations")
     .update({
       status: "accepted",
@@ -181,7 +182,7 @@ export async function acceptAgencyInvitation(
 }
 
 export async function getAllAffiliates(): Promise<any[]> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("affiliates")
     .select("*")
     .order("created_at", { ascending: false });
@@ -195,7 +196,7 @@ export async function getAllAffiliates(): Promise<any[]> {
 }
 
 export async function getAffiliateById(id: string): Promise<any | null> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("affiliates")
     .select("*")
     .eq("id", id)
@@ -210,7 +211,7 @@ export async function getAffiliateById(id: string): Promise<any | null> {
 }
 
 export async function getAffiliateByUserId(userId: string): Promise<any | null> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("affiliates")
     .select("*")
     .eq("user_id", userId)
@@ -225,7 +226,7 @@ export async function getAffiliateByUserId(userId: string): Promise<any | null> 
 }
 
 export async function updateAffiliateStatus(id: string, isActive: boolean): Promise<void> {
-  const { error } = await supabaseAdmin
+  const { error } = await db
     .from("affiliates")
     .update({ is_active: isActive, updated_at: new Date().toISOString() })
     .eq("id", id);
@@ -237,7 +238,7 @@ export async function updateAffiliateStatus(id: string, isActive: boolean): Prom
 }
 
 export async function getAgenciesByAffiliateId(affiliateId: string): Promise<any[]> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("agencies")
     .select("*")
     .eq("affiliate_id", affiliateId)
@@ -259,7 +260,7 @@ export async function getCompaniesByAffiliateId(
 
   // If a specific agency is selected, filter by agency_id
   if (agencyId) {
-    const { data, error } = await supabaseAdmin
+    const { data, error } = await db
       .from("companies")
       .select("*")
       .eq("affiliate_id", affiliateId)
@@ -277,7 +278,7 @@ export async function getCompaniesByAffiliateId(
   }
 
   // No agency selected - get all companies for this affiliate
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("companies")
     .select("*")
     .eq("affiliate_id", affiliateId)
@@ -302,7 +303,7 @@ export async function getAffiliateDashboardStats(
     null;
 
   if (agencyId) {
-    const { data: agency } = await supabaseAdmin
+    const { data: agency } = await db
       .from("agencies")
       .select("city, status")
       .eq("id", agencyId)
@@ -315,7 +316,7 @@ export async function getAffiliateDashboardStats(
       pendingAgencies: agency?.status === "pending" ? 1 : 0,
     };
   } else {
-    const { data: agencies, error: agenciesError } = await supabaseAdmin
+    const { data: agencies, error: agenciesError } = await db
       .from("agencies")
       .select("id, status")
       .eq("affiliate_id", affiliateId);
@@ -326,11 +327,11 @@ export async function getAffiliateDashboardStats(
 
     agencyInfo = {
       totalAgencies: agencies?.length || 0,
-      activeAgencies: agencies?.filter((s) => s.status === "active").length || 0,
-      pendingAgencies: agencies?.filter((s) => s.status === "pending").length || 0,
+      activeAgencies: agencies?.filter((s: any) => s.status === "active").length || 0,
+      pendingAgencies: agencies?.filter((s: any) => s.status === "pending").length || 0,
     };
 
-    const { data: affiliate } = await supabaseAdmin
+    const { data: affiliate } = await db
       .from("affiliates")
       .select("city")
       .eq("id", affiliateId)
@@ -339,14 +340,14 @@ export async function getAffiliateDashboardStats(
     targetCity = affiliate?.city || null;
   }
 
-  const { data: candidates } = await supabaseAdmin
+  const { data: candidates } = await db
     .from("candidates")
     .select("id")
     .eq("city", targetCity || "");
 
   const totalCandidates = candidates?.length || 0;
 
-  let companiesQuery = supabaseAdmin
+  let companiesQuery = db
     .from("companies")
     .select("id")
     .eq("affiliate_id", affiliateId);
@@ -356,30 +357,30 @@ export async function getAffiliateDashboardStats(
   }
 
   const { data: companies } = await companiesQuery;
-  const companyIds = companies?.map((c) => c.id) || [];
+  const companyIds = companies?.map((c: any) => c.id) || [];
 
   let totalJobs = 0;
   let openJobs = 0;
   if (companyIds.length > 0) {
-    const { data: jobs } = await supabaseAdmin
+    const { data: jobs } = await db
       .from("jobs")
       .select("id, status")
       .in("company_id", companyIds);
 
     totalJobs = jobs?.length || 0;
-    openJobs = jobs?.filter((j) => j.status === "open").length || 0;
+    openJobs = jobs?.filter((j: any) => j.status === "open").length || 0;
   }
 
   let totalContracts = 0;
   let activeContracts = 0;
   if (companyIds.length > 0) {
-    const { data: contracts } = await supabaseAdmin
+    const { data: contracts } = await db
       .from("contracts")
       .select("id, status")
       .in("company_id", companyIds);
 
     totalContracts = contracts?.length || 0;
-    activeContracts = contracts?.filter((c) => c.status === "active").length || 0;
+    activeContracts = contracts?.filter((c: any) => c.status === "active").length || 0;
   }
 
   return {
@@ -398,7 +399,7 @@ export async function getCandidatesByAffiliateId(
 ): Promise<any[]> {
   // If a specific agency is selected, filter by agency_id
   if (agencyId) {
-    const { data, error } = await supabaseAdmin
+    const { data, error } = await db
       .from("candidates")
       .select("*")
       .eq("agency_id", agencyId)
@@ -412,15 +413,15 @@ export async function getCandidatesByAffiliateId(
   }
 
   // Otherwise, get all agencies under this affiliate and fetch all their candidates
-  const { data: agencies } = await supabaseAdmin
+  const { data: agencies } = await db
     .from("agencies")
     .select("id")
     .eq("affiliate_id", affiliateId);
 
-  const agencyIds = (agencies || []).map(a => a.id);
+  const agencyIds = (agencies || []).map((a: any) => a.id);
   if (agencyIds.length === 0) return [];
 
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("candidates")
     .select("*")
     .in("agency_id", agencyIds)
@@ -439,14 +440,14 @@ export async function getJobsByAffiliateId(
   agencyId?: string | null
 ): Promise<any[]> {
   if (agencyId) {
-    const { data: agency } = await supabaseAdmin
+    const { data: agency } = await db
       .from("agencies")
       .select("city")
       .eq("id", agencyId)
       .single();
 
     if (agency?.city) {
-      const { data, error } = await supabaseAdmin
+      const { data, error } = await db
         .from("jobs")
         .select(
           `
@@ -471,7 +472,7 @@ export async function getJobsByAffiliateId(
     }
   }
 
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("jobs")
     .select(
       `
@@ -506,7 +507,7 @@ export async function getApplicationsByAffiliateId(
     return [];
   }
 
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("applications")
     .select(
       `
@@ -549,7 +550,7 @@ export async function getContractsByAffiliateId(
     return [];
   }
 
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("contracts")
     .select(
       `
@@ -600,7 +601,7 @@ export async function getPaymentsByAffiliateId(
   }
 
   // Query payments through companies belonging to these agencies
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("payments")
     .select(
       `

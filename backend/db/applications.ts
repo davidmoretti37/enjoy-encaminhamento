@@ -1,10 +1,9 @@
-// @ts-nocheck
 // Application database operations
 import { supabase, supabaseAdmin } from "../supabase";
 import type { Application, InsertApplication } from "./types";
 
 export async function createApplication(application: InsertApplication): Promise<string> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await (supabaseAdmin as any)
     .from("applications")
     .insert(application)
     .select("id")
@@ -59,7 +58,7 @@ export async function updateApplication(
   id: string,
   data: Partial<InsertApplication>
 ): Promise<void> {
-  const { error } = await supabaseAdmin.from("applications").update(data).eq("id", id);
+  const { error } = await (supabaseAdmin as any).from("applications").update(data).eq("id", id);
 
   if (error) throw error;
 }
@@ -75,7 +74,7 @@ export async function getApplicantCandidateIds(jobId: string): Promise<string[]>
     console.error("[Database] Failed to get applicant IDs:", error);
     return [];
   }
-  return data?.map(a => a.candidate_id) || [];
+  return data?.map((a: Pick<Application, "candidate_id">) => a.candidate_id) || [];
 }
 
 export async function updateApplicationsByCandidateIds(
@@ -85,7 +84,7 @@ export async function updateApplicationsByCandidateIds(
 ): Promise<void> {
   if (candidateIds.length === 0) return;
 
-  const { error } = await supabaseAdmin
+  const { error } = await (supabaseAdmin as any)
     .from("applications")
     .update({ status, reviewed_at: new Date().toISOString() })
     .eq("job_id", jobId)

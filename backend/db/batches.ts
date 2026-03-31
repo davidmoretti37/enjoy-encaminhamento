@@ -1,7 +1,9 @@
-// @ts-nocheck
 // Candidate batch database operations
 import { supabase, supabaseAdmin } from "../supabase";
 import type { CandidateBatch, InsertCandidateBatch, AgencyEmployeeTypeSetting, InsertAgencyEmployeeTypeSetting } from "./types";
+
+const db = supabaseAdmin as any;
+const dbAnon = supabase as any;
 import { getCandidatesByIds } from "./candidates";
 import { getJobById } from "./jobs";
 import { getAgencyById } from "./agencies";
@@ -21,7 +23,7 @@ export async function getTopMatchesForJob(
   limit: number = 15,
   minScore: number = 50
 ): Promise<any[]> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("job_matches")
     .select(`
       *,
@@ -52,7 +54,7 @@ export async function createBatch(params: {
   unlockFee?: number;
   status?: string;
 }): Promise<string> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("candidate_batches")
     .insert({
       job_id: params.jobId,
@@ -80,7 +82,7 @@ export async function createBatch(params: {
  * Get batch by ID with related data
  */
 export async function getBatchById(batchId: string): Promise<any | null> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("candidate_batches")
     .select(`
       *,
@@ -108,7 +110,7 @@ export async function updateBatch(
   batchId: string,
   updates: Partial<InsertCandidateBatch>
 ): Promise<void> {
-  const { error } = await supabaseAdmin
+  const { error } = await db
     .from("candidate_batches")
     .update(updates)
     .eq("id", batchId);
@@ -140,7 +142,7 @@ export async function setCandidateStatus(
     [candidateId]: status,
   };
 
-  const { error } = await supabaseAdmin
+  const { error } = await db
     .from("candidate_batches")
     .update({ candidate_statuses: updatedStatuses })
     .eq("id", batchId);
@@ -184,7 +186,7 @@ export async function sendBatchToCompany(batchId: string): Promise<void> {
   await updateBatch(batchId, {
     status: "sent",
     sent_at: new Date().toISOString(),
-  });
+  } as any);
 }
 
 /**
@@ -192,7 +194,7 @@ export async function sendBatchToCompany(batchId: string): Promise<void> {
  * Companies can now view candidates immediately - no payment required upfront
  */
 export async function getBatchesForCompany(companyId: string): Promise<any[]> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("candidate_batches")
     .select(`
       *,
@@ -210,7 +212,7 @@ export async function getBatchesForCompany(companyId: string): Promise<any[]> {
 
   // Fetch full candidate details for all batches
   const batchesWithCandidates = await Promise.all(
-    (data || []).map(async (batch) => {
+    (data || []).map(async (batch: any) => {
       const candidates = await getCandidatesByIds(batch.candidate_ids);
       return {
         ...batch,
@@ -227,7 +229,7 @@ export async function getBatchesForCompany(companyId: string): Promise<any[]> {
  * Returns batches with full candidate details
  */
 export async function getUnlockedBatchesForCompany(companyId: string): Promise<any[]> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("candidate_batches")
     .select(`
       *,
@@ -245,7 +247,7 @@ export async function getUnlockedBatchesForCompany(companyId: string): Promise<a
 
   // Fetch full candidate details for unlocked batches
   const batchesWithCandidates = await Promise.all(
-    (data || []).map(async (batch) => {
+    (data || []).map(async (batch: any) => {
       const candidates = await getCandidatesByIds(batch.candidate_ids);
       return {
         ...batch,
@@ -261,7 +263,7 @@ export async function getUnlockedBatchesForCompany(companyId: string): Promise<a
  * Get batches for a specific job
  */
 export async function getBatchesByJobId(jobId: string): Promise<any[]> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("candidate_batches")
     .select(`
       *,
@@ -278,7 +280,7 @@ export async function getBatchesByJobId(jobId: string): Promise<any[]> {
 
   // Enrich with candidate details (wrapped as { candidate: {...} } to match frontend expectations)
   const enriched = await Promise.all(
-    (data || []).map(async (batch) => {
+    (data || []).map(async (batch: any) => {
       const rawCandidates = await getCandidatesByIds(batch.candidate_ids || []);
       const statuses = batch.candidate_statuses || {};
       const candidates = rawCandidates.map((c: any) => ({
@@ -298,7 +300,7 @@ export async function getBatchesByJobId(jobId: string): Promise<any[]> {
  * Used to show agency-initiated funnels in the candidate's portal
  */
 export async function getBatchesByCandidateId(candidateId: string): Promise<any[]> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("candidate_batches")
     .select(`
       id, job_id, agency_id, company_id, status, candidate_statuses, created_at,
@@ -315,7 +317,7 @@ export async function getBatchesByCandidateId(candidateId: string): Promise<any[
     return [];
   }
 
-  return (data || []).map(batch => ({
+  return (data || []).map((batch: any) => ({
     ...batch,
     candidateStatus: batch.candidate_statuses?.[candidateId] || 'pending',
   }));
@@ -328,7 +330,7 @@ export async function getBatchesByAgencyId(
   agencyId: string,
   status?: string
 ): Promise<any[]> {
-  let query = supabaseAdmin
+  let query = db
     .from("candidate_batches")
     .select(`
       *,
@@ -360,7 +362,7 @@ export async function getBatchesByAgencyIds(
 ): Promise<any[]> {
   if (agencyIds.length === 0) return [];
 
-  let query = supabaseAdmin
+  let query = db
     .from("candidate_batches")
     .select(`
       *,
@@ -393,7 +395,7 @@ export async function unlockBatch(batchId: string): Promise<void> {
     unlocked_at: new Date().toISOString(),
     payment_status: "paid",
     status: "unlocked",
-  });
+  } as any);
 }
 
 /**
@@ -408,7 +410,7 @@ export async function selectCandidatesForInterview(
     selected_candidate_ids: candidateIds,
     selection_completed_at: new Date().toISOString(),
     status: "completed",
-  });
+  } as any);
 }
 
 /**
@@ -448,7 +450,7 @@ export async function cancelBatch(batchId: string, reason?: string): Promise<voi
 export async function getAgencyEmployeeTypeSettings(
   agencyId: string
 ): Promise<AgencyEmployeeTypeSetting[]> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("agency_employee_type_settings")
     .select("*")
     .eq("agency_id", agencyId)
@@ -469,7 +471,7 @@ export async function getAgencyEmployeeTypeSetting(
   agencyId: string,
   employeeType: "estagio" | "clt" | "menor-aprendiz"
 ): Promise<AgencyEmployeeTypeSetting | null> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("agency_employee_type_settings")
     .select("*")
     .eq("agency_id", agencyId)
@@ -501,7 +503,7 @@ export async function upsertAgencyEmployeeTypeSetting(
     monthlyFee?: number;
   }
 ): Promise<string> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("agency_employee_type_settings")
     .upsert(
       {
@@ -537,7 +539,7 @@ export async function deleteAgencyEmployeeTypeSetting(
   agencyId: string,
   employeeType: "estagio" | "clt" | "menor-aprendiz"
 ): Promise<void> {
-  const { error } = await supabaseAdmin
+  const { error } = await db
     .from("agency_employee_type_settings")
     .delete()
     .eq("agency_id", agencyId)
@@ -557,7 +559,7 @@ export async function getAgencyContractsByTypes(
   agencyId: string,
   employeeTypes: string[]
 ): Promise<AgencyEmployeeTypeSetting[]> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("agency_employee_type_settings")
     .select("*")
     .eq("agency_id", agencyId)
@@ -585,7 +587,7 @@ export async function getCompanyBatchStats(companyId: string): Promise<{
   totalCandidates: number;
   totalSpent: number;
 }> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("candidate_batches")
     .select("unlocked, status, batch_size, unlock_fee")
     .eq("company_id", companyId);
@@ -604,15 +606,15 @@ export async function getCompanyBatchStats(companyId: string): Promise<{
   const batches = data || [];
 
   return {
-    locked: batches.filter(b => !b.unlocked && b.status === "sent").length,
-    unlocked: batches.filter(b => b.unlocked && b.status !== "completed").length,
-    completed: batches.filter(b => b.status === "completed").length,
+    locked: batches.filter((b: any) => !b.unlocked && b.status === "sent").length,
+    unlocked: batches.filter((b: any) => b.unlocked && b.status !== "completed").length,
+    completed: batches.filter((b: any) => b.status === "completed").length,
     totalCandidates: batches
-      .filter(b => b.unlocked)
-      .reduce((sum, b) => sum + b.batch_size, 0),
+      .filter((b: any) => b.unlocked)
+      .reduce((sum: any, b: any) => sum + b.batch_size, 0),
     totalSpent: batches
-      .filter(b => b.unlocked)
-      .reduce((sum, b) => sum + (b.unlock_fee || 0), 0),
+      .filter((b: any) => b.unlocked)
+      .reduce((sum: any, b: any) => sum + (b.unlock_fee || 0), 0),
   };
 }
 
@@ -626,7 +628,7 @@ export async function getAgencyBatchStats(agencyId: string): Promise<{
   completed: number;
   totalRevenue: number;
 }> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("candidate_batches")
     .select("status, unlocked, unlock_fee")
     .eq("agency_id", agencyId);
@@ -645,12 +647,12 @@ export async function getAgencyBatchStats(agencyId: string): Promise<{
   const batches = data || [];
 
   return {
-    draft: batches.filter(b => b.status === "draft").length,
-    sent: batches.filter(b => b.status === "sent").length,
-    unlocked: batches.filter(b => b.unlocked && b.status !== "completed").length,
-    completed: batches.filter(b => b.status === "completed").length,
+    draft: batches.filter((b: any) => b.status === "draft").length,
+    sent: batches.filter((b: any) => b.status === "sent").length,
+    unlocked: batches.filter((b: any) => b.unlocked && b.status !== "completed").length,
+    completed: batches.filter((b: any) => b.status === "completed").length,
     totalRevenue: batches
-      .filter(b => b.unlocked)
-      .reduce((sum, b) => sum + (b.unlock_fee || 0), 0),
+      .filter((b: any) => b.unlocked)
+      .reduce((sum: any, b: any) => sum + (b.unlock_fee || 0), 0),
   };
 }

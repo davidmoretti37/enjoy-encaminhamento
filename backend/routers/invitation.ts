@@ -1,4 +1,3 @@
-// @ts-nocheck
 // Invitation router - agency invitations management
 import { z } from "zod";
 import { router } from "../_core/trpc";
@@ -114,7 +113,7 @@ export const invitationRouter = router({
       }
 
       // Create agency record linked to the authenticated user
-      const { data: agency, error: agencyError } = await supabaseAdmin
+      const { data: agency, error: agencyError } = await (supabaseAdmin as any)
         .from("agencies")
         .insert({
           user_id: ctx.user.id,
@@ -136,13 +135,13 @@ export const invitationRouter = router({
       }
 
       // Update user role to agency
-      await supabaseAdmin
+      await (supabaseAdmin as any)
         .from("users")
         .update({ role: "agency" })
         .eq("id", ctx.user.id);
 
       // Mark invitation as accepted
-      await supabaseAdmin
+      await (supabaseAdmin as any)
         .from("agency_invitations")
         .update({
           status: "accepted",

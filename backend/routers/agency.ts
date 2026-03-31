@@ -1,4 +1,3 @@
-// @ts-nocheck
 // Agency router - regional recruitment agency management
 import { z } from "zod";
 import { router } from "../_core/trpc";
@@ -6,8 +5,10 @@ import { TRPCError } from "@trpc/server";
 import { publicProcedure } from "../_core/trpc";
 import { adminProcedure, agencyProcedure } from "./procedures";
 import { sendEmail } from "./email";
-import * as db from "../db";
-import { supabaseAdmin } from "../supabase";
+import * as _db from "../db";
+const db: any = _db;
+import { supabaseAdmin as _supabaseAdmin } from "../supabase";
+const supabaseAdmin = _supabaseAdmin as any;
 import { generateCompanySummary } from "../services/ai/summarizer";
 import { ENV } from "../_core/env";
 import { parseExcelWithAI, suggestColumnMappings as suggestColumnMappingsAI, identifyBasicColumns, suggestCompanyColumnMappings, getCompanyFieldsList } from "../services/ai/columnMapper";
@@ -580,7 +581,7 @@ export const agencyRouter = router({
       return {
         created: result.created.length,
         failed: result.errors.length,
-        errors: result.errors.map(e => e.message),
+        errors: result.errors.map((e: any) => e.message),
       };
     }),
 
@@ -1141,7 +1142,309 @@ Regras:
       return {
         created: result.created.length,
         failed: result.errors.length,
-        errors: result.errors.map(e => e.message),
+        errors: result.errors.map((e: any) => e.message),
       };
+    }),
+
+  // Register an employee who was already hired outside the platform
+  registerExistingEmployee: agencyProcedure
+    .input(z.object({
+      companyId: z.string().uuid(),
+      jobId: z.string().uuid().optional(),
+      jobTitle: z.string().optional(),
+      candidate: z.object({
+        full_name: z.string().min(2),
+        cpf: z.string().min(11),
+        email: z.string().email(),
+        phone: z.string().optional(),
+        date_of_birth: z.string().optional(),
+      }),
+      contractType: z.enum(['estagio', 'clt', 'menor-aprendiz', 'pj']),
+      monthlySalary: z.number().int().min(0).default(0),
+      startDate: z.string(),
+      endDate: z.string().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const agency = await db.getAgencyForUserContext(ctx.user.id, ctx.user.role);
+      if (!agency) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Agência não encontrada' });
+      }
+
+      // 1. Verify company exists
+      const { data: company, error: compErr } = await supabaseAdmin
+        .from('companies')
+        .select('id, company_name')
+        .eq('id', input.companyId)
+        .single();
+      if (compErr || !company) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Empresa não encontrada' });
+      }
+
+      // 2. Find or create candidate by CPF
+      const normalizedCpf = input.candidate.cpf.replace(/\D/g, '');
+      let candidateId: string;
+
+      const { data: existingCandidate } = await supabaseAdmin
+        .from('candidates')
+        .select('id')
+        .eq('cpf', normalizedCpf)
+        .maybeSingle();
+
+      if (existingCandidate) {
+        candidateId = existingCandidate.id;
+      } else {
+        // Create auth user for candidate
+        const { data: authUser, error: authErr } = await supabaseAdmin.auth.admin.createUser({
+          email: input.candidate.email,
+          password: normalizedCpf.slice(0, 8) + '!Aa', // temp password from CPF
+          email_confirm: true,
+        });
+
+        if (authErr) {
+          // If email already exists, try to find the user
+          const { data: existingAuth } = await supabaseAdmin.auth.admin.listUsers();
+          const found = existingAuth?.users?.find((u: any) => u.email === input.candidate.email);
+          if (!found) {
+            throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Erro ao criar conta: ' + authErr.message });
+          }
+
+          // Create user profile if needed
+          await supabaseAdmin.from('users').upsert({
+            id: found.id,
+            email: input.candidate.email,
+            name: input.candidate.full_name,
+            role: 'candidate',
+            agency_id: agency.id,
+          }, { onConflict: 'id' });
+
+          // Create candidate record
+          const { data: newCand, error: candErr } = await supabaseAdmin
+            .from('candidates')
+            .insert({
+              user_id: found.id,
+              full_name: input.candidate.full_name,
+              cpf: normalizedCpf,
+              email: input.candidate.email,
+              phone: input.candidate.phone || null,
+              date_of_birth: input.candidate.date_of_birth || null,
+              agency_id: agency.id,
+              status: 'employed',
+              education_level: 'medio',
+              skills: [],
+              languages: ['Português'],
+            })
+            .select('id')
+            .single();
+
+          if (candErr) {
+            throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Erro ao criar candidato: ' + candErr.message });
+          }
+          candidateId = newCand.id;
+        } else {
+          // Create user profile
+          await supabaseAdmin.from('users').upsert({
+            id: authUser.user.id,
+            email: input.candidate.email,
+            name: input.candidate.full_name,
+            role: 'candidate',
+            agency_id: agency.id,
+          }, { onConflict: 'id' });
+
+          // Create candidate record
+          const { data: newCand, error: candErr } = await supabaseAdmin
+            .from('candidates')
+            .insert({
+              user_id: authUser.user.id,
+              full_name: input.candidate.full_name,
+              cpf: normalizedCpf,
+              email: input.candidate.email,
+              phone: input.candidate.phone || null,
+              date_of_birth: input.candidate.date_of_birth || null,
+              agency_id: agency.id,
+              status: 'employed',
+              education_level: 'medio',
+              skills: [],
+              languages: ['Português'],
+            })
+            .select('id')
+            .single();
+
+          if (candErr) {
+            throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Erro ao criar candidato: ' + candErr.message });
+          }
+          candidateId = newCand.id;
+        }
+      }
+
+      // 3. Find or create job
+      let jobId = input.jobId;
+      if (!jobId) {
+        const title = input.jobTitle || `${input.contractType.toUpperCase()} - ${company.company_name}`;
+        const { data: newJob, error: jobErr } = await supabaseAdmin
+          .from('jobs')
+          .insert({
+            company_id: input.companyId,
+            agency_id: agency.id,
+            title,
+            description: `Vaga registrada manualmente pela agência`,
+            contract_type: input.contractType,
+            status: 'filled',
+            salary: input.monthlySalary,
+          })
+          .select('id')
+          .single();
+        if (jobErr) {
+          throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Erro ao criar vaga: ' + jobErr.message });
+        }
+        jobId = newJob.id;
+      }
+
+      // 4. Create application (status: selected)
+      const { data: app, error: appErr } = await supabaseAdmin
+        .from('applications')
+        .insert({
+          job_id: jobId,
+          candidate_id: candidateId,
+          status: 'selected',
+        })
+        .select('id')
+        .single();
+      if (appErr) {
+        throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Erro ao criar aplicação: ' + appErr.message });
+      }
+
+      // 5. Create hiring process (status: active)
+      const { data: hp, error: hpErr } = await supabaseAdmin
+        .from('hiring_processes')
+        .insert({
+          application_id: app.id,
+          company_id: input.companyId,
+          candidate_id: candidateId,
+          job_id: jobId,
+          hiring_type: input.contractType,
+          status: 'active',
+          start_date: input.startDate,
+          end_date: input.endDate || null,
+          is_first_intern: false,
+          calculated_fee: 0,
+          monthly_salary: input.monthlySalary,
+        })
+        .select('id')
+        .single();
+      if (hpErr) {
+        throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Erro ao criar processo: ' + hpErr.message });
+      }
+
+      // 6. Create contract (status: active)
+      const { data: contract, error: cErr } = await supabaseAdmin
+        .from('contracts')
+        .insert({
+          company_id: input.companyId,
+          candidate_id: candidateId,
+          job_id: jobId,
+          application_id: app.id,
+          agency_id: agency.id,
+          contract_type: input.contractType,
+          contract_number: `CTR-${Date.now().toString(36).toUpperCase()}`,
+          monthly_salary: input.monthlySalary,
+          monthly_fee: 0,
+          insurance_fee: 0,
+          payment_day: 5,
+          start_date: input.startDate,
+          end_date: input.endDate || null,
+          status: 'active',
+        })
+        .select('id')
+        .single();
+      if (cErr) {
+        throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Erro ao criar contrato: ' + cErr.message });
+      }
+
+      // 7. Update candidate status
+      await supabaseAdmin
+        .from('candidates')
+        .update({ status: 'employed' })
+        .eq('id', candidateId);
+
+      return {
+        success: true,
+        candidateId,
+        applicationId: app.id,
+        hiringProcessId: hp.id,
+        contractId: contract.id,
+        jobId,
+      };
+    }),
+
+  // Update company profile (agency can edit companies in their region)
+  updateCompanyProfile: agencyProcedure
+    .input(z.object({
+      companyId: z.string().uuid(),
+      companyName: z.string().optional(),
+      businessName: z.string().optional(),
+      cnpj: z.string().optional(),
+      email: z.string().optional(),
+      contactPerson: z.string().optional(),
+      phone: z.string().optional(),
+      socialMedia: z.string().optional(),
+      address: z.string().optional(),
+      city: z.string().optional(),
+      state: z.string().optional(),
+      cep: z.string().optional(),
+      complement: z.string().optional(),
+      neighborhood: z.string().optional(),
+      website: z.string().optional(),
+      industry: z.string().optional(),
+      employeeCount: z.string().optional(),
+      companySize: z.enum(["1-10", "11-50", "51-200", "201-500", "500+"]).or(z.literal("")).optional(),
+      description: z.string().optional(),
+      contactPhone: z.string().optional(),
+      mobilePhone: z.string().optional(),
+      landlinePhone: z.string().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const { companyId, ...fields } = input;
+
+      // Map camelCase to snake_case
+      const updateData: Record<string, any> = {};
+      if (fields.companyName !== undefined) updateData.company_name = fields.companyName;
+      if (fields.businessName !== undefined) updateData.business_name = fields.businessName;
+      if (fields.cnpj !== undefined) updateData.cnpj = fields.cnpj;
+      if (fields.socialMedia !== undefined) updateData.social_media = fields.socialMedia;
+      if (fields.email !== undefined) updateData.email = fields.email;
+      if (fields.contactPerson !== undefined) updateData.contact_person = fields.contactPerson;
+      if (fields.phone !== undefined) updateData.phone = fields.phone;
+      if (fields.address !== undefined) updateData.address = fields.address;
+      if (fields.city !== undefined) updateData.city = fields.city;
+      if (fields.state !== undefined) updateData.state = fields.state;
+      if (fields.cep !== undefined) updateData.cep = fields.cep;
+      if (fields.complement !== undefined) updateData.complement = fields.complement;
+      if (fields.neighborhood !== undefined) updateData.neighborhood = fields.neighborhood;
+      if (fields.website !== undefined) updateData.website = fields.website;
+      if (fields.industry !== undefined) updateData.industry = fields.industry;
+      if (fields.employeeCount !== undefined) updateData.employee_count = fields.employeeCount;
+      if (fields.companySize && fields.companySize !== '') updateData.company_size = fields.companySize;
+      if (fields.description !== undefined) updateData.description = fields.description;
+      if (fields.contactPhone !== undefined) updateData.contact_phone = fields.contactPhone;
+      if (fields.mobilePhone !== undefined) updateData.mobile_phone = fields.mobilePhone;
+      if (fields.landlinePhone !== undefined) updateData.landline_phone = fields.landlinePhone;
+
+      if (Object.keys(updateData).length === 0) {
+        return { success: true };
+      }
+
+      updateData.updated_at = new Date().toISOString();
+
+      const { error } = await supabaseAdmin
+        .from('companies')
+        .update(updateData)
+        .eq('id', companyId);
+
+      if (error) {
+        console.error('[Agency.updateCompanyProfile] Error:', error);
+        throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Erro ao atualizar dados da empresa' });
+      }
+
+      return { success: true };
     }),
 });

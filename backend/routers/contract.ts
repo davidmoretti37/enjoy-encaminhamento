@@ -1,12 +1,13 @@
-// @ts-nocheck
 // Contract router - employment contract management
 import { z } from "zod";
 import { router } from "../_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { protectedProcedure } from "../_core/trpc";
 import { adminProcedure, companyProcedure, candidateProcedure } from "./procedures";
-import * as db from "../db";
-import * as hiringDb from "../db/hiring";
+import * as _db from "../db";
+import * as _hiringDb from "../db/hiring";
+const db: any = _db;
+const hiringDb: any = _hiringDb;
 
 export const contractRouter = router({
   // Create contract
@@ -29,7 +30,7 @@ export const contractRouter = router({
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Company not found' });
       }
 
-      const contractId = await db.createContract({
+      const contractId = await (db as any).createContract({
         companyId: company.id,
         ...input,
         insuranceFee: input.insuranceFee || 0,
@@ -76,7 +77,7 @@ export const contractRouter = router({
 
       if (ctx.user.role === 'agency') {
         const agency = await db.getAgencyByUserId(ctx.user.id);
-        if (!agency || contract.companies?.agency_id !== agency.id) {
+        if (!agency || (contract as any).companies?.agency_id !== agency.id) {
           throw new TRPCError({ code: 'FORBIDDEN', message: 'Acesso negado' });
         }
       } else if (ctx.user.role === 'company') {
@@ -141,11 +142,12 @@ export const contractRouter = router({
 
       // Check for Autentique documents (signing happens on Autentique)
       let autentiqueDocuments: any[] = [];
-      const { supabaseAdmin } = await import("../supabase");
+      const { supabaseAdmin: _sb } = await import("../supabase");
+      const supabaseAdminAny = _sb as any;
       try {
         // 1. Check outreach_contract context (admin sent contract via outreach)
         if (input.category === "contrato_inicial") {
-          const { data: meetings } = await supabaseAdmin
+          const { data: meetings } = await supabaseAdminAny
             .from("scheduled_meetings")
             .select("id")
             .eq("company_email", ctx.user.email)
@@ -168,7 +170,7 @@ export const contractRouter = router({
 
         // 3. Check hiring_contract context (hiring process contracts)
         if (company?.id) {
-          const { data: hiringProcesses } = await supabaseAdmin
+          const { data: hiringProcesses } = await supabaseAdminAny
             .from("hiring_processes")
             .select("id, autentique_document_ids")
             .eq("company_id", company.id)
@@ -204,7 +206,7 @@ export const contractRouter = router({
                 });
                 const allSignersSigned = updatedSigners.every((s: any) => s.signed_at);
                 const newStatus = allSignersSigned ? "signed" : aDoc.status;
-                await supabaseAdmin
+                await supabaseAdminAny
                   .from("autentique_documents")
                   .update({
                     signers: updatedSigners,
@@ -286,7 +288,8 @@ export const contractRouter = router({
       }
 
       const contextId = company?.id || ctx.user.id;
-      const { supabaseAdmin } = await import("../supabase");
+      const { supabaseAdmin: _sb2 } = await import("../supabase");
+      const supabaseAdmin2 = _sb2 as any;
 
       // Check if Autentique docs already exist for this context
       const existingDocs = await db.getAutentiqueDocumentsByContext("onboarding_contract", contextId);
@@ -296,7 +299,7 @@ export const contractRouter = router({
 
       // Also check outreach_contract context (admin may have already sent contract)
       if (input.category === "contrato_inicial") {
-        const { data: meetings } = await supabaseAdmin
+        const { data: meetings } = await supabaseAdmin2
           .from("scheduled_meetings")
           .select("id")
           .eq("company_email", ctx.user.email)
@@ -312,7 +315,7 @@ export const contractRouter = router({
         return { created: false, reason: "no_templates" };
       }
 
-      const signerEmail = ctx.user.email;
+      const signerEmail: any = ctx.user.email;
       const signerName = company?.contact_name || company?.name || ctx.user.name || "Representante";
       let count = 0;
 
@@ -490,8 +493,9 @@ export const contractRouter = router({
         const signedDocs = await db.getSignedDocuments({ companyId: company.id, ...input });
 
         // Also get contracts uploaded by agency to scheduled_meetings
-        const { supabaseAdmin } = await import("../supabase");
-        const { data: meetingContracts, error: meetingError } = await supabaseAdmin
+        const { supabaseAdmin: _sb3 } = await import("../supabase");
+        const supabaseAdmin3 = _sb3 as any;
+        const { data: meetingContracts, error: meetingError } = await supabaseAdmin3
           .from('scheduled_meetings')
           .select('id, contract_pdf_url, contract_signed_at, company_name, updated_at')
           .eq('company_id', company.id)
@@ -519,7 +523,7 @@ export const contractRouter = router({
         let storageContracts: any[] = [];
         try {
           const storagePath = `contracts/signed/company-${company.id}`;
-          const { data: storageFiles } = await supabaseAdmin.storage.from('contracts').list(storagePath, { limit: 20 });
+          const { data: storageFiles } = await supabaseAdmin3.storage.from('contracts').list(storagePath, { limit: 20 });
           if (storageFiles && storageFiles.length > 0) {
             // Filter out files already in signedDocs or meetingContracts
             const existingUrls = new Set([
@@ -528,7 +532,7 @@ export const contractRouter = router({
             ].filter(Boolean));
 
             for (const file of storageFiles) {
-              const { data: urlData } = supabaseAdmin.storage.from('contracts').getPublicUrl(`${storagePath}/${file.name}`);
+              const { data: urlData } = supabaseAdmin3.storage.from('contracts').getPublicUrl(`${storagePath}/${file.name}`);
               if (urlData?.publicUrl && !existingUrls.has(urlData.publicUrl)) {
                 storageContracts.push({
                   id: `storage-${file.id}`,
@@ -733,6 +737,12 @@ export const contractRouter = router({
           candidate_signed_at: new Date().toISOString(),
           candidate_signer_cpf: input.signerCpf,
         } as any);
+
+        // Check if all signatures are now complete → activate for CLT/PJ
+        const sigStatus = await hiringDb.checkAllSignaturesComplete(input.hiringProcessId);
+        if (sigStatus.complete && (hp.hiring_type === "clt" || hp.hiring_type === "pj")) {
+          await hiringDb.updateHiringProcess(input.hiringProcessId, { status: "active" });
+        }
       }
 
       return {

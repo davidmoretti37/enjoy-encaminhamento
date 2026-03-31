@@ -1,11 +1,11 @@
-// @ts-nocheck
 // Outreach router - email, scheduling, meetings, contracts
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { publicProcedure, rateLimitedPublicProcedure, router } from "../_core/trpc";
 import { adminProcedure, agencyProcedure } from "./procedures";
 import { sendEmail } from "./email";
-import * as db from "../db";
+import * as _db from "../db";
+const db: any = _db;
 import { createZoomMeeting, isZoomConfigured } from "../integrations/zoom";
 import { createGoogleMeeting, isGoogleMeetConfigured } from "../integrations/googleMeet";
 import { createDocument as createAutentiqueDocument, isAutentiqueConfigured, getDocumentStatus as getAutentiqueDocStatus } from "../integrations/autentique";
@@ -16,7 +16,7 @@ import { generateCompanySummary } from "../services/ai/summarizer";
 
 // Resolve agencyId based on user role: agency users look up via agencies.user_id,
 // admin users look up via admin_agency_context switcher
-async function resolveAgencyId(userId: string, role: string, inputAgencyId?: string | null): Promise<string | undefined> {
+async function resolveAgencyId(userId: any, role: any, inputAgencyId?: any): Promise<any> {
   if (inputAgencyId) return inputAgencyId;
   if (role === "agency") {
     const agency = await db.getAgencyByUserId(userId);

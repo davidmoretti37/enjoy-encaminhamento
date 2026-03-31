@@ -1,6 +1,8 @@
-// @ts-nocheck
 // Document template and signing database operations
 import { supabaseAdmin } from "../supabase";
+
+// Tables not yet in generated Database types — use untyped client for queries
+const db = supabaseAdmin as any;
 
 // ============================================
 // Document Templates (Agency uploads)
@@ -10,7 +12,7 @@ export async function getDocumentTemplates(
   agencyId: string,
   category?: string
 ): Promise<any[]> {
-  let query = supabaseAdmin
+  let query = db
     .from("agency_document_templates")
     .select("*")
     .eq("agency_id", agencyId)
@@ -37,7 +39,7 @@ export async function createDocumentTemplate(input: {
   fileKey: string;
 }): Promise<{ id: string }> {
   // Get current max sort_order for this category
-  const { data: existing } = await supabaseAdmin
+  const { data: existing } = await db
     .from("agency_document_templates")
     .select("sort_order")
     .eq("agency_id", input.agencyId)
@@ -47,7 +49,7 @@ export async function createDocumentTemplate(input: {
 
   const nextOrder = existing && existing.length > 0 ? existing[0].sort_order + 1 : 0;
 
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("agency_document_templates")
     .insert({
       agency_id: input.agencyId,
@@ -66,14 +68,14 @@ export async function createDocumentTemplate(input: {
 
 export async function deleteDocumentTemplate(templateId: string, agencyId: string): Promise<{ fileKey: string | null }> {
   // Get the template first to return file key for storage deletion
-  const { data: template } = await supabaseAdmin
+  const { data: template } = await db
     .from("agency_document_templates")
     .select("file_key")
     .eq("id", templateId)
     .eq("agency_id", agencyId)
     .single();
 
-  const { error } = await supabaseAdmin
+  const { error } = await db
     .from("agency_document_templates")
     .delete()
     .eq("id", templateId)
@@ -88,7 +90,7 @@ export async function reorderDocumentTemplates(
   templateIds: string[]
 ): Promise<void> {
   for (let i = 0; i < templateIds.length; i++) {
-    await supabaseAdmin
+    await db
       .from("agency_document_templates")
       .update({ sort_order: i })
       .eq("id", templateIds[i])
@@ -98,7 +100,7 @@ export async function reorderDocumentTemplates(
 
 export async function getDocumentTemplatesByIds(templateIds: string[]): Promise<any[]> {
   if (!templateIds.length) return [];
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("agency_document_templates")
     .select("*")
     .in("id", templateIds);
@@ -110,7 +112,7 @@ export async function getDocumentTemplatesByIds(templateIds: string[]): Promise<
 }
 
 export async function getDocumentTemplateById(templateId: string): Promise<any | null> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("agency_document_templates")
     .select("*")
     .eq("id", templateId)
@@ -136,7 +138,7 @@ export async function createSignedDocument(input: {
   signerCpf: string;
   signature: string;
 }): Promise<{ id: string }> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("signed_documents")
     .insert({
       template_id: input.templateId,
@@ -164,7 +166,7 @@ export async function getSignedDocuments(filters: {
   candidateId?: string;
   category?: string;
 }): Promise<any[]> {
-  let query = supabaseAdmin
+  let query = db
     .from("signed_documents")
     .select(`
       *,
@@ -192,7 +194,7 @@ export async function getSignedDocumentsByTemplateIds(
   contractId?: string,
   signerUserId?: string
 ): Promise<any[]> {
-  let query = supabaseAdmin
+  let query = db
     .from("signed_documents")
     .select("template_id")
     .in("template_id", templateIds);
@@ -248,7 +250,7 @@ export async function updateSignedDocumentUrl(
   id: string,
   signedPdfUrl: string
 ): Promise<void> {
-  const { error } = await supabaseAdmin
+  const { error } = await db
     .from("signed_documents")
     .update({ signed_pdf_url: signedPdfUrl })
     .eq("id", id);
@@ -268,7 +270,7 @@ export async function updateCompanyContractSigning(
     contract_signer_cpf: string;
   }
 ): Promise<void> {
-  const { error } = await supabaseAdmin
+  const { error } = await (supabaseAdmin as any)
     .from("companies")
     .update(data)
     .eq("id", companyId);

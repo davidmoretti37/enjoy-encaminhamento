@@ -1,6 +1,8 @@
-// @ts-nocheck
 // Autentique document tracking database operations
 import { supabaseAdmin } from "../supabase";
+
+// Table not yet in generated Database types — use untyped client for queries
+const db = supabaseAdmin as any;
 
 // ============================================
 // TYPES
@@ -59,7 +61,7 @@ export async function createAutentiqueDocument(params: {
     signed_at: null,
   }));
 
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("autentique_documents")
     .insert({
       autentique_document_id: params.autentiqueDocumentId,
@@ -86,7 +88,7 @@ export async function createAutentiqueDocument(params: {
 export async function getAutentiqueDocumentByAutentiqueId(
   autentiqueDocumentId: string
 ): Promise<AutentiqueDocumentRecord | null> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("autentique_documents")
     .select("*")
     .eq("autentique_document_id", autentiqueDocumentId)
@@ -108,7 +110,7 @@ export async function getAutentiqueDocumentsByContext(
   contextType: "outreach_contract" | "hiring_contract" | "onboarding_contract",
   contextId: string
 ): Promise<AutentiqueDocumentRecord[]> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("autentique_documents")
     .select("*")
     .eq("context_type", contextType)
@@ -136,7 +138,7 @@ export async function updateAutentiqueDocumentStatus(
     updates.signed_pdf_url = signedPdfUrl;
   }
 
-  const { error } = await supabaseAdmin
+  const { error } = await db
     .from("autentique_documents")
     .update(updates)
     .eq("autentique_document_id", autentiqueDocumentId);
@@ -182,7 +184,7 @@ export async function updateAutentiqueSignerStatus(
   // Update the signer
   signers[signerIndex].signed_at = signedAt;
 
-  const { error } = await supabaseAdmin
+  const { error } = await db
     .from("autentique_documents")
     .update({ signers })
     .eq("autentique_document_id", autentiqueDocumentId);
