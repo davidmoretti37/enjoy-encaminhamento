@@ -432,7 +432,7 @@ export const companyRouter = router({
       if (input.state !== undefined) updateData.state = input.state;
       if (input.zipCode !== undefined) updateData.cep = input.zipCode;
       if (input.industry !== undefined) updateData.industry = input.industry;
-      if (input.companySize && input.companySize !== '') updateData.company_size = input.companySize;
+      if (input.companySize && (input.companySize as string) !== '') updateData.company_size = input.companySize;
       if (input.website !== undefined) updateData.website = input.website;
       if (input.description !== undefined) updateData.description = input.description;
       if (input.logo !== undefined) updateData.logo = input.logo;

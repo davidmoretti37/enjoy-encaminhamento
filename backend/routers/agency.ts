@@ -1423,7 +1423,7 @@ Regras:
       if (fields.website !== undefined) updateData.website = fields.website;
       if (fields.industry !== undefined) updateData.industry = fields.industry;
       if (fields.employeeCount !== undefined) updateData.employee_count = fields.employeeCount;
-      if (fields.companySize && fields.companySize !== '') updateData.company_size = fields.companySize;
+      if (fields.companySize && (fields.companySize as string) !== '') updateData.company_size = fields.companySize;
       if (fields.description !== undefined) updateData.description = fields.description;
       if (fields.contactPhone !== undefined) updateData.contact_phone = fields.contactPhone;
       if (fields.mobilePhone !== undefined) updateData.mobile_phone = fields.mobilePhone;
