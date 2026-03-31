@@ -945,10 +945,40 @@ export default function CompanyDocumentsModal({
                         })}
                       </div>
                     ) : (
-                      <p className="text-sm text-muted-foreground">
+                      <p className="text-sm text-muted-foreground mb-3">
                         Nenhum contrato de funcionário registrado.
                       </p>
                     )}
+
+                    {/* Always show upload button */}
+                    <div className="mt-3 pt-3 border-t border-gray-200">
+                      <p className="text-xs text-muted-foreground mb-2">Adicionar documento de contrato:</p>
+                      <label className="cursor-pointer inline-flex items-center gap-2 px-3 py-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm">
+                        <Upload className="h-3.5 w-3.5" />
+                        Upload Contrato de Funcionário
+                        <input
+                          type="file"
+                          accept=".pdf"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (!file) return;
+                            const reader = new FileReader();
+                            reader.onload = () => {
+                              const base64 = (reader.result as string).split(',')[1];
+                              const sanitizedName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+                              uploadMutation.mutate({
+                                companyEmail: meeting?.company_email || '',
+                                fileBase64: base64,
+                                fileName: `employee-contract-${sanitizedName}`,
+                              });
+                            };
+                            reader.readAsDataURL(file);
+                            e.target.value = '';
+                          }}
+                        />
+                      </label>
+                    </div>
                   </div>
                 </CollapsibleContent>
               </Collapsible>
