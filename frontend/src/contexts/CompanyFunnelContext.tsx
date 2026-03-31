@@ -11,36 +11,34 @@ import {
 import { useLocation, useSearch } from "wouter";
 import { trpc } from "@/lib/trpc";
 
-// Step configuration (5 steps)
+// Step configuration (3 steps)
 export const COMPANY_STEPS = [
-  { id: "vaga_criada", label: "Vaga Criada", shortLabel: "Vaga" },
   { id: "preferencia", label: "Preferência", shortLabel: "Preferência" },
   { id: "entrevista", label: "Entrevista", shortLabel: "Entrevista" },
   { id: "contratacao", label: "Contratação", shortLabel: "Contrato" },
-  { id: "funcionario_ativo", label: "Funcionário Ativo", shortLabel: "Ativo" },
 ] as const;
 
-// Map job status to funnel step (5-step flow)
+// Map job status to funnel step (3-step flow)
 export function getStepFromJobStatus(status: string | undefined): number {
   switch (status) {
     case "pending_review":
     case "searching":
-      return 1; // Preferência (job exists = step 0 done)
+      return 0; // Preferência
     case "list_sent":
     case "candidates_found":
     case "in_selection":
     case "meeting_scheduled":
     case "interview_scheduled":
     case "interview_completed":
-      return 2; // Entrevista
+      return 1; // Entrevista
     case "pending_signatures":
     case "hiring_in_progress":
-      return 3; // Contratação
+      return 2; // Contratação
     case "filled":
     case "active":
-      return 4; // Funcionário Ativo
+      return 2; // allComplete handled separately
     default:
-      return 1;
+      return 0;
   }
 }
 
@@ -59,6 +57,7 @@ interface CompanyFunnelContextType {
 
   // Step state (derived from job status)
   currentStep: number;
+  allComplete: boolean;
   viewingStep: number;
   setViewingStep: (step: number) => void;
   stepDirection: number;
@@ -147,39 +146,37 @@ export function CompanyFunnelProvider({ children }: { children: ReactNode }) {
     return jobs.find((j: any) => j.id === selectedJobId) || null;
   }, [jobs, selectedJobId]);
 
-  // Calculate current step from job status (5-step flow)
-  const currentStep = useMemo(() => {
-    if (!selectedJob) return 0;
+  // Calculate current step from job status (3-step flow)
+  const { currentStep, allComplete } = useMemo(() => {
+    if (!selectedJob) return { currentStep: 0, allComplete: false };
 
-    // Step 0 (Vaga Criada) is always done if a job exists — minimum is step 1
-
-    // Check for active contracts (step 4 - Funcionário Ativo)
+    // Check for active contracts → all complete
     const hasActiveContract = hiringProcesses.some(
       (hp: any) => hp.job?.id === selectedJobId && hp.status === "active"
     );
-    if (hasActiveContract) return 4;
+    if (hasActiveContract) return { currentStep: 2, allComplete: true };
 
-    // Check for pending contracts (step 3 - Contratação)
+    // Check for pending contracts (step 2 - Contratação)
     const hasPendingContract = hiringProcesses.some(
       (hp: any) => hp.job?.id === selectedJobId &&
         (hp.status === "pending_signatures" || hp.status === "pending_payment")
     );
-    if (hasPendingContract) return 3;
+    if (hasPendingContract) return { currentStep: 2, allComplete: false };
 
-    // Check for interviews or forwarded batches (step 2 - Entrevista)
+    // Check for interviews or forwarded batches (step 1 - Entrevista)
     const hasInterview = interviews.some(
       (i: any) =>
         i.job?.id === selectedJobId &&
         (i.status === "scheduled" || i.status === "in_progress" || i.status === "completed")
     );
-    if (hasInterview) return 2;
+    if (hasInterview) return { currentStep: 1, allComplete: false };
 
     const hasForwardedCandidates = batches.some(
       (b: any) => b.job?.id === selectedJobId && b.candidates?.length > 0
     );
-    if (hasForwardedCandidates) return 2;
+    if (hasForwardedCandidates) return { currentStep: 1, allComplete: false };
 
-    // Agency is working on it — step 2 (Entrevista waiting)
+    // Agency is working on it — step 1 (Entrevista waiting)
     if (
       selectedJob.status === "candidates_found" ||
       selectedJob.status === "in_selection" ||
@@ -187,16 +184,16 @@ export function CompanyFunnelProvider({ children }: { children: ReactNode }) {
       selectedJob.status === "meeting_scheduled" ||
       selectedJob.status === "interview_scheduled"
     ) {
-      return 2;
+      return { currentStep: 1, allComplete: false };
     }
 
-    // If interview preference is set, advance to step 2 (Entrevista waiting)
+    // If interview preference is set, advance to step 1 (Entrevista waiting)
     if ((selectedJob as any).preferred_interview_type) {
-      return 2;
+      return { currentStep: 1, allComplete: false };
     }
 
-    // Job exists but no preference set → step 1 (Preferência)
-    return 1;
+    // Job exists but no preference set → step 0 (Preferência)
+    return { currentStep: 0, allComplete: false };
   }, [selectedJob, selectedJobId, batches, interviews, hiringProcesses]);
 
   // Viewing step: user can click completed steps to view them
@@ -280,6 +277,7 @@ export function CompanyFunnelProvider({ children }: { children: ReactNode }) {
     jobs,
     selectedJob,
     currentStep,
+    allComplete,
     viewingStep,
     setViewingStep,
     stepDirection,

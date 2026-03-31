@@ -2,11 +2,10 @@ import { useState } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { useLocation } from "wouter";
 import { AnimatePresence, motion } from "framer-motion";
-import { FunnelLayout, type FunnelStep, CardEntrance } from "@/components/funnel";
+import { FunnelLayout, CardEntrance } from "@/components/funnel";
 import {
   CompanyFunnelProvider,
   useCompanyFunnel,
-  COMPANY_STEPS,
 } from "@/contexts/CompanyFunnelContext";
 import { Skeleton } from "@/components/ui/skeleton";
 import { FunnelContentSkeleton } from "@/components/ui/skeletons";
@@ -32,21 +31,8 @@ import {
 import { toast } from "sonner";
 
 // Step Components
-import StepVagaCriada from "@/components/company-steps/StepVagaCriada";
-import StepPreferencia from "@/components/company-steps/StepPreferencia";
-import StepEntrevista from "@/components/company-steps/StepEntrevista";
-import StepContratacao from "@/components/company-steps/StepContratacao";
-import StepFuncionarioAtivo from "@/components/company-steps/StepFuncionarioAtivo";
+import HorizontalAccordion from "@/components/company-steps/HorizontalAccordion";
 import FinanceiroTab from "@/components/company-steps/FinanceiroTab";
-
-// Step components map (5 steps)
-const STEP_COMPONENTS = [
-  StepVagaCriada,       // Step 0: Vaga Criada
-  StepPreferencia,      // Step 1: Preferência de Entrevista
-  StepEntrevista,       // Step 2: Entrevista (waiting + received)
-  StepContratacao,      // Step 3: Contratação
-  StepFuncionarioAtivo, // Step 4: Funcionário Ativo
-];
 
 function EmptyJobsState({ onCreateJob }: { onCreateJob: () => void }) {
   return (
@@ -197,6 +183,7 @@ function EmpresaPortalContent() {
     setSelectedJobId,
     jobs,
     currentStep,
+    allComplete,
     viewingStep,
     setViewingStep,
     stepDirection,
@@ -261,21 +248,11 @@ function EmpresaPortalContent() {
     sublabel: job.contract_type || "",
   }));
 
-  // Get the step component based on what the user is viewing
-  const StepComponent = STEP_COMPONENTS[viewingStep] || StepVagaCriada;
-
   // Tabs configuration
   const tabs = [
     { id: "recrutamento", label: "Recrutamento" },
     { id: "financeiro", label: "Financeiro" },
   ];
-
-  // Convert steps to FunnelStep format
-  const funnelSteps: FunnelStep[] = COMPANY_STEPS.map((step) => ({
-    id: step.id,
-    label: step.label,
-    shortLabel: step.shortLabel,
-  }));
 
   if (isLoading) {
     return (
@@ -303,7 +280,7 @@ function EmpresaPortalContent() {
         tabs={tabs}
         activeTab={activeTab}
         onTabChange={(id) => setActiveTab(id as "recrutamento" | "financeiro")}
-        steps={activeTab === "recrutamento" ? funnelSteps : undefined}
+        steps={undefined}
         currentStep={currentStep}
         viewingStep={viewingStep}
         onStepClick={setViewingStep}
@@ -318,7 +295,7 @@ function EmpresaPortalContent() {
           jobs.length === 0 ? (
             <EmptyJobsState onCreateJob={() => setIsModalOpen(true)} />
           ) : (
-            <StepComponent />
+            <HorizontalAccordion currentStep={currentStep} allComplete={allComplete} />
           )
         ) : (
           <FinanceiroTab />
