@@ -1,7 +1,8 @@
-// @ts-nocheck
 // Matching Service - Vector similarity search for candidates and jobs
 import { supabaseAdmin } from '../supabase';
 import { generateEmbedding, formatEmbeddingForPostgres } from './ai/embeddings';
+
+const sb = supabaseAdmin as any;
 
 export interface CandidateMatch {
   candidate_id: string;
@@ -29,7 +30,7 @@ export interface JobMatch {
 export async function generateCandidateEmbedding(candidateId: string): Promise<boolean> {
   try {
     // Get candidate summary
-    const { data: candidate, error: fetchError } = await supabaseAdmin
+    const { data: candidate, error: fetchError } = await sb
       .from('candidates')
       .select('summary')
       .eq('id', candidateId)
@@ -48,7 +49,7 @@ export async function generateCandidateEmbedding(candidateId: string): Promise<b
     }
 
     // Store embedding
-    const { error: updateError } = await supabaseAdmin
+    const { error: updateError } = await sb
       .from('candidates')
       .update({ embedding: formatEmbeddingForPostgres(embedding) })
       .eq('id', candidateId);
@@ -70,7 +71,7 @@ export async function generateCandidateEmbedding(candidateId: string): Promise<b
 export async function generateJobEmbedding(jobId: string | number): Promise<boolean> {
   try {
     // Get job summary
-    const { data: job, error: fetchError } = await supabaseAdmin
+    const { data: job, error: fetchError } = await sb
       .from('jobs')
       .select('summary')
       .eq('id', jobId)
@@ -89,7 +90,7 @@ export async function generateJobEmbedding(jobId: string | number): Promise<bool
     }
 
     // Store embedding
-    const { error: updateError } = await supabaseAdmin
+    const { error: updateError } = await sb
       .from('jobs')
       .update({ embedding: formatEmbeddingForPostgres(embedding) })
       .eq('id', jobId);
@@ -118,7 +119,7 @@ export async function findMatchingCandidates(
   const { threshold = 0.5, limit = 50 } = options;
 
   try {
-    const { data, error } = await supabaseAdmin
+    const { data, error } = await sb
       .rpc('match_candidates_for_job', {
         job_id_input: jobId,
         match_threshold: threshold,
@@ -148,7 +149,7 @@ export async function findMatchingJobs(
   const { threshold = 0.5, limit = 20 } = options;
 
   try {
-    const { data, error } = await supabaseAdmin
+    const { data, error } = await sb
       .rpc('match_jobs_for_candidate', {
         candidate_id_input: candidateId,
         match_threshold: threshold,
@@ -174,7 +175,7 @@ export async function findSimilarCandidatesRaw(
 ): Promise<CandidateMatch[]> {
   try {
     // Get job embedding
-    const { data: job, error: jobError } = await supabaseAdmin
+    const { data: job, error: jobError } = await sb
       .from('jobs')
       .select('embedding')
       .eq('id', jobId)
@@ -186,7 +187,7 @@ export async function findSimilarCandidatesRaw(
     }
 
     // Query candidates with similarity
-    const { data, error } = await supabaseAdmin
+    const { data, error } = await sb
       .rpc('match_candidates_for_job', {
         job_id_input: jobId,
         match_threshold: 0.3,

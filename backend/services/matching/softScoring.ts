@@ -1,8 +1,9 @@
-// @ts-nocheck
 // Soft Scoring Service - Multi-factor scoring without hard cutoffs
 // Each function returns a score from 0-100
 
 import { supabaseAdmin } from '../../supabase';
+
+const sb = supabaseAdmin as any;
 
 // ============================================
 // TYPE DEFINITIONS
@@ -163,7 +164,7 @@ let skillTaxonomyCache: Map<string, { related: string[]; synonyms: string[] }> |
 async function loadSkillTaxonomy(): Promise<Map<string, { related: string[]; synonyms: string[] }>> {
   if (skillTaxonomyCache) return skillTaxonomyCache;
 
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await sb
     .from('skill_taxonomy')
     .select('skill_normalized, related_skills, synonyms');
 
@@ -509,7 +510,7 @@ export function scorePDPCompetencyFit(candidate: CandidateData, job: JobData): n
 export async function scoreHistoricalPerformance(candidateId: string): Promise<number> {
   try {
     // Get past contracts for this candidate
-    const { data: contracts, error: contractsError } = await supabaseAdmin
+    const { data: contracts, error: contractsError } = await sb
       .from('contracts')
       .select('status, created_at')
       .eq('candidate_id', candidateId);
@@ -519,8 +520,8 @@ export async function scoreHistoricalPerformance(candidateId: string): Promise<n
     }
 
     // Calculate completion rate
-    const completed = contracts.filter(c => c.status === 'completed').length;
-    const terminated = contracts.filter(c => c.status === 'terminated').length;
+    const completed = contracts.filter((c: any) => c.status === 'completed').length;
+    const terminated = contracts.filter((c: any) => c.status === 'terminated').length;
     const total = contracts.length;
 
     if (total === 0) return 70;
@@ -532,7 +533,7 @@ export async function scoreHistoricalPerformance(candidateId: string): Promise<n
     let score = 70 + (completionRate * 30) - terminationPenalty;
 
     // Get feedback if available
-    const { data: feedback, error: feedbackError } = await supabaseAdmin
+    const { data: feedback, error: feedbackError } = await sb
       .from('feedback')
       .select('performance, punctuality, communication, teamwork, technical_skills')
       .eq('candidate_id', candidateId);
@@ -589,7 +590,7 @@ export async function scoreBidirectionalMatch(
 
   // Try to get candidate preferences from preferences table
   try {
-    const { data: prefs, error } = await supabaseAdmin
+    const { data: prefs, error } = await sb
       .from('candidate_preferences')
       .select('*')
       .eq('candidate_id', candidateId)
@@ -659,15 +660,15 @@ export async function batchFetchCandidateData(candidateIds: string[]): Promise<B
   }
 
   const [contractsResult, feedbackResult, prefsResult] = await Promise.all([
-    supabaseAdmin
+    sb
       .from('contracts')
       .select('candidate_id, status, created_at')
       .in('candidate_id', candidateIds),
-    supabaseAdmin
+    sb
       .from('feedback')
       .select('candidate_id, performance, punctuality, communication, teamwork, technical_skills')
       .in('candidate_id', candidateIds),
-    supabaseAdmin
+    sb
       .from('candidate_preferences')
       .select('*')
       .in('candidate_id', candidateIds),
@@ -766,7 +767,7 @@ export function scoreBidirectionalMatchFromBatch(
     }
   }
 
-  const prefs = batchedData.preferences.get(candidateId);
+  const prefs: any = batchedData.preferences.get(candidateId);
   if (prefs) {
     if (prefs.preferred_states?.length > 0 && job.location) {
       const jobState = job.location.split(',')[1]?.trim().toUpperCase();
@@ -840,5 +841,6 @@ export async function calculateAllFactors(
     personality: scorePersonalityFit(candidate, job),
     history: historyScore,
     bidirectional: bidirectionalScore,
+    competency: scorePDPCompetencyFit(candidate, job),
   };
 }

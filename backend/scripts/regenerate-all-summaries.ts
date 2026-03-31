@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * Force regenerate ALL summaries for companies and jobs
  * This will overwrite existing summaries with the updated prompt
@@ -16,12 +15,13 @@ config({ path: resolve(process.cwd(), ".env") });
 async function main() {
   // Dynamic imports after env is loaded
   const { supabaseAdmin } = await import("../supabase");
+  const sb = supabaseAdmin as any;
   const { generateCompanySummary, generateJobSummary } = await import("../services/ai/summarizer");
 
   console.log("Starting FORCE regeneration of ALL summaries...\n");
 
   // Get ALL companies (not just those without summaries)
-  const { data: companies, error: companiesError } = await supabaseAdmin
+  const { data: companies, error: companiesError } = await sb
     .from("companies")
     .select("id, company_name, cnpj, industry, company_size, website, description, city, state, notes");
 
@@ -38,7 +38,7 @@ async function main() {
       console.log(`Regenerating summary for company: ${company.company_name}...`);
 
       // Get the company's first job for context
-      const { data: jobs } = await supabaseAdmin
+      const { data: jobs } = await sb
         .from("jobs")
         .select("title, description, contract_type, work_type, salary, benefits, requirements")
         .eq("company_id", company.id)
@@ -64,7 +64,7 @@ async function main() {
       });
 
       if (summary) {
-        await supabaseAdmin
+        await sb
           .from("companies")
           .update({
             summary,
@@ -83,7 +83,7 @@ async function main() {
   }
 
   // Get ALL jobs
-  const { data: allJobs, error: jobsError } = await supabaseAdmin
+  const { data: allJobs, error: jobsError } = await sb
     .from("jobs")
     .select(`
       id,
@@ -124,7 +124,7 @@ async function main() {
       });
 
       if (summary) {
-        await supabaseAdmin
+        await sb
           .from("jobs")
           .update({
             summary,

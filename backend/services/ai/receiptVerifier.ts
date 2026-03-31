@@ -1,9 +1,10 @@
-// @ts-nocheck
 // AI Receipt Verification Service
 // Uses a vision-capable model via OpenRouter to verify PIX payment receipts
 
 import { updatePayment } from "../../db/payments";
 import { supabaseAdmin } from "../../supabase";
+
+const sb = supabaseAdmin as any;
 
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const VISION_MODEL = 'google/gemini-2.0-flash-001';
@@ -117,7 +118,7 @@ O comprovante confere com o valor esperado?`;
       console.log(`[ReceiptVerifier] Payment ${paymentId} is scheduled (not completed), flagged for review`);
 
       // Notify admin users
-      const { data: admins } = await supabaseAdmin
+      const { data: admins } = await sb
         .from("users")
         .select("id")
         .in("role", ["admin", "agency"]);
@@ -132,7 +133,7 @@ O comprovante confere com o valor esperado?`;
           related_to_id: paymentId,
           is_read: false,
         }));
-        await supabaseAdmin.from("notifications").insert(notifications);
+        await sb.from("notifications").insert(notifications);
       }
       return;
     }
@@ -145,7 +146,7 @@ O comprovante confere com o valor esperado?`;
       });
       console.log(`[ReceiptVerifier] Payment ${paymentId} destination mismatch, flagged for review`);
 
-      const { data: admins } = await supabaseAdmin
+      const { data: admins } = await sb
         .from("users")
         .select("id")
         .in("role", ["admin", "agency"]);
@@ -160,7 +161,7 @@ O comprovante confere com o valor esperado?`;
           related_to_id: paymentId,
           is_read: false,
         }));
-        await supabaseAdmin.from("notifications").insert(notifications);
+        await sb.from("notifications").insert(notifications);
       }
       return;
     }
@@ -184,7 +185,7 @@ O comprovante confere com o valor esperado?`;
       console.log(`[ReceiptVerifier] Payment ${paymentId} flagged for manual review`);
 
       // Notify admin users
-      const { data: admins } = await supabaseAdmin
+      const { data: admins } = await sb
         .from("users")
         .select("id")
         .in("role", ["admin", "agency"]);
@@ -199,7 +200,7 @@ O comprovante confere com o valor esperado?`;
           related_to_id: paymentId,
           is_read: false,
         }));
-        await supabaseAdmin.from("notifications").insert(notifications);
+        await sb.from("notifications").insert(notifications);
       }
     }
   } catch (error) {

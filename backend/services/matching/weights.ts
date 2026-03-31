@@ -1,4 +1,3 @@
-// @ts-nocheck
 // Weight Profiles for Advanced AI Matching
 // Defines how different factors are weighted for different job types
 

@@ -1,4 +1,3 @@
-// @ts-nocheck
 // LLM Re-Ranking Service - Stage 4 of the matching pipeline
 // Uses LLM to deeply analyze top candidates and provide explanations
 

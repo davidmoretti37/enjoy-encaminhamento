@@ -1,4 +1,3 @@
-// @ts-nocheck
 // Explainability Service - Generate human-readable explanations for matches
 // Provides transparency into why a candidate was ranked for a job
 

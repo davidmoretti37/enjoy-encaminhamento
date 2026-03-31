@@ -1,4 +1,3 @@
-// @ts-nocheck
 // Autentique Digital Signature API Integration
 // Docs: https://docs.autentique.com.br/api
 // GraphQL API with multipart file uploads
@@ -162,7 +161,7 @@ export async function createDocument(
   const formData = new FormData();
   formData.append("operations", operations);
   formData.append("map", map);
-  formData.append("0", new Blob([pdfBuffer], { type: "application/pdf" }), `${name}.pdf`);
+  formData.append("0", new Blob([pdfBuffer as any], { type: "application/pdf" }), `${name}.pdf`);
 
   console.log(`[Autentique] Creating document "${name}" with ${signers.length} signer(s)${sandbox ? " (SANDBOX)" : ""}`);
 

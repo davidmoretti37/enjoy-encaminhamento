@@ -1,4 +1,3 @@
-// @ts-nocheck
 // Embed a signature image + signer info into a PDF's last page
 import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
 

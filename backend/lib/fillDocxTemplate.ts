@@ -1,4 +1,3 @@
-// @ts-nocheck
 // Fill DOCX template placeholders with data, then convert to PDF
 import Docxtemplater from "docxtemplater";
 import PizZip from "pizzip";

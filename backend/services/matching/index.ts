@@ -1,4 +1,3 @@
-// @ts-nocheck
 // Advanced AI Matching Pipeline Orchestrator
 // 4-Stage matching: Vector Retrieval → Soft Scoring → Bidirectional → LLM Re-Ranking
 
@@ -9,19 +8,25 @@ import {
   calculateDataCompleteness,
   batchFetchCandidateData,
 } from './softScoring';
+import type { CandidateData, JobData, FactorScores } from './softScoring';
 import {
   getWeightProfile,
   calculateCompositeScore,
   suggestWeightProfile,
   getAllWeightProfiles,
 } from './weights';
+import type { WeightConfig } from './weights';
 import {
   reRankCandidatesBatch,
   filterForReRanking,
   preScreenCandidatesListwise,
 } from './llmReranking';
+import type { LLMReRankResult, CandidateForReRank } from './llmReranking';
 import { generateExplanation } from './explainability';
+import type { MatchExplanation } from './explainability';
 import { initProgress, addMessage, completeProgress, failProgress } from './progress';
+
+const sb = supabaseAdmin as any;
 
 // ============================================
 // TYPE DEFINITIONS
@@ -106,12 +111,12 @@ async function retrieveCandidatesBroad(
     match_count: options.limit,
   };
 
-  const { data, error } = await supabaseAdmin.rpc(rpcName, rpcParams);
+  const { data, error } = await sb.rpc(rpcName, rpcParams);
 
   if (error) {
     console.error('Vector retrieval error:', error);
     // Fall back to simple query without vector search
-    const { data: fallbackData, error: fallbackError } = await supabaseAdmin
+    const { data: fallbackData, error: fallbackError } = await sb
       .from('candidates')
       .select('*')
       .eq('status', 'active')
@@ -122,7 +127,7 @@ async function retrieveCandidatesBroad(
       return [];
     }
 
-    return fallbackData.map(c => ({
+    return fallbackData.map((c: any) => ({
       ...c,
       skills: Array.isArray(c.skills) ? c.skills : [],
       languages: Array.isArray(c.languages) ? c.languages : [],
@@ -178,7 +183,7 @@ async function scoreCandidates(
     const batchResults = await Promise.all(
       batch.map(async (candidate) => {
         const factors = await calculateAllFactorsBatch(candidate, job, batchedData);
-        const compositeScore = calculateCompositeScore(factors, weights);
+        const compositeScore = calculateCompositeScore(factors as unknown as Record<string, number>, weights);
         return { candidate, factors, compositeScore };
       })
     );
@@ -255,7 +260,7 @@ export async function runMatchingPipeline(
   addMessage(jobId, 'Iniciando busca de candidatos...', 5);
 
   // Load job data with company info
-  const { data: job, error: jobError } = await supabaseAdmin
+  const { data: job, error: jobError } = await sb
     .from('jobs')
     .select('*, companies(company_name, summary, industry)')
     .eq('id', jobId)
@@ -320,14 +325,14 @@ export async function runMatchingPipeline(
 
     if (missingApplicantIds.length > 0) {
       console.log(`[Matching] Fetching ${missingApplicantIds.length} additional applicants not in vector results`);
-      const { data: missingApplicants } = await supabaseAdmin
+      const { data: missingApplicants } = await sb
         .from('candidates')
         .select('*')
         .in('id', missingApplicantIds)
         .eq('status', 'active');
 
       if (missingApplicants && missingApplicants.length > 0) {
-        const formattedApplicants = missingApplicants.map(c => ({
+        const formattedApplicants = missingApplicants.map((c: any) => ({
           ...c,
           skills: Array.isArray(c.skills) ? c.skills : [],
           languages: Array.isArray(c.languages) ? c.languages : [],
@@ -366,14 +371,14 @@ export async function runMatchingPipeline(
     .slice(0, cfg.llmRerankLimit + 5)
     .map(sc => sc.candidate.id);
   if (topCandidateIds.length > 0) {
-    const { data: pdpData } = await supabaseAdmin
+    const { data: pdpData } = await sb
       .from('candidates')
       .select('id, pdp_intrapersonal, pdp_interpersonal, pdp_skills, pdp_competencies, pdp_develop_competencies')
       .in('id', topCandidateIds);
     if (pdpData) {
-      const pdpMap = new Map(pdpData.map(p => [p.id, p]));
+      const pdpMap = new Map(pdpData.map((p: any) => [p.id, p]));
       for (const sc of scoredCandidates.slice(0, cfg.llmRerankLimit + 5)) {
-        const pdp = pdpMap.get(sc.candidate.id);
+        const pdp: any = pdpMap.get(sc.candidate.id);
         if (pdp) {
           sc.candidate.pdp_intrapersonal = pdp.pdp_intrapersonal;
           sc.candidate.pdp_interpersonal = pdp.pdp_interpersonal;
@@ -505,7 +510,7 @@ export async function saveMatchResults(
   const batchSize = 50;
   for (let i = 0; i < records.length; i += batchSize) {
     const batch = records.slice(i, i + batchSize);
-    const { error } = await supabaseAdmin
+    const { error } = await sb
       .from('job_matches')
       .upsert(batch, {
         onConflict: 'job_id,candidate_id',
@@ -537,7 +542,7 @@ export async function getMatchResults(
     includeExplanations = true,
   } = options;
 
-  let query = supabaseAdmin
+  let query = sb
     .from('job_matches')
     .select(`
       *,
