@@ -125,6 +125,8 @@ export const interviewRouter = router({
       if (input.batchId) {
         await db.updateBatch(input.batchId, {
           status: "meeting_scheduled",
+          meeting_scheduled_at: input.scheduledAt,
+          meeting_link: meetingLink || null,
           selected_candidate_ids: input.candidateIds,
         } as any);
       }
