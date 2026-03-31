@@ -16,6 +16,8 @@ import {
   Mail,
   Phone,
   MapPin,
+  Upload,
+  FileText,
 } from "lucide-react";
 import { CardEntrance } from "@/components/funnel";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -375,6 +377,33 @@ function EmployeeCard({ employee, onOpenReport }: { employee: any; onOpenReport:
                 </p>
               </div>
             )}
+
+            {/* Contract document upload */}
+            <div className="p-3 rounded-lg bg-slate-50 border border-slate-100">
+              <p className="text-xs text-slate-500 flex items-center gap-1 mb-2"><FileText className="w-3 h-3" /> Documento do Contrato</p>
+              {employee.contract_document_url ? (
+                <a href={employee.contract_document_url} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 hover:underline flex items-center gap-1">
+                  <FileText className="w-3.5 h-3.5" />
+                  Ver contrato
+                </a>
+              ) : (
+                <label className="cursor-pointer inline-flex items-center gap-2 px-3 py-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-xs">
+                  <Upload className="h-3.5 w-3.5" />
+                  Upload Contrato
+                  <input
+                    type="file"
+                    accept=".pdf,image/*"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      toast.info("Funcionalidade de upload será disponibilizada em breve");
+                      e.target.value = '';
+                    }}
+                  />
+                </label>
+              )}
+            </div>
           </div>
         )}
       </div>
