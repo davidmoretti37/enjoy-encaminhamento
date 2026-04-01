@@ -440,11 +440,12 @@ function EstagioContractCard({ hiringProcess, onRefresh }: { hiringProcess: any;
 function CLTPaymentCard({ hiringProcess, onRefresh }: { hiringProcess: any; onRefresh: () => void }) {
   const candidate = hiringProcess.candidate;
   const feeReais = (hiringProcess.calculated_fee / 100).toFixed(2).replace(".", ",");
-  const isPendingPayment = hiringProcess.status === "pending_payment" || hiringProcess.status === "pending_signatures";
   const [receiptBase64, setReceiptBase64] = useState<string | null>(null);
   const [receiptFileName, setReceiptFileName] = useState<string | null>(null);
   const [receiptPreview, setReceiptPreview] = useState<string | null>(null);
   const [showSigningFlow, setShowSigningFlow] = useState(false);
+  const [paymentConfirmed, setPaymentConfirmed] = useState(false);
+  const isPendingPayment = !paymentConfirmed && !hiringProcess.paymentPaid && (hiringProcess.status === "pending_payment" || hiringProcess.status === "pending_signatures");
 
   // Fetch agency payment info
   const { data: agencyPaymentInfo } = trpc.company.getAgencyPaymentInfo.useQuery();
@@ -452,6 +453,7 @@ function CLTPaymentCard({ hiringProcess, onRefresh }: { hiringProcess: any; onRe
   const confirmMutation = trpc.hiring.confirmCLTPayment.useMutation({
     onSuccess: () => {
       toast.success("Pagamento confirmado!");
+      setPaymentConfirmed(true);
       onRefresh();
     },
     onError: (err) => toast.error(err.message || "Erro ao confirmar pagamento"),

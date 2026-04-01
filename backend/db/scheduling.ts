@@ -78,6 +78,7 @@ export async function getCompanyFullHistory(
   signedContratoInicial: any[];
   hiringProcesses: any[];
   signingInvitations: any[];
+  signedHiringDocs: any[];
 }> {
   let meeting = null;
 
@@ -132,6 +133,7 @@ export async function getCompanyFullHistory(
   let signedContratoInicial: any[] = [];
   let hiringProcesses: any[] = [];
   let signingInvitations: any[] = [];
+  let signedHiringDocs: any[] = [];
   if (company?.id) {
     const { data: companyContracts } = await db
       .from("contracts")
@@ -215,6 +217,25 @@ export async function getCompanyFullHistory(
         .select("*")
         .in("hiring_process_id", hpIds);
       signingInvitations = invitations || [];
+    }
+
+    // Fetch signed hiring contract documents (Autentique-sourced) for this company's hiring processes
+    if (hpIds.length > 0) {
+      const { data: autentiqueDocs } = await db
+        .from("autentique_documents")
+        .select("id, template_id, document_name, status, signers, context_id, created_at")
+        .eq("context_type", "hiring_contract")
+        .in("context_id", hpIds)
+        .order("created_at", { ascending: false });
+
+      // Deduplicate by template_id (keep most recent)
+      const seen = new Set<string>();
+      for (const doc of (autentiqueDocs || [])) {
+        if (doc.template_id && !seen.has(doc.template_id + '_' + doc.context_id)) {
+          seen.add(doc.template_id + '_' + doc.context_id);
+          signedHiringDocs.push(doc);
+        }
+      }
     }
   }
 
@@ -321,6 +342,7 @@ export async function getCompanyFullHistory(
     signedContratoInicial,
     hiringProcesses,
     signingInvitations,
+    signedHiringDocs,
   };
 }
 

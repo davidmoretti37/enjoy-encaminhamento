@@ -148,6 +148,8 @@ export async function createJobForOnboarding(
     status?: "draft" | "open" | "closed" | "filled";
     published_at?: string;
     agency_id: string;
+    subsidiary_cnpj?: string;
+    subsidiary_name?: string;
   }
 ): Promise<string> {
   const { data: job, error } = await db
@@ -171,6 +173,8 @@ export async function createJobForOnboarding(
       specific_requirements: data.requirements || null,
       openings: data.openings || 1,
       filled_positions: 0,
+      subsidiary_cnpj: data.subsidiary_cnpj || null,
+      subsidiary_name: data.subsidiary_name || null,
       status: data.status || "open",
       published_at: data.published_at || new Date().toISOString(),
     })

@@ -136,17 +136,20 @@ export default function CandidateGroupManagement({ jobId, companyInterviewCandid
     },
   });
 
-  // Mutation to update meeting link
-  const updateLinkMutation = trpc.batch.updateMeetingLink.useMutation({
+  // Mutation to update session meeting link
+  const updateSessionLinkMutation = trpc.batch.updateSessionMeetingLink.useMutation({
     onSuccess: () => {
-      toast.success("Link enviado! Os candidatos foram notificados.");
+      toast.success("Link da reunião atualizado!");
       setMeetingLinkInput("");
-      refetch();
+      setEditingLinkSessionId(null);
+      refetchSessions();
     },
     onError: () => {
-      toast.error("Nao foi possivel enviar o link. Verifique se e um endereco valido.");
+      toast.error("Erro ao atualizar link.");
     },
   });
+
+  const [editingLinkSessionId, setEditingLinkSessionId] = useState<string | null>(null);
 
   if (isLoading) {
     return (
@@ -243,11 +246,6 @@ export default function CandidateGroupManagement({ jobId, companyInterviewCandid
     setSelectedIds(new Set());
   };
 
-  // Actions
-  const handleEmailCandidates = () => {
-    toast.info("Funcionalidade de email em desenvolvimento");
-  };
-
   const handleScheduleInterviews = () => {
     if (selectedIds.size === 0) {
       toast.error("Selecione ao menos um candidato para agendar");
@@ -296,15 +294,6 @@ export default function CandidateGroupManagement({ jobId, companyInterviewCandid
 
         {/* Bulk Actions */}
         <div className="flex items-center gap-2">
-          <Button
-            onClick={handleEmailCandidates}
-            variant="outline"
-            size="sm"
-            className="border-slate-300 hover:border-orange-300"
-          >
-            <Mail className="w-4 h-4 mr-1.5" />
-            Email
-          </Button>
           {isForwarded && (
             <Badge variant="outline" className="border-green-300 text-green-600">
               <CheckCircle className="w-3.5 h-3.5 mr-1" />
@@ -358,7 +347,7 @@ export default function CandidateGroupManagement({ jobId, companyInterviewCandid
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    {session.meeting_link && (
+                    {session.meeting_link ? (
                       <button
                         onClick={() => window.open(session.meeting_link, '_blank')}
                         className={`flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs font-medium transition-colors border ${
@@ -370,7 +359,18 @@ export default function CandidateGroupManagement({ jobId, companyInterviewCandid
                         <Link2 className="w-3 h-3" />
                         Link
                       </button>
-                    )}
+                    ) : isOnline && session.status !== "completed" ? (
+                      <button
+                        onClick={() => {
+                          setEditingLinkSessionId(session.id);
+                          setMeetingLinkInput("");
+                        }}
+                        className="flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs font-medium transition-colors border border-dashed border-blue-300 text-blue-600 hover:bg-blue-50"
+                      >
+                        <Link2 className="w-3 h-3" />
+                        Adicionar link
+                      </button>
+                    ) : null}
                     {session.status !== "completed" ? (
                       <button
                         onClick={() => {
@@ -415,6 +415,55 @@ export default function CandidateGroupManagement({ jobId, companyInterviewCandid
                     </span>
                   ))}
                 </div>
+                {editingLinkSessionId === session.id && (
+                  <div className="flex items-center gap-2 mt-2">
+                    <Input
+                      value={meetingLinkInput}
+                      onChange={(e) => setMeetingLinkInput(e.target.value)}
+                      placeholder="https://meet.google.com/... ou zoom.us/..."
+                      className="h-8 text-sm flex-1"
+                      autoFocus
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && meetingLinkInput.trim()) {
+                          updateSessionLinkMutation.mutate({
+                            sessionId: session.id,
+                            meetingLink: meetingLinkInput.trim(),
+                          });
+                        }
+                        if (e.key === "Escape") {
+                          setEditingLinkSessionId(null);
+                          setMeetingLinkInput("");
+                        }
+                      }}
+                    />
+                    <Button
+                      size="sm"
+                      className="h-8 px-3 text-xs"
+                      disabled={!meetingLinkInput.trim() || updateSessionLinkMutation.isPending}
+                      onClick={() => {
+                        updateSessionLinkMutation.mutate({
+                          sessionId: session.id,
+                          meetingLink: meetingLinkInput.trim(),
+                        });
+                      }}
+                    >
+                      {updateSessionLinkMutation.isPending ? (
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                      ) : (
+                        "Salvar"
+                      )}
+                    </Button>
+                    <button
+                      onClick={() => {
+                        setEditingLinkSessionId(null);
+                        setMeetingLinkInput("");
+                      }}
+                      className="text-slate-400 hover:text-slate-600"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
               </div>
             );
           })}

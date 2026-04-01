@@ -635,7 +635,7 @@ function CompanyPaymentsModal({ company, open, onClose }: { company: any; open: 
     },
   });
 
-  const isRecurring = paymentForm.payment_type === 'monthly-fee' || paymentForm.payment_type === 'insurance-fee';
+  const isRecurring = paymentForm.payment_type === 'monthly-fee' || paymentForm.payment_type === 'insurance-fee' || paymentForm.payment_type === 'annual-insurance';
 
   const handleCreatePayment = async () => {
     if (!paymentForm.amount) {
@@ -791,7 +791,7 @@ function CompanyPaymentsModal({ company, open, onClose }: { company: any; open: 
                           R$ {((payment.amount || 0) / 100).toFixed(2)}
                         </p>
                         <p className="text-xs text-gray-500">
-                          {payment.payment_type === 'monthly-fee' ? 'Taxa mensal' : payment.payment_type === 'insurance-fee' ? 'Seguro' : payment.payment_type}
+                          {payment.payment_type === 'monthly-fee' ? 'Taxa mensal' : payment.payment_type === 'insurance-fee' ? 'Seguro Mensal' : payment.payment_type === 'annual-insurance' ? 'Seguro Anual' : payment.payment_type}
                           {payment.billing_period && ` · ${payment.billing_period}`}
                         </p>
                       </div>
@@ -828,6 +828,7 @@ function CompanyPaymentsModal({ company, open, onClose }: { company: any; open: 
                   <SelectContent>
                     <SelectItem value="monthly-fee">Mensalidade</SelectItem>
                     <SelectItem value="insurance-fee">Seguro Mensal</SelectItem>
+                    <SelectItem value="annual-insurance">Seguro Anual</SelectItem>
                     <SelectItem value="setup-fee">Taxa Única</SelectItem>
                     <SelectItem value="penalty">Multa</SelectItem>
                   </SelectContent>

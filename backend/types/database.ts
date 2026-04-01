@@ -471,6 +471,8 @@ export interface Database {
           min_experience_years: number | null
           specific_requirements: string | null
           work_schedule: string | null
+          subsidiary_cnpj: string | null
+          subsidiary_name: string | null
           status: 'draft' | 'open' | 'closed' | 'filled' | 'pending_review' | 'searching' | 'candidates_found' | 'in_selection' | 'paused'
           openings: number
           filled_positions: number
@@ -499,6 +501,8 @@ export interface Database {
           min_experience_years?: number | null
           specific_requirements?: string | null
           work_schedule?: string | null
+          subsidiary_cnpj?: string | null
+          subsidiary_name?: string | null
           status?: 'draft' | 'open' | 'closed' | 'filled' | 'pending_review' | 'searching' | 'candidates_found' | 'in_selection' | 'paused'
           openings?: number
           filled_positions?: number
@@ -527,6 +531,8 @@ export interface Database {
           min_experience_years?: number | null
           specific_requirements?: string | null
           work_schedule?: string | null
+          subsidiary_cnpj?: string | null
+          subsidiary_name?: string | null
           status?: 'draft' | 'open' | 'closed' | 'filled' | 'pending_review' | 'searching' | 'candidates_found' | 'in_selection' | 'paused'
           openings?: number
           filled_positions?: number

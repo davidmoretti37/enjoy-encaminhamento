@@ -28,10 +28,19 @@ export default function StepEntrevista() {
     refreshData,
   } = useCandidateFunnel();
 
-  // Filter interviews for selected application
-  const appInterviews = [...pendingInterviews, ...confirmedInterviews, ...waitingResultInterviews].filter(
-    (i: any) => i.application_id === selectedApplication?.id
+  const selectedJobId = selectedApplication?.job?.id;
+
+  // Filter interviews for selected application's job
+  const jobPending = pendingInterviews.filter(
+    (i: any) => i.session?.job?.id === selectedJobId || i.session?.job_id === selectedJobId
   );
+  const jobConfirmed = confirmedInterviews.filter(
+    (i: any) => i.session?.job?.id === selectedJobId || i.session?.job_id === selectedJobId
+  );
+  const jobWaiting = waitingResultInterviews.filter(
+    (i: any) => i.session?.job?.id === selectedJobId || i.session?.job_id === selectedJobId
+  );
+  const appInterviews = [...jobPending, ...jobConfirmed, ...jobWaiting];
 
   if (!selectedApplication) {
     return <EmptyState />;
@@ -40,7 +49,7 @@ export default function StepEntrevista() {
   return (
     <div className="space-y-6">
       {/* Pending interviews */}
-      {pendingInterviews.length > 0 && (
+      {jobPending.length > 0 && (
         <CardEntrance>
           <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
             <div className="p-4 border-b border-slate-200">
@@ -57,7 +66,7 @@ export default function StepEntrevista() {
               </div>
             </div>
             <div className="p-4 space-y-3">
-              {pendingInterviews.map((interview: any) => (
+              {jobPending.map((interview: any) => (
                 <InterviewCard
                   key={interview.id}
                   interview={interview}
@@ -71,8 +80,8 @@ export default function StepEntrevista() {
       )}
 
       {/* Confirmed interviews */}
-      {confirmedInterviews.length > 0 && (
-        <CardEntrance delay={pendingInterviews.length > 0 ? 0.1 : 0}>
+      {jobConfirmed.length > 0 && (
+        <CardEntrance delay={jobPending.length > 0 ? 0.1 : 0}>
           <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
             <div className="p-4 border-b border-slate-200">
               <div className="flex items-center gap-3">
@@ -88,7 +97,7 @@ export default function StepEntrevista() {
               </div>
             </div>
             <div className="p-4 space-y-3">
-              {confirmedInterviews.map((interview: any) => (
+              {jobConfirmed.map((interview: any) => (
                 <InterviewCard
                   key={interview.id}
                   interview={interview}
@@ -103,7 +112,7 @@ export default function StepEntrevista() {
       )}
 
       {/* Waiting for result */}
-      {waitingResultInterviews.length > 0 && (
+      {jobWaiting.length > 0 && (
         <CardEntrance delay={0.2}>
           <div className="bg-white rounded-xl border-2 border-slate-200 overflow-hidden">
             <div className="p-4 border-b border-slate-200">
@@ -120,7 +129,7 @@ export default function StepEntrevista() {
               </div>
             </div>
             <div className="p-4 space-y-3">
-              {waitingResultInterviews.map((interview: any) => (
+              {jobWaiting.map((interview: any) => (
                 <InterviewCard
                   key={interview.id}
                   interview={interview}

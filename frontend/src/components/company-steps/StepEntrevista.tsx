@@ -379,6 +379,39 @@ function ReceivedState({
     (c) => c.profile.id === selectedCandidateId
   );
 
+  // If no candidates have interviews yet, show waiting state
+  if (candidateProfiles.length === 0) {
+    return (
+      <CardEntrance>
+        <div className="bg-white rounded-xl border border-slate-200 p-8 text-center">
+          <div className="relative mx-auto w-20 h-20 mb-6">
+            <motion.div
+              animate={{ scale: [1, 1.15, 1] }}
+              transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+              className="absolute inset-0 rounded-2xl bg-[#FF6B35]/10"
+            />
+            <div className="absolute inset-0 flex items-center justify-center">
+              <Search className="w-10 h-10 text-[#FF6B35]" />
+            </div>
+          </div>
+
+          <h3 className="text-xl font-semibold text-[#0A2342] mb-2">
+            Estamos buscando os candidatos perfeitos para você!
+          </h3>
+          <p className="text-slate-500 max-w-md mx-auto mb-2">
+            Nossa agência está realizando a pré-seleção e agendando as entrevistas com
+            os melhores candidatos para a vaga{" "}
+            <span className="font-medium text-[#0A2342]">{selectedJob.title}</span>.
+          </p>
+          <p className="text-slate-400 text-sm max-w-md mx-auto">
+            Quando tudo estiver pronto, você receberá os perfis completos dos
+            candidatos e os horários das entrevistas.
+          </p>
+        </div>
+      </CardEntrance>
+    );
+  }
+
   return (
     <div className="space-y-4">
       {/* Header */}

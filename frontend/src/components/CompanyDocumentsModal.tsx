@@ -203,6 +203,7 @@ export default function CompanyDocumentsModal({
   const emails = historyData?.emails || [];
   const hiringProcesses = historyData?.hiringProcesses || [];
   const signingInvitations = historyData?.signingInvitations || [];
+  const signedHiringDocs = (historyData as any)?.signedHiringDocs || [];
 
   // Use company data if form data doesn't exist (for companies that went through onboarding)
   const displayData = formData || (companyData ? {
@@ -945,6 +946,41 @@ export default function CompanyDocumentsModal({
                                   </label>
                                 )}
                               </div>
+
+                              {/* Autentique documents for this hiring process */}
+                              {(() => {
+                                const hpDocs = signedHiringDocs.filter((d: any) => d.context_id === hp.id);
+                                if (hpDocs.length === 0) return null;
+                                return (
+                                  <div className="mt-2 pt-2 border-t border-gray-200">
+                                    <p className="text-xs font-medium text-gray-500 mb-1.5">Documentos Autentique</p>
+                                    <div className="space-y-1.5">
+                                      {hpDocs.map((doc: any) => {
+                                        const signers = doc.signers || [];
+                                        const allSigned = signers.every((s: any) => s.signed_at);
+                                        return (
+                                          <div key={doc.id} className="text-xs bg-white rounded border p-2">
+                                            <div className="flex items-center justify-between mb-1">
+                                              <span className="font-medium text-gray-700">{doc.document_name}</span>
+                                              <span className={`text-[10px] px-1.5 py-0.5 rounded ${allSigned ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
+                                                {allSigned ? 'Completo' : 'Pendente'}
+                                              </span>
+                                            </div>
+                                            <div className="flex gap-2">
+                                              {signers.map((s: any, i: number) => (
+                                                <span key={i} className={`flex items-center gap-0.5 ${s.signed_at ? 'text-green-600' : 'text-gray-400'}`}>
+                                                  {s.signed_at ? <CheckCircle2 className="h-2.5 w-2.5" /> : <Clock className="h-2.5 w-2.5" />}
+                                                  {s.name || s.role}
+                                                </span>
+                                              ))}
+                                            </div>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
+                                );
+                              })()}
                             </div>
                           );
                         })}

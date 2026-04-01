@@ -5,7 +5,7 @@
  * Integrated from AgencyJobDescriptions.tsx
  */
 
-import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef, Component, type ReactNode, type ErrorInfo } from 'react';
 import { useAgencyFunnel } from '@/contexts/AgencyFunnelContext';
 import { trpc } from '@/lib/trpc';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -33,6 +33,7 @@ import {
   Search,
   Pause,
   Loader2,
+  Upload,
   Bot,
   UserCheck,
   AlertCircle,
@@ -1056,6 +1057,280 @@ function MatchingStatusCard({ jobId, autoTrigger }: { jobId: string; autoTrigger
       </div>
     </div>
   );
+}
+
+// Document assignment section — agency selects which documents to send
+function DocumentAssignmentSection({
+  hiringProcessId,
+  hiringType,
+  onAssigned,
+}: {
+  hiringProcessId: string;
+  hiringType: string;
+  onAssigned: () => void;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [selections, setSelections] = useState<Record<string, 'company' | 'candidate' | 'both'>>({});
+  const [isUploading, setIsUploading] = useState(false);
+  const utils = trpc.useUtils();
+
+  const categoryMap: Record<string, string> = {
+    estagio: 'estagio',
+    clt: 'clt',
+    'menor-aprendiz': 'menor_aprendiz',
+    pj: 'clt',
+  };
+  const category = categoryMap[hiringType] || hiringType;
+
+  const { data: templates = [] } = (trpc.agency.getDocumentTemplates as any).useQuery(
+    { category },
+    { enabled: isOpen }
+  );
+
+  const { data: assigned = [] } = (trpc.hiring as any).getHiringDocuments.useQuery(
+    { hiringProcessId },
+    { enabled: true }
+  );
+
+  const assignMutation = (trpc.hiring as any).assignDocumentsToHiring.useMutation({
+    onSuccess: () => {
+      toast.success('Documentos atribuídos!');
+      (utils.hiring as any).getHiringDocuments.invalidate({ hiringProcessId });
+      onAssigned();
+      setIsOpen(false);
+    },
+    onError: () => toast.error('Erro ao atribuir documentos'),
+  });
+
+  const uploadMutation = (trpc.agency as any).uploadDocumentTemplate.useMutation({
+    onSuccess: () => {
+      toast.success('Documento enviado!');
+      (utils.agency as any).getDocumentTemplates.invalidate({ category });
+      setIsUploading(false);
+    },
+    onError: () => {
+      toast.error('Erro ao enviar documento');
+      setIsUploading(false);
+    },
+  });
+
+  const handleUpload = () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.pdf,.docx';
+    input.onchange = async (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+      setIsUploading(true);
+      const reader = new FileReader();
+      reader.onload = () => {
+        const base64 = (reader.result as string).split(',')[1];
+        uploadMutation.mutate({
+          category,
+          name: file.name,
+          fileBase64: base64,
+          fileName: file.name,
+        });
+      };
+      reader.readAsDataURL(file);
+    };
+    input.click();
+  };
+
+  // Initialize selections from assigned data
+  useEffect(() => {
+    if (assigned.length > 0 && Object.keys(selections).length === 0) {
+      const sel: Record<string, 'company' | 'candidate' | 'both'> = {};
+      assigned.forEach((a: any) => {
+        const templateId = a.template?.id || a.template_id;
+        if (templateId) sel[templateId] = a.target;
+      });
+      setSelections(sel);
+    }
+  }, [assigned]);
+
+  const handleSave = () => {
+    const documents = Object.entries(selections).map(([templateId, target]) => ({
+      templateId,
+      target,
+    }));
+    assignMutation.mutate({ hiringProcessId, documents });
+  };
+
+  const toggleTemplate = (templateId: string) => {
+    setSelections(prev => {
+      const next = { ...prev };
+      if (next[templateId]) {
+        delete next[templateId];
+      } else {
+        next[templateId] = 'both';
+      }
+      return next;
+    });
+  };
+
+  const assignedCount = assigned.length;
+
+  return (
+    <div className="mt-3">
+      <div className="flex items-center gap-2">
+        <button
+          onClick={() => setIsOpen(!isOpen)}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 transition-colors"
+        >
+          <FileText className="w-3.5 h-3.5" />
+          {assignedCount > 0 ? `${assignedCount} documento(s)` : 'Selecionar Documentos'}
+        </button>
+        {assignedCount > 0 && (
+          <span className="text-xs text-green-600 flex items-center gap-1">
+            <CheckCircle className="w-3 h-3" />
+            Atribuídos
+          </span>
+        )}
+      </div>
+
+      {assignedCount > 0 && (
+        <div className="mt-3 border border-slate-200 rounded-lg overflow-hidden">
+          {assigned.map((doc: any, idx: number) => {
+            const templateName = doc.template?.name || 'Documento';
+            const signing = doc.signingStatus;
+            const isLast = idx === assigned.length - 1;
+            return (
+              <div key={doc.id} className={`px-3 py-2.5 ${!isLast ? 'border-b border-slate-100' : ''} bg-white`}>
+                <div className="flex items-center gap-2 mb-2">
+                  <FileText className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                  <span className="text-xs font-medium text-[#0A2342] truncate">{templateName}</span>
+                </div>
+                {signing ? (
+                  <div className="space-y-1.5">
+                    <div className="grid grid-cols-3 gap-1.5">
+                      <div className={`flex items-center gap-1.5 px-2 py-1 rounded text-[11px] ${signing.agencySigned ? 'bg-green-50' : 'bg-blue-50'}`}>
+                        <span className="text-slate-500">Agência</span>
+                        {signing.agencySigned ? (
+                          <CheckCircle className="w-3 h-3 text-green-500 ml-auto" />
+                        ) : (
+                          <Clock className="w-3 h-3 text-blue-400 ml-auto" />
+                        )}
+                      </div>
+                      <div className={`flex items-center gap-1.5 px-2 py-1 rounded text-[11px] ${signing.companySigned ? 'bg-green-50' : 'bg-amber-50'}`}>
+                        <span className="text-slate-500">Empresa</span>
+                        {signing.companySigned ? (
+                          <CheckCircle className="w-3 h-3 text-green-500 ml-auto" />
+                        ) : (
+                          <Clock className="w-3 h-3 text-amber-400 ml-auto" />
+                        )}
+                      </div>
+                      <div className={`flex items-center gap-1.5 px-2 py-1 rounded text-[11px] ${signing.candidateSigned ? 'bg-green-50' : 'bg-amber-50'}`}>
+                        <span className="text-slate-500">Candidato</span>
+                        {signing.candidateSigned ? (
+                          <CheckCircle className="w-3 h-3 text-green-500 ml-auto" />
+                        ) : (
+                          <Clock className="w-3 h-3 text-amber-400 ml-auto" />
+                        )}
+                      </div>
+                    </div>
+                    {!signing.agencySigned && signing.agencySignUrl && (
+                      <button
+                        onClick={() => window.open(signing.agencySignUrl, '_blank')}
+                        className="w-full flex items-center justify-center gap-1.5 px-2 py-1.5 rounded text-[11px] font-medium bg-[#0A2342] text-white hover:bg-[#1B4D7A] transition-colors"
+                      >
+                        <ExternalLink className="w-3 h-3" />
+                        Assinar na Autentique
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-[11px] text-slate-400 ml-5.5">Aguardando envio</p>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {isOpen && (
+        <div className="mt-3 border border-slate-200 rounded-lg p-4 bg-white space-y-3">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">Documentos disponíveis</p>
+            <button
+              onClick={handleUpload}
+              disabled={isUploading}
+              className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium border border-dashed border-slate-300 text-slate-600 hover:bg-slate-50 transition-colors disabled:opacity-50"
+            >
+              {isUploading ? (
+                <Loader2 className="w-3 h-3 animate-spin" />
+              ) : (
+                <Upload className="w-3 h-3" />
+              )}
+              Enviar documento
+            </button>
+          </div>
+          {templates.length === 0 ? (
+            <p className="text-sm text-slate-400">Nenhum documento cadastrado para esta categoria.</p>
+          ) : (
+            <div className="space-y-2">
+              {templates.map((t: any) => {
+                const isSelected = !!selections[t.id];
+                return (
+                  <div key={t.id} className={`flex items-center justify-between p-2.5 rounded-lg border ${isSelected ? 'border-[#FF6B35] bg-orange-50' : 'border-slate-200'}`}>
+                    <label className="flex items-center gap-2 cursor-pointer flex-1">
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => toggleTemplate(t.id)}
+                        className="rounded border-slate-300"
+                      />
+                      <span className="text-sm text-[#0A2342]">{t.name}</span>
+                    </label>
+                    {isSelected && (
+                      <select
+                        value={selections[t.id]}
+                        onChange={(e) => setSelections(prev => ({ ...prev, [t.id]: e.target.value as any }))}
+                        className="text-xs border border-slate-200 rounded px-2 py-1 bg-white"
+                      >
+                        <option value="both">Ambos</option>
+                        <option value="company">Empresa</option>
+                        <option value="candidate">Candidato</option>
+                      </select>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          <div className="flex items-center gap-2 pt-2 border-t border-slate-100">
+            <button
+              onClick={handleSave}
+              disabled={assignMutation.isPending || Object.keys(selections).length === 0}
+              className="px-4 py-1.5 rounded-lg text-xs font-medium bg-[#0A2342] text-white hover:bg-[#1B4D7A] disabled:opacity-50 transition-colors"
+            >
+              {assignMutation.isPending ? 'Salvando...' : 'Confirmar'}
+            </button>
+            <button
+              onClick={() => setIsOpen(false)}
+              className="px-3 py-1.5 rounded-lg text-xs text-slate-500 hover:text-slate-700"
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Safe wrapper with error boundary for DocumentAssignmentSection
+class DocAssignErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean; error: string }> {
+  state = { hasError: false, error: '' };
+  static getDerivedStateFromError(error: Error) { return { hasError: true, error: error.message }; }
+  componentDidCatch(error: Error, info: ErrorInfo) { console.error('[DocAssign Error]', error, info); }
+  render() {
+    if (this.state.hasError) return <p className="text-xs text-red-500 mt-2">Erro ao carregar documentos: {this.state.error}</p>;
+    return this.props.children;
+  }
+}
+function DocumentAssignmentSectionSafe(props: { hiringProcessId: string; hiringType: string; onAssigned: () => void }) {
+  return <DocAssignErrorBoundary><DocumentAssignmentSection {...props} /></DocAssignErrorBoundary>;
 }
 
 // Modal for agency to configure contract terms before sending
@@ -2188,6 +2463,15 @@ function JobWithWorkflow({ job, contractTypeLabels, companyName }: { job: any; c
                               onConfigured={() => utils.hiring.getHiringProcessesByJobId.invalidate({ jobId: job.id })}
                             />
                           </div>
+                        )}
+
+                        {/* Document assignment */}
+                        {(hp.status === 'pending_signatures' || hp.status === 'awaiting_configuration') && (
+                          <DocumentAssignmentSectionSafe
+                            hiringProcessId={hp.id}
+                            hiringType={hp.hiring_type}
+                            onAssigned={() => utils.hiring.getHiringProcessesByJobId.invalidate({ jobId: job.id })}
+                          />
                         )}
 
                         {/* Signature progress for estágio — 4 parties */}

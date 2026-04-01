@@ -280,3 +280,70 @@ export async function updateCompanyContractSigning(
     throw error;
   }
 }
+
+// ============================================
+// Autentique → signed_documents sync
+// ============================================
+
+export async function createSignedDocumentFromAutentique(input: {
+  autentiqueDocumentId: string;
+  templateId: string;
+  agencyId: string;
+  companyId: string | null;
+  candidateId: string | null;
+  signerUserId: string | null;
+  signerName: string;
+  category: string;
+  signedAt: string;
+  signedPdfUrl?: string | null;
+}): Promise<string | null> {
+  // Dedup check
+  const { data: existing } = await db
+    .from("signed_documents")
+    .select("id")
+    .eq("autentique_document_id", input.autentiqueDocumentId)
+    .eq("template_id", input.templateId)
+    .eq("signer_name", input.signerName)
+    .limit(1);
+
+  if (existing && existing.length > 0) return null;
+
+  const { data, error } = await db
+    .from("signed_documents")
+    .insert({
+      autentique_document_id: input.autentiqueDocumentId,
+      template_id: input.templateId,
+      agency_id: input.agencyId,
+      company_id: input.companyId,
+      candidate_id: input.candidateId,
+      signer_user_id: input.signerUserId,
+      signer_name: input.signerName,
+      signer_cpf: null,
+      signature: "autentique",
+      category: input.category,
+      signed_pdf_url: input.signedPdfUrl || null,
+      signed_at: input.signedAt,
+    })
+    .select("id")
+    .single();
+
+  if (error) {
+    console.error("[Database] Failed to create signed document from Autentique:", error);
+    return null;
+  }
+  return data.id;
+}
+
+export async function updateSignedDocPdfByAutentique(
+  autentiqueDocumentId: string,
+  signedPdfUrl: string
+): Promise<void> {
+  const { error } = await db
+    .from("signed_documents")
+    .update({ signed_pdf_url: signedPdfUrl })
+    .eq("autentique_document_id", autentiqueDocumentId);
+
+  if (error) {
+    console.error("[Database] Failed to update signed doc PDF:", error);
+  }
+}

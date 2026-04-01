@@ -31,9 +31,29 @@ export const batchRouter = router({
       if (!batches || batches.length === 0) return null;
 
       const batch = batches[0];
+
+      // Also check interview_sessions for meeting link (agency sets it there)
+      let meetingLink = batch.meeting_link;
+      let meetingScheduledAt = batch.meeting_scheduled_at;
+      if (!meetingLink || !meetingScheduledAt) {
+        const { data: sessions } = await supabaseAdmin
+          .from('interview_sessions')
+          .select('scheduled_at, meeting_link, notes')
+          .eq('batch_id', batch.id)
+          .neq('status', 'cancelled')
+          .order('scheduled_at', { ascending: false })
+          .limit(1);
+
+        if (sessions && sessions.length > 0) {
+          const session = sessions[0];
+          if (!meetingLink && session.meeting_link) meetingLink = session.meeting_link;
+          if (!meetingScheduledAt && session.scheduled_at) meetingScheduledAt = session.scheduled_at;
+        }
+      }
+
       return {
-        meeting_scheduled_at: batch.meeting_scheduled_at,
-        meeting_link: batch.meeting_link,
+        meeting_scheduled_at: meetingScheduledAt,
+        meeting_link: meetingLink,
         meeting_notes: batch.meeting_notes,
       };
     }),
@@ -192,6 +212,16 @@ export const batchRouter = router({
         unlockFee: input.unlockFee || 0,
         status: "draft",
       });
+
+      // Update application status for selected candidates
+      for (const candidateId of input.candidateIds) {
+        await supabaseAdmin
+          .from('applications')
+          .update({ status: 'screening' })
+          .eq('job_id', input.jobId)
+          .eq('candidate_id', candidateId)
+          .eq('status', 'applied');
+      }
 
       return { batchId, success: true };
     }),
@@ -426,6 +456,22 @@ export const batchRouter = router({
       }
 
       await batchDb.setCandidateStatus(input.batchId, input.candidateId, input.status);
+
+      // Update application status based on approval/rejection
+      if (input.status === "approved") {
+        await supabaseAdmin
+          .from('applications')
+          .update({ status: 'interview-scheduled' })
+          .eq('job_id', batch.job_id)
+          .eq('candidate_id', input.candidateId);
+      } else if (input.status === "rejected") {
+        await supabaseAdmin
+          .from('applications')
+          .update({ status: 'rejected' })
+          .eq('job_id', batch.job_id)
+          .eq('candidate_id', input.candidateId);
+      }
+
       return { success: true };
     }),
 
@@ -756,6 +802,25 @@ export const batchRouter = router({
       return { success: true };
     }),
 
+  updateSessionMeetingLink: agencyProcedure
+    .input(z.object({
+      sessionId: z.string().uuid(),
+      meetingLink: z.string(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const { data, error } = await supabaseAdmin
+        .from("interview_sessions")
+        .update({ meeting_link: input.meetingLink })
+        .eq("id", input.sessionId)
+        .select("id")
+        .single();
+
+      if (error) {
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to update meeting link" });
+      }
+      return { success: true };
+    }),
+
   addCandidatesToBatch: agencyProcedure
     .input(z.object({
       batchId: z.string().uuid(),
@@ -835,6 +900,15 @@ export const batchRouter = router({
           candidates: input.candidateIds.map(id => ({ candidateId: id, applicationId: null })),
         });
       }
+
+      // Auto-send batch to company if still in draft
+      if (batch.status === 'draft') {
+        await batchDb.updateBatch(input.batchId, {
+          status: 'sent',
+          sent_at: new Date().toISOString(),
+        } as any);
+      }
+
       return { success: true };
     }),
 
@@ -866,6 +940,7 @@ export const batchRouter = router({
       locationAddress: z.string().optional(),
       locationCity: z.string().optional(),
       locationState: z.string().optional(),
+      meetingLink: z.string().optional(),
       notes: z.string().optional(),
       candidateSchedules: z.array(z.object({
         candidateId: z.string().uuid(),
@@ -893,6 +968,7 @@ export const batchRouter = router({
             locationAddress: input.locationAddress,
             locationCity: input.locationCity,
             locationState: input.locationState,
+            meetingLink: input.meetingLink,
             notes: input.notes,
             candidates: [{ candidateId: cs.candidateId, applicationId: null }],
           });
@@ -912,6 +988,7 @@ export const batchRouter = router({
           locationAddress: input.locationAddress,
           locationCity: input.locationCity,
           locationState: input.locationState,
+          meetingLink: input.meetingLink,
           notes: input.notes,
           candidates: input.candidateIds.map(id => ({ candidateId: id, applicationId: null })),
         });

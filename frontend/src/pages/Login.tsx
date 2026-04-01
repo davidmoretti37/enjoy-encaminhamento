@@ -19,7 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { signIn, signUp, getSession } from '@/lib/auth-helpers';
+import { signIn, signUp, getSession, resetPassword } from '@/lib/auth-helpers';
 import { useAuth } from '@/_core/hooks/useAuth';
 import { trpc } from '@/lib/trpc';
 import { Briefcase, Loader2, MapPin } from 'lucide-react';
@@ -42,6 +42,23 @@ export default function Login() {
   // Login form state
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [resetEmail, setResetEmail] = useState('');
+  const [resetSent, setResetSent] = useState(false);
+
+  const handleResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      await resetPassword(resetEmail);
+      setResetSent(true);
+      toast.success('Email de recuperação enviado!');
+    } catch (error: any) {
+      toast.error(error.message || 'Erro ao enviar email de recuperação');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Signup form state
   const [signupEmail, setSignupEmail] = useState('');
@@ -223,7 +240,62 @@ export default function Login() {
                       'Entrar'
                     )}
                   </Button>
+
+                  <button
+                    type="button"
+                    onClick={() => { setShowForgotPassword(true); setResetEmail(loginEmail); }}
+                    className="w-full text-sm text-muted-foreground hover:text-foreground transition-colors mt-2"
+                  >
+                    Esqueci minha senha
+                  </button>
                 </form>
+
+                {showForgotPassword && (
+                  <div className="mt-4 p-4 rounded-lg border bg-slate-50 space-y-3">
+                    {resetSent ? (
+                      <div className="text-center space-y-2">
+                        <p className="text-sm font-medium text-green-700">Email enviado!</p>
+                        <p className="text-xs text-muted-foreground">
+                          Verifique sua caixa de entrada e siga o link para redefinir sua senha.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => { setShowForgotPassword(false); setResetSent(false); }}
+                          className="text-sm text-blue-600 hover:underline"
+                        >
+                          Voltar ao login
+                        </button>
+                      </div>
+                    ) : (
+                      <form onSubmit={handleResetPassword} className="space-y-3">
+                        <p className="text-sm font-medium">Recuperar senha</p>
+                        <p className="text-xs text-muted-foreground">
+                          Digite seu email e enviaremos um link para redefinir sua senha.
+                        </p>
+                        <Input
+                          type="email"
+                          placeholder="seu@email.com"
+                          value={resetEmail}
+                          onChange={(e) => setResetEmail(e.target.value)}
+                          required
+                        />
+                        <div className="flex gap-2">
+                          <Button type="submit" size="sm" disabled={loading} className="flex-1">
+                            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Enviar'}
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setShowForgotPassword(false)}
+                          >
+                            Cancelar
+                          </Button>
+                        </div>
+                      </form>
+                    )}
+                  </div>
+                )}
 
               </TabsContent>
 

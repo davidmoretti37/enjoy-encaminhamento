@@ -111,9 +111,10 @@ export const contractRouter = router({
   // Get documents to sign for a given category (with signing status)
   getDocumentsToSign: companyProcedure
     .input(z.object({
-      category: z.enum(['contrato_inicial', 'clt', 'estagio', 'menor_aprendiz']),
+      category: z.enum(['contrato_inicial', 'clt', 'estagio', 'menor_aprendiz', 'pj']),
       contractId: z.string().uuid().optional(),
       candidateId: z.string().uuid().optional(),
+      hiringProcessId: z.string().uuid().optional(),
     }))
     .query(async ({ ctx, input }) => {
       const company = await db.getCompanyByUserId(ctx.user.id);
@@ -125,7 +126,28 @@ export const contractRouter = router({
         return { templates: [], signed: [], total: 0, signedCount: 0, allSigned: true };
       }
 
-      const templates = await db.getDocumentTemplates(agencyId, input.category);
+      let templates: any[];
+
+      // Check if specific documents were assigned to this hiring process
+      if (input.hiringProcessId) {
+        const { supabaseAdmin: _sb } = await import("../supabase");
+        const sbAdmin = _sb as any;
+        const { data: assigned } = await sbAdmin
+          .from('hiring_process_documents')
+          .select('template:agency_document_templates(*)')
+          .eq('hiring_process_id', input.hiringProcessId)
+          .in('target', ['company', 'both']);
+
+        if (assigned && assigned.length > 0) {
+          templates = assigned.map((a: any) => a.template).filter(Boolean);
+        } else {
+          // Fallback: all templates of matching category
+          templates = await db.getDocumentTemplates(agencyId, input.category);
+        }
+      } else {
+        templates = await db.getDocumentTemplates(agencyId, input.category);
+      }
+
       const templateIds = templates.map((t: any) => t.id);
 
       let signedDocs: any[] = [];
@@ -172,9 +194,8 @@ export const contractRouter = router({
         if (company?.id) {
           const { data: hiringProcesses } = await supabaseAdminAny
             .from("hiring_processes")
-            .select("id, autentique_document_ids")
-            .eq("company_id", company.id)
-            .not("autentique_document_ids", "eq", "{}");
+            .select("id")
+            .eq("company_id", company.id);
 
           if (hiringProcesses && hiringProcesses.length > 0) {
             for (const hp of hiringProcesses) {
@@ -187,17 +208,23 @@ export const contractRouter = router({
         console.error("[Contract] Error looking up Autentique docs:", err?.message || err);
       }
 
-      // Refresh status from Autentique API for any pending docs
+      // Refresh status from Autentique API for any pending docs + sync to signed_documents
       if (autentiqueDocuments.length > 0) {
         try {
           const { getDocumentStatus } = await import("../integrations/autentique");
+          const { createSignedDocumentFromAutentique, updateSignedDocPdfByAutentique } = await import("../db/documents");
+          const { getHiringContextForSigning } = await import("../db/hiring");
+
           for (const aDoc of autentiqueDocuments) {
             if (aDoc.status === "pending" && aDoc.autentique_document_id) {
               const apiStatus = await getDocumentStatus(aDoc.autentique_document_id);
               const signedSigners = apiStatus.signers.filter((s: any) => s.signed);
               if (signedSigners.length > 0) {
+                // Track which signers are newly signed
+                const previousSigners = aDoc.signers || [];
+
                 // Update signers signed_at in DB
-                const updatedSigners = (aDoc.signers || []).map((s: any) => {
+                const updatedSigners = previousSigners.map((s: any) => {
                   const apiSigner = apiStatus.signers.find((as: any) => as.public_id === s.autentique_signer_id);
                   if (apiSigner?.signed) {
                     return { ...s, signed_at: apiSigner.signed.created_at };
@@ -206,16 +233,100 @@ export const contractRouter = router({
                 });
                 const allSignersSigned = updatedSigners.every((s: any) => s.signed_at);
                 const newStatus = allSignersSigned ? "signed" : aDoc.status;
+                const signedPdfUrl = allSignersSigned && apiStatus.files?.signed ? apiStatus.files.signed : null;
+
                 await supabaseAdminAny
                   .from("autentique_documents")
                   .update({
                     signers: updatedSigners,
                     status: newStatus,
-                    ...(allSignersSigned && apiStatus.files.signed ? { signed_pdf_url: apiStatus.files.signed } : {}),
+                    ...(signedPdfUrl ? { signed_pdf_url: signedPdfUrl } : {}),
                   })
                   .eq("id", aDoc.id);
                 aDoc.status = newStatus;
                 aDoc.signers = updatedSigners;
+
+                // Sync newly signed signers to signed_documents table
+                if (aDoc.context_type === "hiring_contract" && aDoc.template_id) {
+                  const ctx2 = await getHiringContextForSigning(aDoc.context_id);
+                  if (ctx2) {
+                    for (const signer of updatedSigners) {
+                      const wasPreviouslySigned = previousSigners.find((ps: any) =>
+                        ps.autentique_signer_id === signer.autentique_signer_id && ps.signed_at
+                      );
+                      if (signer.signed_at && !wasPreviouslySigned) {
+                        const userIdMap: Record<string, string | null> = {
+                          company: ctx2.companyUserId,
+                          candidate: ctx2.candidateUserId,
+                          agency: null,
+                        };
+                        await createSignedDocumentFromAutentique({
+                          autentiqueDocumentId: aDoc.id,
+                          templateId: aDoc.template_id,
+                          agencyId: ctx2.agencyId,
+                          companyId: signer.role === "company" ? ctx2.companyId : null,
+                          candidateId: signer.role === "candidate" ? ctx2.candidateId : null,
+                          signerUserId: userIdMap[signer.role] || null,
+                          signerName: signer.name || signer.role,
+                          category: ctx2.category,
+                          signedAt: signer.signed_at,
+                          signedPdfUrl: signedPdfUrl,
+                        });
+                        console.log(`[Contract] Created signed_document for ${signer.role} on ${aDoc.document_name}`);
+                      }
+                    }
+                    // Update PDF URL on all related signed_documents when fully signed
+                    if (signedPdfUrl) {
+                      await updateSignedDocPdfByAutentique(aDoc.id, signedPdfUrl);
+                    }
+
+                    // Check if ALL autentique docs for this hiring process have the company/candidate signed
+                    // If so, update hiring_processes.company_signed / candidate_signed
+                    const allHiringDocs = autentiqueDocuments.filter((d: any) => d.context_id === aDoc.context_id && d.template_id);
+                    // Deduplicate by template_id (use most recent)
+                    const latestByTemplate = new Map<string, any>();
+                    for (const d of allHiringDocs) {
+                      const existing = latestByTemplate.get(d.template_id);
+                      if (!existing || new Date(d.created_at) > new Date(existing.created_at)) {
+                        latestByTemplate.set(d.template_id, d);
+                      }
+                    }
+                    const latestDocs = Array.from(latestByTemplate.values());
+
+                    const allCompanySigned = latestDocs.every((d: any) => {
+                      const cs = (d.signers || []).find((s: any) => s.role === 'company');
+                      return !cs || cs.signed_at; // no company signer = not required
+                    });
+                    const allCandidateSigned = latestDocs.every((d: any) => {
+                      const cs = (d.signers || []).find((s: any) => s.role === 'candidate');
+                      return !cs || cs.signed_at;
+                    });
+
+                    const hpUpdates: any = {};
+                    if (allCompanySigned) hpUpdates.company_signed = true;
+                    if (allCandidateSigned) hpUpdates.candidate_signed = true;
+
+                    // If both signed, check if payment is done → activate
+                    if (allCompanySigned && allCandidateSigned) {
+                      const { data: paidPayment } = await supabaseAdminAny
+                        .from("payments")
+                        .select("id")
+                        .eq("status", "paid")
+                        .limit(1);
+                      // For PJ/CLT, activate if both signed (payment check is optional)
+                      hpUpdates.status = "active";
+                    }
+
+                    if (Object.keys(hpUpdates).length > 0) {
+                      await supabaseAdminAny
+                        .from("hiring_processes")
+                        .update(hpUpdates)
+                        .eq("id", aDoc.context_id);
+                      console.log(`[Contract] Updated hiring process ${aDoc.context_id}:`, hpUpdates);
+                    }
+                  }
+                }
+
                 if (newStatus === "signed") {
                   console.log(`[Contract] Autentique doc ${aDoc.document_name} marked as signed via API check`);
                 }
@@ -228,12 +339,18 @@ export const contractRouter = router({
       }
 
       const enrichedTemplates = templates.map((t: any) => {
-        const autentiqueDoc = autentiqueDocuments.find((d: any) => d.template_id === t.id);
+        // Use the most recent Autentique doc for this template (last in ascending order)
+        const matchingDocs = autentiqueDocuments.filter((d: any) => d.template_id === t.id);
+        const autentiqueDoc = matchingDocs.length > 0 ? matchingDocs[matchingDocs.length - 1] : null;
+        // Find the company signer's sign URL (field may be signUrl or sign_url depending on how it was stored)
+        const companySigner = autentiqueDoc?.signers?.find((s: any) => s.role === 'company');
+        const signUrl = companySigner?.signUrl || companySigner?.sign_url || null;
+        const companyHasSigned = !!companySigner?.signed_at;
         return {
           ...t,
-          isSigned: signedTemplateIds.has(t.id) || autentiqueDoc?.status === "signed",
-          autentiqueStatus: autentiqueDoc?.status || null,
-          autentiqueSignUrl: autentiqueDoc?.signers?.find((s: any) => s.sign_url)?.sign_url || null,
+          isSigned: signedTemplateIds.has(t.id) || autentiqueDoc?.status === "signed" || companyHasSigned,
+          autentiqueStatus: companyHasSigned ? "signed" : (autentiqueDoc?.status || null),
+          autentiqueSignUrl: signUrl,
         };
       });
 
@@ -251,7 +368,7 @@ export const contractRouter = router({
   // Create Autentique documents on-demand for self-service onboarding
   prepareAutentiqueDocuments: companyProcedure
     .input(z.object({
-      category: z.enum(['contrato_inicial', 'clt', 'estagio', 'menor_aprendiz']),
+      category: z.enum(['contrato_inicial', 'clt', 'estagio', 'menor_aprendiz', 'pj']),
       companyData: z.object({
         legalName: z.string().optional(),
         businessName: z.string().optional(),
@@ -569,7 +686,7 @@ export const contractRouter = router({
   // Check if all documents are signed for a category
   checkAllSigned: companyProcedure
     .input(z.object({
-      category: z.enum(['contrato_inicial', 'clt', 'estagio', 'menor_aprendiz']),
+      category: z.enum(['contrato_inicial', 'clt', 'estagio', 'menor_aprendiz', 'pj']),
       contractId: z.string().uuid().optional(),
     }))
     .query(async ({ ctx, input }) => {
@@ -625,7 +742,24 @@ export const contractRouter = router({
       };
       const category = categoryMap[hp.hiring_type] || hp.hiring_type;
 
-      const templates = await db.getDocumentTemplates(agencyId, category);
+      let templates: any[];
+
+      // Check if specific documents were assigned to this hiring process
+      const { supabaseAdmin: _sb2 } = await import("../supabase");
+      const sbAdmin2 = _sb2 as any;
+      const { data: assigned } = await sbAdmin2
+        .from('hiring_process_documents')
+        .select('template:agency_document_templates(*)')
+        .eq('hiring_process_id', input.hiringProcessId)
+        .in('target', ['candidate', 'both']);
+
+      if (assigned && assigned.length > 0) {
+        templates = assigned.map((a: any) => a.template).filter(Boolean);
+      } else {
+        // Fallback: all templates of matching category
+        templates = await db.getDocumentTemplates(agencyId, category);
+      }
+
       const templateIds = templates.map((t: any) => t.id);
 
       let signedDocs: any[] = [];
@@ -640,14 +774,36 @@ export const contractRouter = router({
 
       const signedTemplateIds = new Set(signedDocs.map((s: any) => s.template_id));
 
-      return {
-        templates: templates.map((t: any) => ({
+      // Check for Autentique documents for this hiring process
+      let autentiqueDocuments: any[] = [];
+      try {
+        const autentiqueDocs = await db.getAutentiqueDocumentsByContext("hiring_contract", input.hiringProcessId);
+        autentiqueDocuments.push(...autentiqueDocs);
+      } catch (err: any) {
+        console.error("[Contract] Error looking up candidate Autentique docs:", err?.message || err);
+      }
+
+      const enrichedTemplates = templates.map((t: any) => {
+        const matchingDocs = autentiqueDocuments.filter((d: any) => d.template_id === t.id);
+        const autentiqueDoc = matchingDocs.length > 0 ? matchingDocs[matchingDocs.length - 1] : null;
+        const candidateSigner = autentiqueDoc?.signers?.find((s: any) => s.role === 'candidate');
+        const signUrl = candidateSigner?.signUrl || candidateSigner?.sign_url || null;
+        const candidateHasSigned = !!candidateSigner?.signed_at;
+        return {
           ...t,
-          isSigned: signedTemplateIds.has(t.id),
-        })),
+          isSigned: signedTemplateIds.has(t.id) || autentiqueDoc?.status === "signed" || candidateHasSigned,
+          autentiqueStatus: candidateHasSigned ? "signed" : (autentiqueDoc?.status || null),
+          autentiqueSignUrl: signUrl,
+        };
+      });
+
+      const totalSigned = enrichedTemplates.filter((t: any) => t.isSigned).length;
+
+      return {
+        templates: enrichedTemplates,
         total: templates.length,
-        signedCount: signedDocs.length,
-        allSigned: templates.length === 0 || signedDocs.length >= templates.length,
+        signedCount: totalSigned,
+        allSigned: templates.length === 0 || totalSigned >= templates.length,
       };
     }),
 

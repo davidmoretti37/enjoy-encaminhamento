@@ -99,6 +99,7 @@ export function AgencyScheduleModal({
   const [locationAddress, setLocationAddress] = useState("");
   const [locationCity, setLocationCity] = useState("");
   const [locationState, setLocationState] = useState("");
+  const [meetingLink, setMeetingLink] = useState("");
   const [notes, setNotes] = useState("");
   const [candidateTimes, setCandidateTimes] = useState<Record<string, string>>({});
 
@@ -138,6 +139,7 @@ export function AgencyScheduleModal({
     setLocationAddress("");
     setLocationCity("");
     setLocationState("");
+    setMeetingLink("");
     setNotes("");
     setCandidateTimes({});
   };
@@ -179,6 +181,7 @@ export function AgencyScheduleModal({
       locationAddress: interviewType === "in_person" ? locationAddress : undefined,
       locationCity: interviewType === "in_person" ? locationCity : undefined,
       locationState: interviewType === "in_person" ? locationState : undefined,
+      meetingLink: interviewType === "online" && meetingLink.trim() ? meetingLink.trim() : undefined,
       notes: notes || undefined,
       candidateSchedules,
     });
@@ -417,6 +420,19 @@ export function AgencyScheduleModal({
                   className="h-9 text-sm"
                 />
               </div>
+            </div>
+          )}
+
+          {/* Meeting link for online */}
+          {interviewType === "online" && (
+            <div>
+              <label className="text-xs font-medium text-slate-600 mb-1.5 block">Link da Reunião</label>
+              <Input
+                value={meetingLink}
+                onChange={(e) => setMeetingLink(e.target.value)}
+                placeholder="https://meet.google.com/... ou zoom.us/..."
+                className="h-9 text-sm"
+              />
             </div>
           )}
 

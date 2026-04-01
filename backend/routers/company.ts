@@ -597,6 +597,8 @@ export const companyRouter = router({
       work_schedule: z.string().optional(),
       city: z.string().optional(),
       requirements: z.string().optional(),
+      subsidiary_cnpj: z.string().optional(),
+      subsidiary_name: z.string().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       const company = await db.getCompanyByUserId(ctx.user.id);
@@ -621,9 +623,33 @@ export const companyRouter = router({
         requirements: input.requirements,
         status: 'open',
         agency_id: company.agency_id,
+        subsidiary_cnpj: input.subsidiary_cnpj,
+        subsidiary_name: input.subsidiary_name,
       });
 
       return { jobId };
+    }),
+
+  // Get previously used CNPJs for this company (for subsidiary dropdown)
+  getUsedCnpjs: companyProcedure
+    .query(async ({ ctx }) => {
+      const company = await db.getCompanyByUserId(ctx.user.id);
+      if (!company) return [];
+
+      const { data } = await supabaseAdmin
+        .from('jobs')
+        .select('subsidiary_cnpj, subsidiary_name')
+        .eq('company_id', company.id)
+        .not('subsidiary_cnpj', 'is', null)
+        .order('created_at', { ascending: false });
+
+      // Deduplicate by CNPJ
+      const seen = new Set<string>();
+      return (data || []).filter((j: any) => {
+        if (seen.has(j.subsidiary_cnpj)) return false;
+        seen.add(j.subsidiary_cnpj);
+        return true;
+      });
     }),
 
   // Update job details (company can edit their own jobs)

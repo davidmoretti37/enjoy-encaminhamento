@@ -234,7 +234,8 @@ export async function getInterviewsByCandidate(candidateId: string): Promise<any
     return [];
   }
 
-  return data || [];
+  // Filter out pre-selection sessions — only return company interviews
+  return (data || []).filter((p: any) => p.session?.interview_stage === "company_interview");
 }
 
 /**

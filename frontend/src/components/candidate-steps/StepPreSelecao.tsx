@@ -56,31 +56,31 @@ export default function StepPreSelecao() {
       {/* Meeting info */}
       {meetingInfo?.meeting_scheduled_at && !hasJoinedMeeting && (
         <CardEntrance delay={0.1}>
-          <div className="rounded-2xl border border-blue-200 bg-blue-50 p-5">
+          <div className="rounded-2xl border border-orange-200 bg-orange-50 p-5">
             <div className="flex items-center gap-3 mb-3">
-              <div className="w-10 h-10 rounded-full bg-blue-500/20 flex items-center justify-center shrink-0">
-                <Video className="w-5 h-5 text-blue-500" />
+              <div className="w-10 h-10 rounded-full bg-[#FF6B35]/20 flex items-center justify-center shrink-0">
+                <Video className="w-5 h-5 text-[#FF6B35]" />
               </div>
               <div>
                 <h3 className="text-[#0A2342] font-semibold">Reunião Agendada</h3>
-                <p className="text-blue-700 text-sm">
+                <p className="text-orange-700 text-sm">
                   {format(new Date(meetingInfo.meeting_scheduled_at), "EEEE, d 'de' MMMM 'às' HH:mm", { locale: ptBR })}
                 </p>
               </div>
             </div>
             {meetingInfo.meeting_notes && (
-              <p className="text-sm text-blue-700 mb-3">{meetingInfo.meeting_notes}</p>
+              <p className="text-sm text-orange-700 mb-3">{meetingInfo.meeting_notes}</p>
             )}
             {meetingInfo.meeting_link ? (
               <Button
                 onClick={handleJoinMeeting}
-                className="w-full bg-blue-600 hover:bg-blue-700"
+                className="w-full bg-[#FF6B35] hover:bg-[#e55a2a]"
               >
                 <Video className="w-4 h-4 mr-2" />
                 Entrar na Reunião
               </Button>
             ) : (
-              <p className="text-sm text-blue-600 bg-blue-100 rounded-lg px-3 py-2 text-center">
+              <p className="text-sm text-[#FF6B35] bg-orange-100 rounded-lg px-3 py-2 text-center">
                 O link da reunião será disponibilizado em breve
               </p>
             )}

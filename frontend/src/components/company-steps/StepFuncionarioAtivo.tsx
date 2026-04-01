@@ -207,6 +207,14 @@ export default function StepFuncionarioAtivo() {
 
 function EmployeeCard({ employee, onOpenReport }: { employee: any; onOpenReport: (emp: any) => void }) {
   const [showDetails, setShowDetails] = useState(false);
+
+  // Fetch signed documents for this hiring process
+  const { data: signedDocsData } = (trpc.contract.getDocumentsToSign as any).useQuery(
+    { category: employee.hiring_type === "menor-aprendiz" ? "menor_aprendiz" : employee.hiring_type, hiringProcessId: employee.id },
+    { enabled: !!employee.id }
+  );
+  const signedDocs = signedDocsData?.templates?.filter((t: any) => t.isSigned) || [];
+
   const uploadContractMutation = trpc.company.uploadEmployeeContract.useMutation({
     onSuccess: () => {
       toast.success('Contrato enviado com sucesso!');
@@ -388,12 +396,24 @@ function EmployeeCard({ employee, onOpenReport }: { employee: any; onOpenReport:
             {/* Contract document upload */}
             <div className="p-3 rounded-lg bg-slate-50 border border-slate-100">
               <p className="text-xs text-slate-500 flex items-center gap-1 mb-2"><FileText className="w-3 h-3" /> Documento do Contrato</p>
-              {employee.contract_document_url ? (
-                <a href={employee.contract_document_url} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 hover:underline flex items-center gap-1">
+              {signedDocs.length > 0 && (
+                <div className="space-y-1.5 mb-2">
+                  {signedDocs.map((doc: any) => (
+                    <div key={doc.id} className="flex items-center gap-2 text-sm text-green-700 bg-green-50 px-2 py-1.5 rounded">
+                      <FileText className="w-3.5 h-3.5 text-green-600 flex-shrink-0" />
+                      <span className="truncate">{doc.name}</span>
+                      <span className="text-xs text-green-600 ml-auto flex-shrink-0">Assinado</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {employee.contract_document_url && (
+                <a href={employee.contract_document_url} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 hover:underline flex items-center gap-1 mb-2">
                   <FileText className="w-3.5 h-3.5" />
                   Ver contrato
                 </a>
-              ) : (
+              )}
+              {!employee.contract_document_url && signedDocs.length === 0 ? (
                 <label className="cursor-pointer inline-flex items-center gap-2 px-3 py-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-xs">
                   <Upload className="h-3.5 w-3.5" />
                   Upload Contrato
@@ -420,7 +440,7 @@ function EmployeeCard({ employee, onOpenReport }: { employee: any; onOpenReport:
                     }}
                   />
                 </label>
-              )}
+              ) : null}
             </div>
           </div>
         )}

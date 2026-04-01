@@ -44,7 +44,9 @@ export default function StepContrato() {
 
   const hiringProcess = (hiringProcesses as any[]).find(
     (hp: any) => hp.application_id === selectedApplication?.id
-  );
+  ) || (hiringProcesses as any[]).find(
+    (hp: any) => hp.job?.id === selectedApplication?.job_id
+  ) || (hiringProcesses as any[])[0] || null;
 
   // Get agency documents for this hiring process
   const utils = trpc.useUtils();
@@ -221,7 +223,7 @@ export default function StepContrato() {
                   {/* Document header */}
                   <button
                     onClick={() => {
-                      if (!template.isSigned) {
+                      if (!template.isSigned && !template.autentiqueSignUrl) {
                         setExpandedDoc(isExpanded ? null : template.id);
                         setErrorMessage("");
                         setAcceptedTerms(false);
@@ -243,7 +245,7 @@ export default function StepContrato() {
                         {template.name}
                       </p>
                       <p className="text-xs text-slate-500 mt-0.5">
-                        {template.isSigned ? "Assinado" : "Pendente"}
+                        {template.isSigned ? "Assinado" : template.autentiqueSignUrl ? "Pendente (Autentique)" : "Pendente"}
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
@@ -266,8 +268,24 @@ export default function StepContrato() {
                     </div>
                   </button>
 
-                  {/* Expanded signing form */}
-                  {isExpanded && !template.isSigned && (
+                  {/* Autentique signing */}
+                  {!template.isSigned && template.autentiqueSignUrl && (
+                    <div className="border-t border-slate-200 p-4 space-y-3 bg-slate-50/50">
+                      <p className="text-sm text-slate-600">
+                        A assinatura deste documento será realizada pela plataforma Autentique com validade jurídica.
+                      </p>
+                      <button
+                        onClick={() => window.open(template.autentiqueSignUrl, '_blank')}
+                        className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium bg-[#0A2342] text-white hover:bg-[#1B4D7A] transition-colors"
+                      >
+                        <ExternalLink className="w-4 h-4" />
+                        Assinar na Autentique
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Expanded signing form (fallback when no Autentique) */}
+                  {isExpanded && !template.isSigned && !template.autentiqueSignUrl && (
                     <div className="border-t border-slate-200 p-4 space-y-4 bg-slate-50/50">
                       {/* View PDF link */}
                       {template.file_url && (

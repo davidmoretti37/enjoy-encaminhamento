@@ -272,7 +272,9 @@ export const hiringRouter = router({
       });
 
       // Update application status to 'selected'
-      await db.updateApplication(input.applicationId, { status: "selected" });
+      if (application?.id) {
+        await db.updateApplication(application.id, { status: "selected" });
+      }
 
       // Update batch status if provided
       if (input.batchId) {
@@ -567,7 +569,7 @@ export const hiringRouter = router({
                 {
                   message: `Contrato de ${process.hiring_type} - ${candidate?.full_name} - ${company?.company_name}`,
                   reminder: "WEEKLY",
-                  sortable: true,
+                  sortable: false,
                 }
               );
 
@@ -699,7 +701,26 @@ export const hiringRouter = router({
       const company = await db.getCompanyByUserId(ctx.user.id);
       if (!company) return [];
 
-      return await hiringDb.getHiringProcessesByCompany(company.id, input?.status);
+      const processes = await hiringDb.getHiringProcessesByCompany(company.id, input?.status);
+
+      // Enrich with payment status
+      if (processes.length > 0) {
+        const { data: payments } = await supabaseAdmin
+          .from("payments")
+          .select("id, status, receipt_url, company_id")
+          .eq("company_id", company.id)
+          .in("status", ["paid", "pending"]);
+
+        for (const hp of processes) {
+          const payment = (payments || []).find((p: any) =>
+            p.status === "paid" || p.receipt_url
+          );
+          (hp as any).paymentPaid = payment?.status === "paid";
+          (hp as any).paymentReceiptUrl = payment?.receipt_url || null;
+        }
+      }
+
+      return processes;
     }),
 
   /**
@@ -1075,27 +1096,50 @@ export const hiringRouter = router({
         receiptUrl = url;
       }
 
-      // Record payment receipt — keep pending_signatures (need company + candidate to sign documents first)
-      // Don't activate yet; the DB trigger or signAsCandidate/confirmCompanyAutentiqueSign will activate
-      // when both parties have signed
+      // Record payment receipt
       const updates: any = {};
       if (process.status === "pending_payment") {
         updates.status = "pending_signatures";
+      }
+      // For PJ: if already in pending_signatures and all docs signed, activate
+      if (process.status === "pending_signatures" && (process.hiring_type === "pj" || process.hiring_type === "clt")) {
+        if (process.company_signed && process.candidate_signed) {
+          updates.status = "active";
+        }
       }
       if (Object.keys(updates).length > 0) {
         await hiringDb.updateHiringProcess(input.hiringProcessId, updates);
       }
 
-      // Update the payment record with receipt
+      // Update or create payment record with receipt
       if (receiptUrl) {
-        await supabaseAdmin
+        const { data: existingPayment } = await supabaseAdmin
           .from("payments")
-          .update({ receipt_url: receiptUrl, status: "paid" })
+          .select("id")
           .eq("company_id", company.id)
           .eq("status", "pending")
-          .ilike("notes", `%${process.candidate?.full_name || "CLT"}%`)
           .order("created_at", { ascending: false })
-          .limit(1);
+          .limit(1)
+          .single();
+
+        if (existingPayment) {
+          await supabaseAdmin
+            .from("payments")
+            .update({ receipt_url: receiptUrl, status: "paid", paid_at: new Date().toISOString() })
+            .eq("id", existingPayment.id);
+        } else {
+          // Create payment record if none exists
+          await db.createPayment({
+            company_id: company.id,
+            amount: process.calculated_fee || 0,
+            payment_type: "setup-fee",
+            due_date: new Date().toISOString(),
+            status: "paid",
+            notes: `Taxa de encaminhamento - ${process.candidate?.full_name || "Candidato"}`,
+            receipt_url: receiptUrl,
+            paid_at: new Date().toISOString(),
+          });
+        }
       }
 
       // AI receipt verification (async — doesn't block confirmation)
@@ -1483,6 +1527,198 @@ export const hiringRouter = router({
 
       return { success: true, signatureStatus };
     }),
+
+  // ============================================
+  // DOCUMENT ASSIGNMENT (Agency selects documents for hiring)
+  // ============================================
+
+  assignDocumentsToHiring: agencyProcedure
+    .input(z.object({
+      hiringProcessId: z.string().uuid(),
+      documents: z.array(z.object({
+        templateId: z.string().uuid(),
+        target: z.enum(['company', 'candidate', 'both']),
+      })),
+    }))
+    .mutation(async ({ input }) => {
+      const process = await hiringDb.getHiringProcessById(input.hiringProcessId);
+      if (!process) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Hiring process not found' });
+      }
+
+      // Delete existing assignments
+      await supabaseAdmin
+        .from('hiring_process_documents')
+        .delete()
+        .eq('hiring_process_id', input.hiringProcessId);
+
+      // Insert new assignments
+      if (input.documents.length > 0) {
+        const rows = input.documents.map((d: any) => ({
+          hiring_process_id: input.hiringProcessId,
+          template_id: d.templateId,
+          target: d.target,
+        }));
+        const { error } = await supabaseAdmin
+          .from('hiring_process_documents')
+          .insert(rows);
+        if (error) {
+          throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Failed to assign documents' });
+        }
+      }
+
+      // Create Autentique documents for the assigned templates
+      if (isAutentiqueConfigured() && input.documents.length > 0) {
+        const candidate = await db.getCandidateById(process.candidate_id);
+        const company = await db.getCompanyById(process.company_id);
+        const job = await db.getJobById(process.job_id);
+        const agency = company?.agency_id ? await db.getAgencyById(company.agency_id) : null;
+
+        const templateIds = input.documents.map((d: any) => d.templateId);
+        const templates = await db.getDocumentTemplatesByIds(templateIds);
+
+        const templateData = buildHiringTemplateData({
+          company: company ? {
+            company_name: company.company_name, business_name: company.business_name, cnpj: company.cnpj,
+            contact_name: company.contact_person, contact_cpf: company.contact_cpf, phone: company.phone,
+            landline_phone: company.landline_phone, email: company.email, company_email: company.company_email,
+            website: company.website, employee_count: company.employee_count, cep: company.cep,
+            address: company.address, complement: company.complement, neighborhood: company.neighborhood,
+            city: company.city, state: company.state,
+          } : undefined,
+          candidate: candidate ? {
+            full_name: candidate.full_name, cpf: candidate.cpf, rg: candidate.rg, email: candidate.email,
+            phone: candidate.phone, date_of_birth: candidate.date_of_birth, address: candidate.address,
+            city: candidate.city, state: candidate.state, zip_code: candidate.zip_code,
+            education_level: candidate.education_level, institution: candidate.institution, course: candidate.course,
+            parent_guardian_name: candidate.parent_guardian_name, parent_guardian_cpf: candidate.parent_guardian_cpf,
+            parent_guardian_email: candidate.parent_guardian_email, parent_guardian_phone: candidate.parent_guardian_phone,
+            educational_institution_name: candidate.educational_institution_name,
+            educational_institution_email: candidate.educational_institution_email,
+            educational_institution_contact: candidate.educational_institution_contact,
+          } : undefined,
+          job: job ? { title: job.title, salary: job.salary, contract_type: job.contract_type } : undefined,
+          agency: agency ? { name: agency.name, city: agency.city } : undefined,
+          hiring: {
+            start_date: process.start_date, end_date: process.end_date,
+            duration_months: process.contract_duration_months, monthly_salary: process.monthly_salary,
+            monthly_fee: process.calculated_fee, payment_day: process.payment_day,
+            hiring_type: process.hiring_type,
+          },
+        });
+
+        for (const doc of input.documents) {
+          const template = templates.find((t: any) => t.id === doc.templateId);
+          if (!template) continue;
+
+          const signers: Array<{ email: string; name: string; action: "SIGN"; role: string }> = [];
+          // Agency signs first
+          if (agency?.email) {
+            signers.push({ email: agency.email, name: agency.name || 'Agência', action: 'SIGN', role: 'agency' });
+          }
+          if ((doc.target === 'company' || doc.target === 'both') && company?.email) {
+            signers.push({ email: company.email, name: company.company_name || 'Empresa', action: 'SIGN', role: 'company' });
+          }
+          if ((doc.target === 'candidate' || doc.target === 'both') && candidate?.email) {
+            signers.push({ email: candidate.email, name: candidate.full_name || 'Candidato', action: 'SIGN', role: 'candidate' });
+          }
+          if (signers.length === 0) continue;
+
+          try {
+            const fileResponse = await fetch(template.file_url);
+            const fileBuffer = Buffer.from(await fileResponse.arrayBuffer());
+            const isDocx = template.file_url?.endsWith('.docx') || template.name?.endsWith('.docx');
+            let pdfBuffer: Buffer;
+            if (isDocx) {
+              pdfBuffer = await fillDocxTemplate(fileBuffer, templateData);
+            } else {
+              pdfBuffer = fileBuffer;
+            }
+
+            const result = await createAutentiqueDoc(
+              template.name, pdfBuffer,
+              signers.map(s => ({ email: s.email, name: s.name, action: s.action })),
+              { message: `Contrato - ${candidate?.full_name} - ${company?.company_name}`, reminder: 'WEEKLY', sortable: false }
+            );
+
+            await db.createAutentiqueDocument({
+              autentiqueDocumentId: result.documentId, documentName: template.name,
+              contextType: 'hiring_contract', contextId: process.id, templateId: template.id,
+              signers: result.signers.map((apiSigner: any, idx: number) => {
+                // Match by index since Autentique doesn't return emails when we omit them
+                const ourSigner = signers[idx];
+                return { role: ourSigner?.role || 'unknown', email: ourSigner?.email || apiSigner.email, name: apiSigner.name,
+                  autentiqueSignerId: apiSigner.public_id, signUrl: apiSigner.signUrl };
+              }),
+            });
+          } catch (err) {
+            console.error(`[Hiring] Failed to create Autentique doc for template ${template.name}:`, err);
+          }
+        }
+      }
+
+      return { success: true, count: input.documents.length };
+    }),
+
+  getHiringDocuments: agencyProcedure
+    .input(z.object({
+      hiringProcessId: z.string().uuid(),
+    }))
+    .query(async ({ input }) => {
+      const { data, error } = await supabaseAdmin
+        .from('hiring_process_documents')
+        .select('*, template:agency_document_templates(id, name, file_url, category)')
+        .eq('hiring_process_id', input.hiringProcessId);
+      if (error) return [];
+      const documents = data || [];
+
+      // Fetch Autentique signing status for this hiring process
+      const { data: autentiqueDocs } = await supabaseAdmin
+        .from('autentique_documents')
+        .select('id, template_id, document_name, status, signers, created_at')
+        .eq('context_type', 'hiring_contract')
+        .eq('context_id', input.hiringProcessId);
+
+      // Map autentique docs by template_id (most recent first)
+      const autentiqueByTemplate = new Map<string, any>();
+      if (autentiqueDocs) {
+        const sorted = [...autentiqueDocs].sort(
+          (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        );
+        for (const doc of sorted) {
+          if (doc.template_id && !autentiqueByTemplate.has(doc.template_id)) {
+            autentiqueByTemplate.set(doc.template_id, doc);
+          }
+        }
+      }
+
+      // Enrich each assigned document with signing status
+      return documents.map((doc: any) => {
+        const templateId = doc.template?.id || doc.template_id;
+        const autentiqueDoc = templateId ? autentiqueByTemplate.get(templateId) : null;
+        if (!autentiqueDoc) return { ...doc, signingStatus: null };
+
+        const signers = (autentiqueDoc.signers || []) as Array<{
+          role?: string;
+          signed_at?: string | null;
+          [key: string]: any;
+        }>;
+        const agencySigner = signers.find((s) => s.role === 'agency');
+        const companySigner = signers.find((s) => s.role === 'company');
+        const candidateSigner = signers.find((s) => s.role === 'candidate');
+
+        return {
+          ...doc,
+          signingStatus: {
+            documentStatus: autentiqueDoc.status,
+            agencySigned: !!agencySigner?.signed_at,
+            agencySignUrl: agencySigner?.signUrl || agencySigner?.sign_url || null,
+            companySigned: !!companySigner?.signed_at,
+            candidateSigned: !!candidateSigner?.signed_at,
+          },
+        };
+      });
+    }),
 });
 
 // ============================================
@@ -1642,6 +1878,7 @@ export const publicSigningRouter = router({
         signatureStatus,
       };
     }),
+
 });
 
 // ============================================

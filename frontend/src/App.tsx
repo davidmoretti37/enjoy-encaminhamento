@@ -8,6 +8,7 @@ import AuthGuard from "./components/AuthGuard";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { AgencyProvider } from "./contexts/AgencyContext";
 import Home from "./pages/Home";
+import ResetPassword from "./pages/ResetPassword";
 // Company Portal Pages
 import CompanyPortalDashboard from "./pages/company/CompanyPortalDashboard";
 import CompanyJobs from "./pages/company/CompanyJobs";
@@ -90,6 +91,7 @@ function Router() {
       <Route path={"/vagas"} component={PublicVagasPage} />
       <Route path={"/login"} component={Login} />
       <Route path={"/auth/callback"} component={AuthCallback} />
+      <Route path={"/auth/reset-password"} component={ResetPassword} />
       <Route path={"/contract/:token"} component={ContractSign} />
       <Route path={"/company/register/:token"} component={CompanyRegister} />
       {/* Agency registration */}

@@ -74,7 +74,10 @@ export default function CompanyJobs() {
     description: '',
     requirements: '',
     work_schedule: '',
+    subsidiary_cnpj: '',
+    subsidiary_name: '',
   });
+  const [showNewCnpj, setShowNewCnpj] = useState(false);
 
   const utils = trpc.useUtils();
   const { data: jobs, isLoading } = trpc.company.getJobs.useQuery(
@@ -83,6 +86,11 @@ export default function CompanyJobs() {
   );
 
   const { data: companyProfile } = trpc.company.getProfile.useQuery(
+    undefined,
+    { enabled: !!user && user.role === 'company' }
+  );
+
+  const { data: usedCnpjs = [] } = trpc.company.getUsedCnpjs.useQuery(
     undefined,
     { enabled: !!user && user.role === 'company' }
   );
@@ -98,8 +106,12 @@ export default function CompanyJobs() {
         description: '',
         requirements: '',
         work_schedule: '',
+        subsidiary_cnpj: '',
+        subsidiary_name: '',
       });
+      setShowNewCnpj(false);
       utils.company.getJobs.invalidate();
+      utils.company.getUsedCnpjs.invalidate();
     },
     onError: (error) => {
       toast.error(error.message || 'Erro ao solicitar vaga');
@@ -214,6 +226,8 @@ export default function CompanyJobs() {
       salary_max: formData.salary ? parseFloat(formData.salary) : undefined,
       work_schedule: formData.work_schedule || undefined,
       requirements: formData.requirements || undefined,
+      subsidiary_cnpj: formData.subsidiary_cnpj || undefined,
+      subsidiary_name: formData.subsidiary_name || undefined,
     });
   };
 
@@ -279,6 +293,69 @@ export default function CompanyJobs() {
                     value={formData.work_schedule}
                     onChange={(value) => setFormData(prev => ({ ...prev, work_schedule: value }))}
                   />
+                </div>
+                <div className="grid gap-2">
+                  <Label>CNPJ da Unidade</Label>
+                  {!showNewCnpj ? (
+                    <Select
+                      value={formData.subsidiary_cnpj}
+                      onValueChange={(v) => {
+                        if (v === '__new__') {
+                          setShowNewCnpj(true);
+                          setFormData(prev => ({ ...prev, subsidiary_cnpj: '', subsidiary_name: '' }));
+                        } else {
+                          const match = usedCnpjs.find((c: any) => c.subsidiary_cnpj === v);
+                          setFormData(prev => ({
+                            ...prev,
+                            subsidiary_cnpj: v,
+                            subsidiary_name: match?.subsidiary_name || '',
+                          }));
+                        }
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="CNPJ principal da empresa" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {companyProfile?.cnpj && (
+                          <SelectItem value={companyProfile.cnpj}>
+                            {companyProfile.cnpj} — {companyProfile.company_name}
+                          </SelectItem>
+                        )}
+                        {usedCnpjs.filter((c: any) => c.subsidiary_cnpj !== companyProfile?.cnpj).map((c: any) => (
+                          <SelectItem key={c.subsidiary_cnpj} value={c.subsidiary_cnpj}>
+                            {c.subsidiary_cnpj} — {c.subsidiary_name}
+                          </SelectItem>
+                        ))}
+                        <SelectItem value="__new__">+ Novo CNPJ</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <div className="space-y-2">
+                      <Input
+                        placeholder="00.000.000/0000-00"
+                        value={formData.subsidiary_cnpj}
+                        onChange={(e) => setFormData(prev => ({ ...prev, subsidiary_cnpj: e.target.value }))}
+                      />
+                      <Input
+                        placeholder="Razão Social"
+                        value={formData.subsidiary_name}
+                        onChange={(e) => setFormData(prev => ({ ...prev, subsidiary_name: e.target.value }))}
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setShowNewCnpj(false);
+                          setFormData(prev => ({ ...prev, subsidiary_cnpj: '', subsidiary_name: '' }));
+                        }}
+                      >
+                        Cancelar
+                      </Button>
+                    </div>
+                  )}
+                  <p className="text-xs text-muted-foreground">Opcional — para empresas com mais de um CNPJ</p>
                 </div>
                 <div className="grid gap-2">
                   <Label htmlFor="description">Descrição das atividades *</Label>

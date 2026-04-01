@@ -810,3 +810,43 @@ export function calculateCLTFee(monthlySalary: number): number {
   const salaryInCents = monthlySalary > 10000 ? monthlySalary : monthlySalary * 100;
   return Math.round(salaryInCents * 0.5);
 }
+
+/**
+ * Get hiring context needed for creating signed_documents from Autentique
+ */
+export async function getHiringContextForSigning(hiringProcessId: string): Promise<{
+  companyId: string;
+  candidateId: string;
+  agencyId: string;
+  companyUserId: string | null;
+  candidateUserId: string | null;
+  category: string;
+} | null> {
+  const { data, error } = await db
+    .from("hiring_processes")
+    .select(`
+      id, hiring_type,
+      company:companies(id, user_id, agency_id),
+      candidate:candidates(id, user_id)
+    `)
+    .eq("id", hiringProcessId)
+    .single();
+
+  if (error || !data) return null;
+
+  const categoryMap: Record<string, string> = {
+    estagio: "estagio",
+    clt: "clt",
+    "menor-aprendiz": "menor_aprendiz",
+    pj: "pj",
+  };
+
+  return {
+    companyId: data.company?.id,
+    candidateId: data.candidate?.id,
+    agencyId: data.company?.agency_id,
+    companyUserId: data.company?.user_id || null,
+    candidateUserId: data.candidate?.user_id || null,
+    category: categoryMap[data.hiring_type] || data.hiring_type,
+  };
+}

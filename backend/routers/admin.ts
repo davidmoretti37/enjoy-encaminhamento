@@ -174,7 +174,7 @@ export const adminRouter = router({
       billing_period: z.string().optional(),
       notes: z.string().optional(),
       job_id: z.string().uuid().nullable().optional(),
-      payment_type: z.enum(['monthly-fee', 'insurance-fee', 'setup-fee', 'penalty', 'refund']).optional(),
+      payment_type: z.enum(['monthly-fee', 'insurance-fee', 'annual-insurance', 'setup-fee', 'penalty', 'refund']).optional(),
       status: z.enum(['pending', 'paid', 'overdue', 'failed', 'refunded']).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
@@ -209,7 +209,7 @@ export const adminRouter = router({
       amount: z.number().min(0),
       due_date: z.string(),
       billing_period: z.string().optional(),
-      payment_type: z.enum(['monthly-fee', 'insurance-fee', 'setup-fee', 'penalty', 'refund']),
+      payment_type: z.enum(['monthly-fee', 'insurance-fee', 'annual-insurance', 'setup-fee', 'penalty', 'refund']),
       status: z.enum(['pending', 'paid', 'overdue']).default('pending'),
       notes: z.string().optional(),
     }))

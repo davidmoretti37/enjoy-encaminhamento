@@ -133,11 +133,13 @@ export default function DocumentSigningFlow({
   category,
   contractId,
   candidateId,
+  hiringProcessId,
   onAllSigned,
 }: DocumentSigningFlowProps) {
   const [expandedDoc, setExpandedDoc] = useState<string | null>(null);
   const [signerName, setSignerName] = useState("");
   const [signerCpf, setSignerCpf] = useState("");
+  const [hasCalledAllSigned, setHasCalledAllSigned] = useState(false);
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const sigPadRef = useRef<SignatureCanvas | null>(null);
 
@@ -147,6 +149,7 @@ export default function DocumentSigningFlow({
     category,
     contractId,
     candidateId,
+    hiringProcessId,
   }, {
     // Poll every 5s when there are pending Autentique docs (user may be signing in another tab)
     refetchInterval: (query: any) => {
@@ -159,12 +162,13 @@ export default function DocumentSigningFlow({
     },
   });
 
-  // Call onAllSigned when initial data loads with everything already signed
+  // Call onAllSigned when initial data loads with everything already signed (only once)
   useEffect(() => {
-    if (data?.allSigned && onAllSigned) {
+    if (data?.allSigned && onAllSigned && !hasCalledAllSigned) {
+      setHasCalledAllSigned(true);
       onAllSigned();
     }
-  }, [data?.allSigned, onAllSigned]);
+  }, [data?.allSigned, onAllSigned, hasCalledAllSigned]);
 
   const signMutation = trpc.contract.signDocument.useMutation({
     onSuccess: (result) => {
@@ -174,7 +178,7 @@ export default function DocumentSigningFlow({
       setSignerCpf("");
       setAcceptedTerms(false);
       sigPadRef.current?.clear();
-      (utils.contract.getDocumentsToSign as any).invalidate({ category, contractId, candidateId });
+      (utils.contract.getDocumentsToSign as any).invalidate({ category, contractId, candidateId, hiringProcessId });
 
       if (result.allSigned && onAllSigned) {
         onAllSigned();
