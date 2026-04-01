@@ -84,8 +84,8 @@ export default function Login() {
 
       // Refresh user to get role information with retry logic
       let user = null;
-      for (let attempt = 0; attempt < 5; attempt++) {
-        await new Promise(resolve => setTimeout(resolve, 300 * (attempt + 1)));
+      for (let attempt = 0; attempt < 3; attempt++) {
+        await new Promise(resolve => setTimeout(resolve, 400 * (attempt + 1)));
 
         try {
           const result = await refresh();

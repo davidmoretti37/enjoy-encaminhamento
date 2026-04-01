@@ -16,6 +16,7 @@ export default function ResetPassword() {
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [sessionReady, setSessionReady] = useState(false);
+  const [expired, setExpired] = useState(false);
 
   useEffect(() => {
     // Supabase will auto-detect the recovery token from the URL hash
@@ -28,7 +29,11 @@ export default function ResetPassword() {
     supabase.auth.getSession().then(({ data }) => {
       if (data.session) setSessionReady(true);
     });
-    return () => subscription.unsubscribe();
+    // If no recovery event after 5 seconds, show expired message
+    const timeout = setTimeout(() => {
+      setExpired(true);
+    }, 5000);
+    return () => { subscription.unsubscribe(); clearTimeout(timeout); };
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -78,10 +83,26 @@ export default function ResetPassword() {
               </div>
             ) : !sessionReady ? (
               <div className="text-center space-y-4 py-4">
-                <Loader2 className="h-8 w-8 animate-spin mx-auto text-muted-foreground" />
-                <p className="text-sm text-muted-foreground">
-                  Verificando link de recuperação...
-                </p>
+                {expired ? (
+                  <>
+                    <p className="text-sm text-muted-foreground">
+                      O link de recuperação expirou ou já foi utilizado.
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      Solicite um novo link na página de login.
+                    </p>
+                    <Button onClick={() => setLocation('/login')} className="w-full">
+                      Ir para o Login
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <Loader2 className="h-8 w-8 animate-spin mx-auto text-muted-foreground" />
+                    <p className="text-sm text-muted-foreground">
+                      Verificando link de recuperação...
+                    </p>
+                  </>
+                )}
               </div>
             ) : (
               <form onSubmit={handleSubmit} className="space-y-4">
