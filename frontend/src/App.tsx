@@ -76,10 +76,22 @@ function ScrollToTop() {
   return null;
 }
 
+function PasswordRecoveryRedirect() {
+  const [location, setLocation] = useLocation();
+  useEffect(() => {
+    // Detect Supabase PASSWORD_RECOVERY event from URL hash and redirect to reset page
+    if (location !== "/auth/reset-password" && window.location.hash.includes("type=recovery")) {
+      setLocation("/auth/reset-password");
+    }
+  }, [location, setLocation]);
+  return null;
+}
+
 function Router() {
   return (
     <>
     <ScrollToTop />
+    <PasswordRecoveryRedirect />
     <Switch>
       {/* Public routes - no auth required */}
       <Route path={"/"} component={Home} />
