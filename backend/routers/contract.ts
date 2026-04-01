@@ -607,7 +607,38 @@ export const contractRouter = router({
         if (!company) return [];
 
         // Get documents from signed_documents table
-        const signedDocs = await db.getSignedDocuments({ companyId: company.id, ...input });
+        const allSignedDocs = await db.getSignedDocuments({ companyId: company.id, ...input });
+
+        // Filter: only show docs where the company user signed, or docs linked to this company's hiring processes
+        // This prevents agency-level documents from leaking into the company view
+        const { supabaseAdmin: _sbFilter } = await import("../supabase");
+        const sbFilter = _sbFilter as any;
+        const { data: companyHPs } = await sbFilter
+          .from('hiring_processes')
+          .select('id')
+          .eq('company_id', company.id);
+        const hiringProcessIds = new Set((companyHPs || []).map((hp: any) => hp.id));
+
+        // Get autentique doc IDs that belong to this company's hiring processes
+        let hiringAutentiqueDocIds = new Set<string>();
+        if (hiringProcessIds.size > 0) {
+          const { data: autDocs } = await sbFilter
+            .from('autentique_documents')
+            .select('id')
+            .eq('context_type', 'hiring_contract')
+            .in('context_id', Array.from(hiringProcessIds));
+          hiringAutentiqueDocIds = new Set((autDocs || []).map((d: any) => d.id));
+        }
+
+        const signedDocs = allSignedDocs.filter((doc: any) => {
+          // Company user signed it directly
+          if (doc.signer_user_id === ctx.user.id) return true;
+          // Document is from a hiring process belonging to this company
+          if (doc.autentique_document_id && hiringAutentiqueDocIds.has(doc.autentique_document_id)) return true;
+          // Legacy canvas-signed documents (no autentique_document_id) with company_id match
+          if (!doc.autentique_document_id) return true;
+          return false;
+        });
 
         // Also get contracts uploaded by agency to scheduled_meetings
         const { supabaseAdmin: _sb3 } = await import("../supabase");
