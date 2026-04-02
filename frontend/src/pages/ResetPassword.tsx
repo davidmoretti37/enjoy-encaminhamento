@@ -19,20 +19,33 @@ export default function ResetPassword() {
   const [expired, setExpired] = useState(false);
 
   useEffect(() => {
-    // Supabase will auto-detect the recovery token from the URL hash
+    let settled = false;
+
+    // Listen for the PASSWORD_RECOVERY event from Supabase
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
       if (event === 'PASSWORD_RECOVERY') {
+        settled = true;
         setSessionReady(true);
       }
     });
-    // Also check if we already have a session (token already processed)
-    supabase.auth.getSession().then(({ data }) => {
-      if (data.session) setSessionReady(true);
-    });
-    // If no recovery event after 5 seconds, show expired message
+
+    // Handle PKCE flow: if URL has ?code= param, exchange it explicitly
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get('code');
+    if (code) {
+      supabase.auth.exchangeCodeForSession(code).then(({ error }) => {
+        if (error) {
+          setExpired(true);
+        }
+        // PASSWORD_RECOVERY event will fire from onAuthStateChange if successful
+      });
+    }
+
+    // Give Supabase enough time to process the token (15s for slow connections)
     const timeout = setTimeout(() => {
-      setExpired(true);
-    }, 5000);
+      if (!settled) setExpired(true);
+    }, 15000);
+
     return () => { subscription.unsubscribe(); clearTimeout(timeout); };
   }, []);
 

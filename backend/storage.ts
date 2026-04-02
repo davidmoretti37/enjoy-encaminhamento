@@ -4,12 +4,26 @@ import { ENV } from "./_core/env";
 const BUCKET_NAME = "contracts";
 
 // Upload a file to Supabase Storage using REST API directly
+function sanitizeStorageKey(raw: string): string {
+  return raw
+    .split("/")
+    .map((segment, i, arr) => {
+      // Only sanitize the filename (last segment), keep path segments as-is
+      if (i < arr.length - 1) return segment;
+      return segment
+        .normalize("NFD").replace(/[\u0300-\u036f]/g, "") // remove accents (ã→a, é→e)
+        .replace(/\s+/g, "_")                              // spaces → underscores
+        .replace(/[^a-zA-Z0-9._\-]/g, "");                // strip anything else unsafe
+    })
+    .join("/");
+}
+
 export async function storagePut(
   relKey: string,
   data: Buffer | Uint8Array,
   contentType = "application/octet-stream"
 ): Promise<{ key: string; url: string }> {
-  const key = relKey.replace(/^\/+/, "");
+  const key = sanitizeStorageKey(relKey.replace(/^\/+/, ""));
 
   console.log("[Storage] Uploading to bucket:", BUCKET_NAME, "key:", key, "size:", data.length);
 
