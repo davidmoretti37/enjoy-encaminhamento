@@ -57,15 +57,38 @@ const BRAZILIAN_STATES = [
   'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO'
 ];
 
+const STORAGE_KEY = 'candidate-onboarding-draft';
+
+function loadDraft() {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    return saved ? JSON.parse(saved) : null;
+  } catch { return null; }
+}
+
+function saveDraft(data: any) {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch {}
+}
+
+function clearDraft() {
+  try { localStorage.removeItem(STORAGE_KEY); } catch {}
+}
+
 export default function CandidateOnboarding() {
   const { user, loading: authLoading } = useAuth();
-  const [step, setStep] = useState(1);
+  const draft = loadDraft();
+  const [step, setStep] = useState(draft?.step || 1);
   const [submitting, setSubmitting] = useState(false);
   const [calendarMonth, setCalendarMonth] = useState<Date>(new Date(2000, 0));
   const [calendarOpen, setCalendarOpen] = useState(false);
 
   // Form state - Step 1 (Personal + Education merged)
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<{
+    full_name: string; cpf: string; email: string; phone: string;
+    date_of_birth: string; city: string; state: string; social_media: string;
+    education_level: string; institution: string;
+    courses: string[]; skills: string[]; languages: string[]; experiences: string[];
+  }>(draft?.formData || {
     full_name: '',
     cpf: '',
     email: '',
@@ -96,11 +119,16 @@ export default function CandidateOnboarding() {
   };
 
   // DISC state
-  const [discAnswers, setDiscAnswers] = useState<Record<number, DISCProfile>>({});
-  const [discResults, setDiscResults] = useState<Record<DISCProfile, number> | null>(null);
+  const [discAnswers, setDiscAnswers] = useState<Record<number, DISCProfile>>(draft?.discAnswers || {});
+  const [discResults, setDiscResults] = useState<Record<DISCProfile, number> | null>(draft?.discResults || null);
 
   // PDP state
-  const [pdpResults, setPdpResults] = useState<PDPResultsType | null>(null);
+  const [pdpResults, setPdpResults] = useState<PDPResultsType | null>(draft?.pdpResults || null);
+
+  // Auto-save draft on changes
+  useEffect(() => {
+    saveDraft({ step, formData, discAnswers, discResults, pdpResults });
+  }, [step, formData, discAnswers, discResults, pdpResults]);
 
   // Fetch user's linked agency for pre-populating city/state
   const agencyQuery = trpc.candidate.getMyAgency.useQuery(undefined, {
@@ -137,6 +165,7 @@ export default function CandidateOnboarding() {
 
   const submitOnboarding = trpc.candidate.submitOnboarding.useMutation({
     onSuccess: () => {
+      clearDraft();
       toast.success("Perfil criado com sucesso!");
       window.location.href = "/candidate";
     },
