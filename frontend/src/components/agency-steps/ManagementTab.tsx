@@ -635,7 +635,7 @@ function CompanyPaymentsModal({ company, open, onClose }: { company: any; open: 
     },
   });
 
-  const isRecurring = paymentForm.payment_type === 'monthly-fee' || paymentForm.payment_type === 'insurance-fee' || paymentForm.payment_type === 'annual-insurance';
+  const isRecurring = paymentForm.payment_type === 'monthly-fee' || paymentForm.payment_type === 'insurance-fee';
 
   const handleCreatePayment = async () => {
     if (!paymentForm.amount) {
