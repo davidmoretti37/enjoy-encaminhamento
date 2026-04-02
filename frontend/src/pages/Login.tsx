@@ -158,11 +158,17 @@ export default function Login() {
     e.preventDefault();
     setLoading(true);
 
+    if (!signupAgencyId) {
+      toast.error('Selecione uma região');
+      setLoading(false);
+      return;
+    }
+
     try {
       await signUp(signupEmail, signupPassword, {
         name: signupName,
         role: signupRole,
-        agency_id: signupAgencyId || undefined,
+        agency_id: signupAgencyId,
       });
       toast.success('Conta criada com sucesso!');
 
