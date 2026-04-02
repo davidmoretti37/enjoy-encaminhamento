@@ -1042,7 +1042,7 @@ function CompanyPaymentsTab() {
           {payment.billing_period && ` · ${payment.billing_period}`}
         </p>
         <p className="text-xs text-slate-400">
-          Venc: {payment.due_date ? format(new Date(payment.due_date + 'T12:00:00'), 'dd/MM/yyyy') : '-'}
+          Venc: {(() => { try { return payment.due_date ? format(new Date(payment.due_date + 'T12:00:00'), 'dd/MM/yyyy') : '-'; } catch { return '-'; } })()}
         </p>
       </div>
       <div className="flex items-center gap-2">
