@@ -31,6 +31,7 @@ import {
   Bell,
   FileText,
   UserCheck,
+  DollarSign,
   LogOut,
   X,
   ChevronRight,
@@ -70,6 +71,7 @@ const MENU_ITEMS = [
   { id: "users", label: "Usuários", icon: Users, description: "Gerenciar acessos" },
   { id: "notifications", label: "Notificações", icon: Bell, description: "Preferências de aviso" },
   { id: "documents", label: "Documentos", icon: FileText, description: "Contratos assinados" },
+  { id: "payments", label: "Pagamentos", icon: DollarSign, description: "Pagamentos pendentes" },
   { id: "employees", label: "Funcionários Ativos", icon: UserCheck, description: "Todos os contratados" },
 ];
 

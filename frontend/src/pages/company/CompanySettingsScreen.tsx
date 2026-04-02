@@ -28,6 +28,10 @@ import {
   Briefcase,
   BarChart,
   Lock,
+  DollarSign,
+  Upload,
+  Loader2,
+  CheckCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useLocation, useSearch } from "wouter";
@@ -206,6 +210,7 @@ export default function CompanySettingsScreen() {
     users: "Usuários",
     notifications: "Notificações",
     documents: "Documentos",
+    payments: "Pagamentos",
     employees: "Funcionários Ativos",
     security: "Segurança",
   };
@@ -442,6 +447,13 @@ export default function CompanySettingsScreen() {
 
               <SignedDocumentsView />
             </div>
+          </CardEntrance>
+        )}
+
+        {/* Payments Tab */}
+        {activeTab === "payments" && (
+          <CardEntrance>
+            <CompanyPaymentsTab />
           </CardEntrance>
         )}
 
@@ -954,6 +966,185 @@ function SettingsEmployeeCard({ employee, onOpenReport }: { employee: any; onOpe
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+function CompanyPaymentsTab() {
+  const { user } = useAuth();
+  // Payments tab for company settings
+  const utils = trpc.useUtils();
+
+  const { data: payments, isLoading } = trpc.company.getPayments.useQuery(
+    undefined,
+    { enabled: !!user && user.role === 'company' }
+  );
+
+  const { data: stats } = trpc.company.getPaymentStats.useQuery(
+    undefined,
+    { enabled: !!user && user.role === 'company' }
+  );
+
+  const uploadReceiptMutation = trpc.company.uploadPaymentReceipt.useMutation({
+    onSuccess: () => {
+      toast.success('Comprovante enviado!');
+      utils.company.getPayments.invalidate();
+      utils.company.getPaymentStats.invalidate();
+    },
+    onError: (err: any) => toast.error(err.message || 'Erro ao enviar comprovante'),
+  });
+
+  const handleUploadReceipt = (paymentId: string) => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*,application/pdf';
+    input.onchange = async (e: any) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        const base64 = (reader.result as string).split(',')[1];
+        uploadReceiptMutation.mutate({
+          paymentId,
+          fileName: file.name,
+          fileData: base64,
+          contentType: file.type,
+        });
+      };
+      reader.readAsDataURL(file);
+    };
+    input.click();
+  };
+
+  if (isLoading) return <FormSkeleton fields={4} />;
+
+  const overduePayments = (payments || []).filter((p: any) => p.status === 'overdue');
+  const pendingPayments = (payments || []).filter((p: any) => p.status === 'pending');
+  const paidPayments = (payments || []).filter((p: any) => p.status === 'paid');
+
+  const paymentTypeLabels: Record<string, string> = {
+    'monthly-fee': 'Mensalidade',
+    'insurance-fee': 'Seguro Mensal',
+    'annual-insurance': 'Seguro Anual',
+    'setup-fee': 'Taxa Única',
+    'penalty': 'Multa',
+    'refund': 'Reembolso',
+  };
+
+  const renderPaymentCard = (payment: any) => (
+    <div key={payment.id} className="flex items-center justify-between p-4 bg-white border rounded-lg">
+      <div>
+        <p className="font-medium text-[#0A2342]">
+          R$ {((payment.amount || 0) / 100).toFixed(2)}
+        </p>
+        <p className="text-xs text-slate-500">
+          {paymentTypeLabels[payment.payment_type] || payment.payment_type}
+          {payment.billing_period && ` · ${payment.billing_period}`}
+        </p>
+        <p className="text-xs text-slate-400">
+          Venc: {payment.due_date ? format(new Date(payment.due_date + 'T12:00:00'), 'dd/MM/yyyy') : '-'}
+        </p>
+      </div>
+      <div className="flex items-center gap-2">
+        {payment.status === 'paid' ? (
+          <span className="flex items-center gap-1 text-xs text-green-600 font-medium">
+            <CheckCircle className="w-4 h-4" /> Pago
+          </span>
+        ) : (
+          <>
+            <span className={`text-xs font-medium ${payment.status === 'overdue' ? 'text-red-600' : 'text-yellow-600'}`}>
+              {payment.status === 'overdue' ? 'Atrasado' : 'Pendente'}
+            </span>
+            <button
+              onClick={() => handleUploadReceipt(payment.id)}
+              disabled={uploadReceiptMutation.isPending}
+              className="flex items-center gap-1 px-3 py-1.5 text-xs bg-[#0A2342] text-white rounded-lg hover:bg-[#0A2342]/90 transition-all disabled:opacity-50"
+            >
+              {uploadReceiptMutation.isPending ? (
+                <Loader2 className="w-3 h-3 animate-spin" />
+              ) : (
+                <Upload className="w-3 h-3" />
+              )}
+              Comprovante
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="space-y-6">
+      {/* Stats */}
+      <div className="grid grid-cols-3 gap-4">
+        <div className="bg-white rounded-xl border-2 border-slate-200 p-4 text-center">
+          <p className="text-xs text-slate-500">Atrasado</p>
+          <p className="text-lg font-bold text-red-600">R$ {((stats?.overdue || 0) / 100).toFixed(2)}</p>
+        </div>
+        <div className="bg-white rounded-xl border-2 border-slate-200 p-4 text-center">
+          <p className="text-xs text-slate-500">Pendente</p>
+          <p className="text-lg font-bold text-yellow-600">R$ {((stats?.dueThisMonth || 0) / 100).toFixed(2)}</p>
+        </div>
+        <div className="bg-white rounded-xl border-2 border-slate-200 p-4 text-center">
+          <p className="text-xs text-slate-500">Pago (6 meses)</p>
+          <p className="text-lg font-bold text-green-600">R$ {((stats?.paidLast6Months || 0) / 100).toFixed(2)}</p>
+        </div>
+      </div>
+
+      {/* Overdue */}
+      {overduePayments.length > 0 && (
+        <div className="bg-white rounded-xl border-2 border-red-200 shadow-sm p-6">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-10 h-10 rounded-lg bg-red-100 flex items-center justify-center">
+              <AlertCircle className="w-5 h-5 text-red-600" />
+            </div>
+            <div>
+              <h3 className="text-[#0A2342] font-semibold">Pagamentos Atrasados</h3>
+              <p className="text-slate-600 text-sm">{overduePayments.length} pagamento{overduePayments.length !== 1 ? 's' : ''}</p>
+            </div>
+          </div>
+          <div className="space-y-2">{overduePayments.map(renderPaymentCard)}</div>
+        </div>
+      )}
+
+      {/* Pending */}
+      {pendingPayments.length > 0 && (
+        <div className="bg-white rounded-xl border-2 border-slate-200 shadow-sm p-6">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-10 h-10 rounded-lg bg-yellow-100 flex items-center justify-center">
+              <Clock className="w-5 h-5 text-yellow-600" />
+            </div>
+            <div>
+              <h3 className="text-[#0A2342] font-semibold">Pagamentos Pendentes</h3>
+              <p className="text-slate-600 text-sm">{pendingPayments.length} pagamento{pendingPayments.length !== 1 ? 's' : ''}</p>
+            </div>
+          </div>
+          <div className="space-y-2">{pendingPayments.map(renderPaymentCard)}</div>
+        </div>
+      )}
+
+      {/* Paid history */}
+      {paidPayments.length > 0 && (
+        <div className="bg-white rounded-xl border-2 border-slate-200 shadow-sm p-6">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-10 h-10 rounded-lg bg-green-100 flex items-center justify-center">
+              <CheckCircle className="w-5 h-5 text-green-600" />
+            </div>
+            <div>
+              <h3 className="text-[#0A2342] font-semibold">Histórico de Pagamentos</h3>
+              <p className="text-slate-600 text-sm">{paidPayments.length} pagamento{paidPayments.length !== 1 ? 's' : ''} realizado{paidPayments.length !== 1 ? 's' : ''}</p>
+            </div>
+          </div>
+          <div className="space-y-2">{paidPayments.map(renderPaymentCard)}</div>
+        </div>
+      )}
+
+      {(payments || []).length === 0 && (
+        <div className="bg-white rounded-xl border-2 border-slate-200 shadow-sm p-8 text-center">
+          <DollarSign className="w-8 h-8 text-slate-400 mx-auto mb-2" />
+          <p className="text-slate-600">Nenhum pagamento registrado</p>
+        </div>
+      )}
     </div>
   );
 }
