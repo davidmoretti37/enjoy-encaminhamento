@@ -31,9 +31,22 @@ export const authRouter = router({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      // Idempotent: if profile already exists, return it
+      // If profile already exists, check if agency_id needs backfilling.
+      // The handle_new_user() trigger may have created the row before this
+      // endpoint runs, but without agency_id from auth metadata.
       const existingUser = await db.getUserById(ctx.user.id);
       if (existingUser) {
+        if (!existingUser.agency_id) {
+          // Read agency_id from Supabase auth metadata (not from ctx.user,
+          // which is sourced from the DB row and would also be null)
+          const { data: { user: authUser } } = await supabaseAdmin.auth.admin.getUserById(ctx.user.id);
+          const metadataAgencyId = authUser?.user_metadata?.agency_id || null;
+          if (metadataAgencyId) {
+            await (supabaseAdmin as any).from("users")
+              .update({ agency_id: metadataAgencyId })
+              .eq("id", ctx.user.id);
+          }
+        }
         return { success: true, existing: true };
       }
 

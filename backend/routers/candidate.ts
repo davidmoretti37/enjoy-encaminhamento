@@ -96,7 +96,20 @@ export const candidateRouter = router({
 
       // Get user's agency_id for candidate linking
       const user = await db.getUserById(ctx.user.id);
-      const agencyId = user?.agency_id;
+      let agencyId = user?.agency_id;
+
+      // Fallback: if agency_id is missing from DB, read from auth metadata
+      // (handles race condition where trigger created user row without agency_id)
+      if (!agencyId) {
+        const { data: { user: authUser } } = await supabaseAdmin.auth.admin.getUserById(ctx.user.id);
+        agencyId = authUser?.user_metadata?.agency_id || null;
+        // Backfill the users table so this doesn't happen again
+        if (agencyId) {
+          await (supabaseAdmin as any).from("users")
+            .update({ agency_id: agencyId })
+            .eq("id", ctx.user.id);
+        }
+      }
 
       // Sanitize empty strings for timestamp fields
       if (input.date_of_birth === '') (input as any).date_of_birth = undefined;
