@@ -32,6 +32,7 @@ interface CandidateProfile {
   city?: string;
   state?: string;
   age?: number;
+  date_of_birth?: string;
   education?: string;
   institution?: string;
   course?: string;
@@ -493,6 +494,7 @@ export function CandidateCard({
     full_name: profile.name || "",
     email: profile.email || "",
     phone: profile.phone || "",
+    date_of_birth: profile.date_of_birth || "",
     city: profile.city || "",
     state: profile.state || "",
     education_level: profile.education || "",
@@ -525,6 +527,17 @@ export function CandidateCard({
     .slice(0, 2)
     .join("")
     .toUpperCase();
+
+  const calculatedAge = (() => {
+    if (profile.age) return profile.age;
+    if (!profile.date_of_birth) return undefined;
+    const birth = new Date(profile.date_of_birth);
+    const today = new Date();
+    let age = today.getFullYear() - birth.getFullYear();
+    const m = today.getMonth() - birth.getMonth();
+    if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
+    return age > 0 ? age : undefined;
+  })();
 
   const hasDISC = profile.disc_dominante != null;
   const topCompetencies = profile.pdp_top_10_competencies || [];
@@ -577,10 +590,10 @@ export function CandidateCard({
 
         {/* Quick facts bar */}
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 mt-4 pt-4 border-t border-white/15">
-          {profile.age && (
+          {calculatedAge && (
             <span className="flex items-center gap-1.5 text-sm text-white/70 bg-white/10 px-3 py-1 rounded-full">
               <User className="w-3.5 h-3.5" />
-              {profile.age} anos
+              {calculatedAge} anos
             </span>
           )}
           {profile.city && (
@@ -613,10 +626,11 @@ export function CandidateCard({
           <p className="text-xs font-semibold text-orange-700 uppercase tracking-wide">Editar Cadastro do Candidato</p>
 
           {/* Basic Info */}
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-4 gap-3">
             <div><Label className="text-xs">Nome</Label><Input value={editForm.full_name} onChange={e => setEditForm({...editForm, full_name: e.target.value})} className="h-8 text-sm" /></div>
             <div><Label className="text-xs">Email</Label><Input value={editForm.email} onChange={e => setEditForm({...editForm, email: e.target.value})} className="h-8 text-sm" /></div>
             <div><Label className="text-xs">Telefone</Label><Input value={editForm.phone} onChange={e => setEditForm({...editForm, phone: e.target.value})} className="h-8 text-sm" /></div>
+            <div><Label className="text-xs">Data de Nascimento</Label><Input type="date" value={editForm.date_of_birth} onChange={e => setEditForm({...editForm, date_of_birth: e.target.value})} className="h-8 text-sm" /></div>
           </div>
 
           {/* Location */}

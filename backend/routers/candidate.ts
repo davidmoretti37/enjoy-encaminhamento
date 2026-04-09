@@ -610,9 +610,11 @@ export const candidateRouter = router({
       available_for_internship: z.boolean().optional(),
       available_for_apprentice: z.boolean().optional(),
       preferred_work_type: z.string().optional(),
+      date_of_birth: z.string().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       const { candidateId, ...updateData } = input;
+      if (updateData.date_of_birth === '') delete (updateData as any).date_of_birth;
       await db.updateCandidate(candidateId, updateData as any);
       return { success: true };
     }),

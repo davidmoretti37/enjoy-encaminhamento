@@ -489,6 +489,17 @@ function CompanyList({ companies, onDocumentsClick, onPaymentsClick, searchTerm,
 }
 
 function CandidateRow({ candidate, onProfileClick }: { candidate: any; onProfileClick: (candidate: any) => void }) {
+  const age = (() => {
+    const dob = candidate.date_of_birth;
+    if (!dob) return null;
+    const birth = new Date(dob);
+    const today = new Date();
+    let a = today.getFullYear() - birth.getFullYear();
+    const m = today.getMonth() - birth.getMonth();
+    if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) a--;
+    return a > 0 ? a : null;
+  })();
+
   return (
     <div className="p-3 bg-white rounded-lg border-2 border-slate-200 hover:border-orange-300 hover:shadow-md transition-all">
       <div className="flex items-center justify-between">
@@ -503,6 +514,9 @@ function CandidateRow({ candidate, onProfileClick }: { candidate: any; onProfile
               {candidate.full_name || "Candidato sem nome"}
             </span>
             <div className="flex items-center gap-2 mt-0.5">
+              {age && (
+                <p className="text-xs text-gray-500">{age} anos</p>
+              )}
               {candidate.education_level && (
                 <p className="text-xs text-gray-500">{candidate.education_level}</p>
               )}
