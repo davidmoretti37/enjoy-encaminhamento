@@ -601,6 +601,206 @@ function MatchedCandidatesList({ jobId }: { jobId: string }) {
   );
 }
 
+// Component to show all agency candidates with search (manual selection)
+function AllAgencyCandidatesList({ jobId }: { jobId: string }) {
+  const [searchTerm, setSearchTerm] = useState('');
+  const [showSection, setShowSection] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  const { data: candidates, isLoading } = trpc.agency.getCandidates.useQuery(undefined, {
+    enabled: showSection,
+  });
+
+  // Get matched candidate IDs to exclude from this list
+  const { data: matchData } = trpc.job.getMatchesForJob.useQuery(
+    { jobId, minScore: 0, limit: 100 },
+    { enabled: showSection && !!jobId }
+  );
+  const matchedIds = new Set((matchData?.matches || []).map((m: any) => m.candidateId));
+
+  const createBatchMutation = trpc.batch.createDraftBatch.useMutation({
+    onSuccess: () => {
+      toast.success(`Grupo criado com ${selectedIds.size} candidato(s)!`);
+      setSelectedIds(new Set());
+    },
+    onError: (error) => {
+      toast.error(error.message || 'Erro ao criar grupo');
+    },
+  });
+
+  const toggleSelection = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const filtered = (candidates || [])
+    .filter((c: any) => !matchedIds.has(c.id))
+    .filter((c: any) => {
+      if (!searchTerm) return true;
+      const s = searchTerm.toLowerCase();
+      return (
+        c.full_name?.toLowerCase().includes(s) ||
+        c.city?.toLowerCase().includes(s) ||
+        c.education_level?.toLowerCase().includes(s)
+      );
+    });
+
+  if (!showSection) {
+    return (
+      <div className="mt-4">
+        <Button
+          variant="outline"
+          className="w-full"
+          onClick={() => setShowSection(true)}
+        >
+          <Users className="h-4 w-4 mr-2" />
+          Buscar em todos os candidatos da agência
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-4">
+      <div className="flex items-center gap-2 mb-3">
+        <Users className="h-4 w-4 text-blue-600" />
+        <h4 className="text-sm font-medium text-gray-700">
+          Todos os Candidatos da Agência
+        </h4>
+      </div>
+
+      {/* Search bar */}
+      <div className="relative mb-3">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+        <Input
+          placeholder="Buscar por nome, cidade ou escolaridade..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          className="pl-9 pr-9 h-9"
+        />
+        {searchTerm && (
+          <button
+            onClick={() => setSearchTerm('')}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+          >
+            <span className="text-xs">✕</span>
+          </button>
+        )}
+      </div>
+
+      {isLoading ? (
+        <div className="space-y-2">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="flex items-center gap-3 p-4 border rounded-lg">
+              <Skeleton className="h-10 w-10 rounded-full shrink-0" />
+              <div className="flex-1 space-y-2">
+                <Skeleton className="h-4 w-36" />
+                <Skeleton className="h-3 w-24" />
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : filtered.length === 0 ? (
+        <p className="text-sm text-gray-500 text-center py-4">
+          {searchTerm ? 'Nenhum candidato encontrado' : 'Nenhum candidato adicional disponível'}
+        </p>
+      ) : (
+        <div className="space-y-2">
+          {filtered.map((candidate: any) => (
+            <Card key={candidate.id} className="overflow-hidden hover:shadow-sm transition-shadow">
+              <div className="w-full p-4 text-left flex items-center gap-3">
+                <div className="shrink-0" onClick={(e) => e.stopPropagation()}>
+                  <Checkbox
+                    checked={selectedIds.has(candidate.id)}
+                    onCheckedChange={() => toggleSelection(candidate.id)}
+                    className="h-4.5 w-4.5"
+                  />
+                </div>
+                <div className="h-10 w-10 rounded-full bg-gradient-to-br from-gray-400 to-gray-600 flex items-center justify-center text-white font-medium text-sm shrink-0">
+                  {candidate.full_name?.charAt(0)?.toUpperCase() || '?'}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="font-medium text-gray-900 text-sm truncate">{candidate.full_name}</p>
+                    <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${
+                      candidate.status === 'active' ? 'bg-green-50 text-green-700 border-green-200' :
+                      candidate.status === 'employed' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                      'bg-gray-50 text-gray-600 border-gray-200'
+                    }`}>
+                      {candidate.status === 'active' ? 'Ativo' : candidate.status === 'employed' ? 'Empregado' : candidate.status}
+                    </Badge>
+                  </div>
+                  <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                    {candidate.city && (
+                      <span className="text-xs text-gray-500 flex items-center gap-0.5">
+                        <MapPin className="h-3 w-3" />
+                        {candidate.city}{candidate.state ? `, ${candidate.state}` : ''}
+                      </span>
+                    )}
+                    {candidate.education_level && (
+                      <span className="text-xs text-gray-500 flex items-center gap-0.5">
+                        <GraduationCap className="h-3 w-3" />
+                        {candidate.education_level}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {/* Selection action bar */}
+      {selectedIds.size > 0 && (
+        <div className="sticky bottom-4 mt-4 z-10">
+          <div className="bg-gray-900 text-white rounded-lg shadow-lg px-4 py-3 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <CheckCircle className="h-4 w-4 text-green-400" />
+              <span className="text-sm font-medium">
+                {selectedIds.size} candidato{selectedIds.size !== 1 ? 's' : ''} selecionado{selectedIds.size !== 1 ? 's' : ''}
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-gray-300 hover:text-white hover:bg-gray-800"
+                onClick={() => setSelectedIds(new Set())}
+              >
+                Limpar
+              </Button>
+              <Button
+                size="sm"
+                className="bg-green-600 hover:bg-green-700 text-white"
+                onClick={() => {
+                  if (selectedIds.size === 0) return;
+                  createBatchMutation.mutate({
+                    jobId,
+                    candidateIds: Array.from(selectedIds),
+                  });
+                }}
+                disabled={createBatchMutation.isPending}
+              >
+                {createBatchMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+                ) : (
+                  <UserPlus className="h-4 w-4 mr-1.5" />
+                )}
+                Adicionar ao Grupo
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Component to show AI matching status for a job
 function MatchingStatusCard({ jobId }: { jobId: string }) {
   const utils = trpc.useUtils();
@@ -1199,6 +1399,7 @@ export default function AgencyJobDescriptions() {
                 {/* AI Matching Status & Candidates - Outside the job card */}
                 <MatchingStatusCard jobId={job.id} />
                 <MatchedCandidatesList jobId={job.id} />
+                <AllAgencyCandidatesList jobId={job.id} />
               </div>
               );
             })
