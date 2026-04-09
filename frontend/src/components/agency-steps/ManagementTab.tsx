@@ -37,6 +37,26 @@ export default function ManagementTab() {
     startDate: '', endDate: '',
   });
 
+  const pdfMutation = trpc.candidate.generateProfilePdf.useMutation({
+    onSuccess: (data) => {
+      const byteString = atob(data.base64);
+      const bytes = new Uint8Array(byteString.length);
+      for (let i = 0; i < byteString.length; i++) {
+        bytes[i] = byteString.charCodeAt(i);
+      }
+      const blob = new Blob([bytes], { type: "application/pdf" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = data.filename;
+      a.click();
+      URL.revokeObjectURL(url);
+    },
+    onError: (error) => {
+      toast.error(error.message || "Erro ao gerar PDF");
+    },
+  });
+
   const registerMutation = trpc.agency.registerExistingEmployee.useMutation({
     onSuccess: (data: any) => {
       toast.success('Funcionário registrado com sucesso!');
@@ -261,6 +281,8 @@ export default function ManagementTab() {
             email: selectedCandidate.email || selectedCandidate.users?.email,
             phone: selectedCandidate.phone,
           }}
+          onDownloadPdf={() => pdfMutation.mutate({ candidateId: selectedCandidate.id })}
+          isPdfLoading={pdfMutation.isPending}
         />
       )}
 

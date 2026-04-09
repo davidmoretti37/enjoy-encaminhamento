@@ -8,6 +8,7 @@ import * as db from "../db";
 import { supabaseAdmin } from "../supabase";
 import { generateCandidateSummary } from "../services/ai/summarizer";
 import { generateCandidateEmbedding, findMatchingJobs } from "../services/matching";
+import { generateCandidateCardPdf } from "../lib/candidateCardPdf";
 
 export const candidateRouter = router({
   // Check if candidate has completed onboarding
@@ -617,5 +618,57 @@ export const candidateRouter = router({
       if (updateData.date_of_birth === '') delete (updateData as any).date_of_birth;
       await db.updateCandidate(candidateId, updateData as any);
       return { success: true };
+    }),
+
+  // Generate candidate profile PDF (agency access)
+  generateProfilePdf: agencyProcedure
+    .input(z.object({ candidateId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const candidate = await db.getCandidateById(input.candidateId);
+      if (!candidate) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Candidate not found" });
+      }
+
+      // Calculate age
+      let age = null;
+      const birthDate = (candidate as any).birth_date || candidate.date_of_birth;
+      if (birthDate) {
+        const bd = new Date(birthDate);
+        const today = new Date();
+        age = today.getFullYear() - bd.getFullYear();
+        const monthDiff = today.getMonth() - bd.getMonth();
+        if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < bd.getDate())) {
+          age--;
+        }
+      }
+
+      const pdfBytes = await generateCandidateCardPdf({
+        name: candidate.full_name,
+        city: candidate.city,
+        state: candidate.state,
+        age,
+        education: candidate.education_level,
+        institution: candidate.institution,
+        course: candidate.course,
+        skills: candidate.skills as string[] | null,
+        languages: candidate.languages as any,
+        experience: candidate.experience as any,
+        summary: candidate.summary || candidate.profile_summary,
+        disc_dominante: candidate.disc_dominante,
+        disc_influente: candidate.disc_influente,
+        disc_estavel: candidate.disc_estavel,
+        disc_conforme: candidate.disc_conforme,
+        pdp_top_10_competencies: (candidate as any).pdp_top_10_competencies,
+        pdp_develop_competencies: (candidate as any).pdp_develop_competencies,
+        interview: null,
+        matchScore: null,
+        jobTitle: null,
+      });
+
+      const safeName = candidate.full_name?.replace(/[^a-zA-Z0-9]/g, "_") || "candidato";
+      return {
+        base64: Buffer.from(pdfBytes).toString("base64"),
+        filename: `${safeName}_ficha.pdf`,
+      };
     }),
 });
