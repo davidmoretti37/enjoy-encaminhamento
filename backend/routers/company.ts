@@ -4,6 +4,7 @@ import { router } from "../_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { protectedProcedure, publicProcedure } from "../_core/trpc";
 import { adminProcedure, companyProcedure } from "./procedures";
+import { parseCompensation } from "../lib/parseCompensation";
 import * as _db from "../db";
 const db: any = _db;
 import { supabaseAdmin as _supabaseAdmin } from "../supabase";
@@ -204,8 +205,7 @@ export const companyRouter = router({
       }
       const contractType = mappedType || 'clt';
 
-      const salaryMatch = input.compensation?.match(/[\d.,]+/);
-      const salary = salaryMatch ? parseFloat(salaryMatch[0].replace(/\./g, '').replace(',', '.')) : null;
+      const salary = input.compensation ? parseCompensation(input.compensation) : null;
 
       const educationMap: Record<string, 'fundamental' | 'medio' | 'superior' | 'pos-graduacao'> = {
         'fundamental_incompleto': 'fundamental',

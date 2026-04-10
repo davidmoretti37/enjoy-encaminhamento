@@ -23,7 +23,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     let query = supabase
       .from("jobs")
-      .select("id, title, contract_type, work_type, location, salary, work_schedule, published_at")
+      .select("id, title, contract_type, work_type, location, salary, salary_min, work_schedule, published_at")
       .eq("status", "open")
       .order("published_at", { ascending: false });
 

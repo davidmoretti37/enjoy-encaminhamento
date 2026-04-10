@@ -660,6 +660,7 @@ export const jobRouter = router({
         work_type: job.work_type,
         location: job.location,
         salary: job.salary,
+        salary_min: job.salary_min,
         hours_per_week: job.hours_per_week,
         published_at: job.published_at,
       }));

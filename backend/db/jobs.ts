@@ -3,6 +3,7 @@ import { supabase, supabaseAdmin } from "../supabase";
 import type { Job, InsertJob } from "./types";
 import { generateJobSummary } from "../services/ai/summarizer";
 import { generateJobEmbedding } from "../services/matching";
+import { parseCompensation } from "../lib/parseCompensation";
 
 // Cast to any to work around TS 5.9 overload resolution issues with Supabase client
 const db = supabaseAdmin as any;
@@ -227,10 +228,7 @@ export async function createJobFromCompanyForm(
   // Parse salary from compensation string (e.g., "R$ 2.000,00" -> 2000)
   let salary: number | null = null;
   if (formData.compensation) {
-    const match = formData.compensation.match(/[\d.,]+/);
-    if (match) {
-      salary = parseFloat(match[0].replace(/\./g, "").replace(",", "."));
-    }
+    salary = parseCompensation(formData.compensation);
   }
 
   const contractTypeMap: Record<string, "estagio" | "clt" | "menor-aprendiz" | "pj"> = {

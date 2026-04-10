@@ -5,6 +5,7 @@ import { TRPCError } from "@trpc/server";
 import { publicProcedure } from "../_core/trpc";
 import { adminProcedure, agencyProcedure } from "./procedures";
 import { sendEmail } from "./email";
+import { parseCompensation } from "../lib/parseCompensation";
 import * as _db from "../db";
 const db: any = _db;
 import { supabaseAdmin as _supabaseAdmin } from "../supabase";
@@ -716,8 +717,7 @@ export const agencyRouter = router({
       };
       const contractType = contractTypeMap[input.employmentType || 'clt'] || 'clt';
 
-      const salaryMatch = input.compensation?.match(/[\d.,]+/);
-      const salary = salaryMatch ? parseFloat(salaryMatch[0].replace(/\./g, '').replace(',', '.')) : null;
+      const salary = input.compensation ? parseCompensation(input.compensation) : null;
 
       const educationMap: Record<string, 'fundamental' | 'medio' | 'superior' | 'pos-graduacao'> = {
         'fundamental_incompleto': 'fundamental',

@@ -53,6 +53,7 @@ interface Job {
   work_type: string | null;
   location: string | null;
   salary: number | null;
+  salary_min: number | null;
   work_schedule: string | null;
   published_at: string | null;
 }
@@ -227,9 +228,12 @@ export default function PublicVagasPage() {
                             )}
                           </div>
                           <div className="flex items-center gap-4 mt-2">
-                            {job.salary && (
+                            {(job.salary_min || job.salary) && (
                               <span className="text-sm font-semibold text-[#0A2342]">
-                                R$ {Number(job.salary).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}/mês
+                                R$ {job.salary_min
+                                  ? Number(job.salary_min).toLocaleString("pt-BR", { minimumFractionDigits: 2 })
+                                  : (Number(job.salary) / 100).toLocaleString("pt-BR", { minimumFractionDigits: 2 })
+                                }/mês
                               </span>
                             )}
                             {job.published_at && (
