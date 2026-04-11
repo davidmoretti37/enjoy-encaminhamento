@@ -36,7 +36,7 @@ export const supabase = createClient<Database>(
       autoRefreshToken: true,
       persistSession: true,
       detectSessionInUrl: true,
-      storage: sessionStorage, // Tab-isolated storage - allows different accounts in different tabs
+      storage: localStorage,
     },
     global: {
       fetch: proxyFetch,

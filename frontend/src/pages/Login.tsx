@@ -22,7 +22,7 @@ import {
 import { signIn, signUp, getSession, resetPassword } from '@/lib/auth-helpers';
 import { useAuth } from '@/_core/hooks/useAuth';
 import { trpc } from '@/lib/trpc';
-import { Briefcase, Loader2, MapPin } from 'lucide-react';
+import { Briefcase, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function Login() {
@@ -175,11 +175,14 @@ export default function Login() {
       // Wait a moment for the auth to propagate
       await new Promise(resolve => setTimeout(resolve, 500));
 
+      // Refresh auth state so useAuth picks up the new session
+      await refresh();
+
       // Redirect based on the role we just signed up with (we know it from state)
       if (signupRole === 'company') {
-        window.location.href = '/company/onboarding';
+        setLocation('/company/onboarding');
       } else {
-        window.location.href = '/candidate/onboarding';
+        setLocation('/candidate/onboarding');
       }
     } catch (error: any) {
       toast.error(error.message || 'Erro ao criar conta');
@@ -379,10 +382,7 @@ export default function Login() {
                       <SelectContent>
                         {agencies?.map(agency => (
                           <SelectItem key={agency.id} value={agency.id}>
-                            <div className="flex items-center gap-2">
-                              <MapPin className="h-4 w-4 text-muted-foreground" />
-                              <span>{agency.city} - {agency.state}</span>
-                            </div>
+                            {agency.city} - {agency.state}
                           </SelectItem>
                         ))}
                       </SelectContent>
