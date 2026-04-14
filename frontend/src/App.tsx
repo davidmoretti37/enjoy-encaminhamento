@@ -118,6 +118,12 @@ function Router() {
       <Route path={"/assinar/:token"} component={ExternalSigningPage} />
       <Route path={"/404"} component={NotFound} />
 
+      {/* Onboarding routes — outside AuthGuard because they handle their own
+           auth checks internally. This prevents the race condition where AuthGuard
+           reads a stale null from the auth.me cache right after signup. */}
+      <Route path={"/company/onboarding"} component={CompanyOnboarding} />
+      <Route path={"/candidate/onboarding"} component={CandidateOnboarding} />
+
       {/* All other routes require authentication */}
       <Route>
         <AuthGuard>
@@ -143,10 +149,8 @@ function Router() {
             <Route path={"/settings"} component={SettingsPage} />
             <Route path={"/notifications"} component={NotificationsScreen} />
 
-            {/* Onboarding Routes */}
-            <Route path={"/company/onboarding"} component={CompanyOnboarding} />
+            {/* Onboarding Routes (non-candidate/company) */}
             <Route path={"/company/pending-contracts"} component={CompanyPendingContracts} />
-            <Route path={"/candidate/onboarding"} component={CandidateOnboarding} />
 
             {/* NEW: Company Funnel Portal - replaces all old company routes */}
             <Route path={"/company/portal"} component={EmpresaPortal} />

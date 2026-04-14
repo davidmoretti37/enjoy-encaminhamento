@@ -59,8 +59,28 @@ export async function signUp(
         throw new Error("Este email já está cadastrado. Faça login com sua senha.");
       }
 
-      // Recovery succeeded — user can continue to onboarding
+      // Recovery succeeded — update auth metadata with the agency_id from
+      // the signup form so createProfile can backfill it to the users row
       console.log("[Auth] Recovery sign-in successful:", signInData.user?.email);
+      if (signInData.user && signInData.session) {
+        try {
+          if (metadata?.agency_id) {
+            await supabase.auth.updateUser({
+              data: { agency_id: metadata.agency_id },
+            });
+          }
+          await fetch(`${API_URL}/api/trpc/auth.createProfile`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${signInData.session.access_token}`,
+            },
+            body: JSON.stringify({ json: { name: metadata?.name } }),
+          });
+        } catch (e) {
+          console.error("[Auth] Recovery createProfile failed:", e);
+        }
+      }
       return signInData;
     }
 

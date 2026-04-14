@@ -175,14 +175,12 @@ export default function Login() {
       // Wait a moment for the auth to propagate
       await new Promise(resolve => setTimeout(resolve, 500));
 
-      // Refresh auth state so useAuth picks up the new session
-      await refresh();
-
-      // Redirect based on the role we just signed up with (we know it from state)
+      // Full page reload so Supabase session is picked up fresh from localStorage
+      // (setLocation would hit AuthGuard before the auth query cache updates)
       if (signupRole === 'company') {
-        setLocation('/company/onboarding');
+        window.location.href = '/company/onboarding';
       } else {
-        setLocation('/candidate/onboarding');
+        window.location.href = '/candidate/onboarding';
       }
     } catch (error: any) {
       toast.error(error.message || 'Erro ao criar conta');
