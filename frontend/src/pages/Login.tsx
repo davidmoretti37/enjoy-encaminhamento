@@ -372,19 +372,20 @@ export default function Login() {
                   {/* Agency field is required only in agency-context signup flows.
                      Candidates who sign up independently may have agency_id = NULL. */}
                   <div className="space-y-2">
-                    <Label>Região</Label>
-                    <Select value={signupAgencyId} onValueChange={setSignupAgencyId}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecione a região" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {agencies?.map(agency => (
-                          <SelectItem key={agency.id} value={agency.id}>
-                            {agency.city} - {agency.state}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <Label htmlFor="signup-region">Região</Label>
+                    <select
+                      id="signup-region"
+                      value={signupAgencyId}
+                      onChange={(e) => setSignupAgencyId(e.target.value)}
+                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                    >
+                      <option value="" disabled>Selecione a região</option>
+                      {agencies?.map(agency => (
+                        <option key={agency.id} value={agency.id}>
+                          {agency.city} - {agency.state}
+                        </option>
+                      ))}
+                    </select>
                     <p className="text-xs text-muted-foreground">
                       {signupRole === 'company'
                         ? 'Selecione a região onde sua empresa está localizada'
