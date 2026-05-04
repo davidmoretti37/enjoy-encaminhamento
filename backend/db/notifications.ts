@@ -1,5 +1,7 @@
 // Notification database operations
-import { supabase } from "../supabase";
+// Use the admin client so server-side writes are not blocked by RLS
+// (the `notifications` table has no INSERT policy for end-users).
+import { supabaseAdmin as supabase } from "../supabase";
 import type { Notification } from "./types";
 
 export async function getNotificationsByUserId(userId: string): Promise<Notification[]> {

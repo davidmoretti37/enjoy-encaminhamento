@@ -9,6 +9,7 @@ import { supabaseAdmin } from "../supabase";
 import { generateCandidateSummary } from "../services/ai/summarizer";
 import { generateCandidateEmbedding, findMatchingJobs } from "../services/matching";
 import { generateCandidateCardPdf } from "../lib/candidateCardPdf";
+import { mapEducationLevel } from "../_core/educationLevel";
 
 export const candidateRouter = router({
   // Check if candidate has completed onboarding
@@ -115,20 +116,7 @@ export const candidateRouter = router({
       // Sanitize empty strings for timestamp fields
       if (input.date_of_birth === '') (input as any).date_of_birth = undefined;
 
-      // Map frontend education level values to database enum
-      const educationLevelMap: Record<string, string> = {
-        'fundamental_incompleto': 'fundamental',
-        'fundamental_completo': 'fundamental',
-        'medio_incompleto': 'medio',
-        'medio_completo': 'medio',
-        'tecnico': 'medio',
-        'superior_incompleto': 'superior',
-        'superior_completo': 'superior',
-        'pos_graduacao': 'pos-graduacao',
-        'mestrado': 'mestrado',
-        'doutorado': 'doutorado',
-      };
-      const mappedEducationLevel = educationLevelMap[input.education_level] || input.education_level;
+      const mappedEducationLevel = mapEducationLevel(input.education_level);
 
       // Prepare data with mapped education level and agency_id
       // Convert courses array to comma-separated string for storage
@@ -294,7 +282,7 @@ export const candidateRouter = router({
         city: input.city,
         state: input.state,
         zip_code: input.zipCode,
-        education_level: input.educationLevel,
+        education_level: mapEducationLevel(input.educationLevel) as any,
         currently_studying: input.currentlyStudying,
         institution: input.institution,
         course: input.course,
@@ -346,6 +334,9 @@ export const candidateRouter = router({
       }
       const updateData = { ...input };
       if (updateData.date_of_birth === '') delete updateData.date_of_birth;
+      if (updateData.education_level !== undefined) {
+        (updateData as any).education_level = mapEducationLevel(updateData.education_level);
+      }
       await db.updateCandidate(candidate.id, updateData as any);
       return { success: true };
     }),
@@ -616,6 +607,9 @@ export const candidateRouter = router({
     .mutation(async ({ ctx, input }) => {
       const { candidateId, ...updateData } = input;
       if (updateData.date_of_birth === '') delete (updateData as any).date_of_birth;
+      if (updateData.education_level !== undefined) {
+        (updateData as any).education_level = mapEducationLevel(updateData.education_level);
+      }
       await db.updateCandidate(candidateId, updateData as any);
       return { success: true };
     }),

@@ -196,12 +196,31 @@ export const hiringRouter = router({
         throw new TRPCError({ code: "NOT_FOUND", message: "Candidate not found" });
       }
 
-      // Check if already has a hiring process
-      const existingProcess = await hiringDb.getHiringProcessByApplication(input.applicationId);
-      if (existingProcess) {
+      // Check if already has an active hiring process for this candidate+job.
+      // Two independent checks: by application id (when present) and by
+      // (candidate_id, job_id) — the batch path skips applicationId, which
+      // historically allowed duplicate hires through clicking again after a
+      // partial failure (e.g. an RLS error on notification insert).
+      if (input.applicationId) {
+        const existingByApp = await hiringDb.getHiringProcessByApplication(input.applicationId);
+        if (existingByApp) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Já existe um processo de contratação para esta candidatura",
+          });
+        }
+      }
+      const { data: existingByPair } = await supabaseAdmin
+        .from("hiring_processes")
+        .select("id, status")
+        .eq("candidate_id", candidate.id)
+        .eq("job_id", job.id)
+        .not("status", "in", "(cancelled,failed)")
+        .maybeSingle();
+      if (existingByPair) {
         throw new TRPCError({
           code: "BAD_REQUEST",
-          message: "Já existe um processo de contratação para esta candidatura",
+          message: "Já existe um processo de contratação ativo para este candidato nesta vaga",
         });
       }
 
@@ -257,7 +276,7 @@ export const hiringRouter = router({
       // For estágio: status is awaiting_configuration (agency must configure before contracts go out)
       // For CLT: status is pending_signatures (immediate)
       const hiringProcess = await hiringDb.createHiringProcess({
-        applicationId: input.applicationId,
+        applicationId: input.applicationId || application?.id,
         batchId: input.batchId,
         companyId: company.id,
         candidateId: candidate.id,

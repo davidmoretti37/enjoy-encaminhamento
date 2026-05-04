@@ -959,6 +959,7 @@ export default function AgencyJobDescriptions() {
     description: '',
     requirements: '',
     openings: '1',
+    location: '',
   });
 
   // Edit job dialog state
@@ -973,6 +974,7 @@ export default function AgencyJobDescriptions() {
     description: '',
     requirements: '',
     openings: '1',
+    location: '',
   });
 
   // Delete confirmation state
@@ -1000,6 +1002,7 @@ export default function AgencyJobDescriptions() {
         description: '',
         requirements: '',
         openings: '1',
+        location: '',
       });
       utils.job.getByCompanyId.invalidate({ companyId: companyId || '' });
     },
@@ -1025,6 +1028,7 @@ export default function AgencyJobDescriptions() {
       salaryMax: formData.salary ? parseFloat(formData.salary) : undefined,
       requirements: formData.requirements || undefined,
       openings: formData.openings ? parseInt(formData.openings) : 1,
+      location: formData.location || undefined,
     });
   };
 
@@ -1064,6 +1068,7 @@ export default function AgencyJobDescriptions() {
       description: job.description || '',
       requirements: job.specific_requirements || job.requirements || '',
       openings: String(job.openings || 1),
+      location: job.location || '',
     });
     setIsEditDialogOpen(true);
   };
@@ -1084,6 +1089,7 @@ export default function AgencyJobDescriptions() {
       salaryMax: editFormData.salary ? parseFloat(editFormData.salary) : undefined,
       requirements: editFormData.requirements || undefined,
       openings: editFormData.openings ? parseInt(editFormData.openings) : 1,
+      location: editFormData.location || undefined,
     });
   };
 
@@ -1213,6 +1219,15 @@ export default function AgencyJobDescriptions() {
                     onChange={(e) => setFormData(prev => ({ ...prev, openings: e.target.value }))}
                   />
                 </div>
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="location">Cidade</Label>
+                <Input
+                  id="location"
+                  placeholder="Ex: Uberlândia, MG"
+                  value={formData.location}
+                  onChange={(e) => setFormData(prev => ({ ...prev, location: e.target.value }))}
+                />
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="work_schedule">Horario de trabalho</Label>
@@ -1553,6 +1568,15 @@ export default function AgencyJobDescriptions() {
                     onChange={(e) => setEditFormData(prev => ({ ...prev, openings: e.target.value }))}
                   />
                 </div>
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="edit-location">Cidade</Label>
+                <Input
+                  id="edit-location"
+                  placeholder="Ex: Uberlândia, MG"
+                  value={editFormData.location}
+                  onChange={(e) => setEditFormData(prev => ({ ...prev, location: e.target.value }))}
+                />
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="edit-work_schedule">Horário de trabalho</Label>

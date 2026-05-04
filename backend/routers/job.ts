@@ -83,6 +83,7 @@ export const jobRouter = router({
       requirements: z.string().optional(),
       openings: z.number().optional(),
       status: z.enum(["draft", "open", "closed", "filled", "paused"]).optional(),
+      location: z.string().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       const { jobId, ...fields } = input;
@@ -111,6 +112,7 @@ export const jobRouter = router({
       if (fields.requirements !== undefined) updateData.specific_requirements = fields.requirements || null;
       if (fields.openings !== undefined) updateData.openings = fields.openings;
       if (fields.status !== undefined) updateData.status = fields.status;
+      if (fields.location !== undefined) updateData.location = fields.location?.trim() || null;
 
       await supabaseAdmin.from('jobs').update(updateData).eq('id', jobId);
 
@@ -177,6 +179,7 @@ export const jobRouter = router({
       salaryMax: z.number().optional(),
       requirements: z.string().optional(),
       openings: z.number().default(1),
+      location: z.string().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       // Allow admin and agency roles
@@ -202,6 +205,20 @@ export const jobRouter = router({
         agencyId = companyData?.agency_id;
       }
 
+      // Default location from the company's city/state if the caller didn't supply one,
+      // so candidate-facing listings always show a city.
+      let location: string | null = input.location?.trim() || null;
+      if (!location) {
+        const { data: companyData } = await supabaseAdmin
+          .from('companies')
+          .select('city, state')
+          .eq('id', input.companyId)
+          .single();
+        if (companyData?.city) {
+          location = companyData.state ? `${companyData.city}, ${companyData.state}` : companyData.city;
+        }
+      }
+
       // Insert job directly
       const { data, error } = await supabaseAdmin.from('jobs').insert({
         company_id: input.companyId,
@@ -215,6 +232,7 @@ export const jobRouter = router({
         salary_max: input.salaryMax || null,
         specific_requirements: input.requirements || null,
         openings: input.openings,
+        location,
         status: 'open',
         published_at: new Date().toISOString(),
       }).select('id').single();
