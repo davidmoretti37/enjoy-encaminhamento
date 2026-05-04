@@ -1810,6 +1810,230 @@ function CreateInvitationButton({
   );
 }
 
+// Agency-side actions on a hiring process card: cancel, mark active, edit fee,
+// upload CLT contract. Rendered inside each card on the Finalização step.
+function HiringFinalizationActions({
+  hp,
+  jobId,
+}: {
+  hp: any;
+  jobId: string;
+}) {
+  const utils = trpc.useUtils();
+  const invalidate = () => utils.hiring.invalidate();
+
+  const [isFeeOpen, setIsFeeOpen] = useState(false);
+  const [feeReais, setFeeReais] = useState<string>(((hp.calculated_fee || 0) / 100).toFixed(2));
+  const [isCancelOpen, setIsCancelOpen] = useState(false);
+  const [cancelReason, setCancelReason] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const cancelMutation = trpc.hiring.cancelHiring.useMutation({
+    onSuccess: () => { toast.success('Contratação cancelada'); setIsCancelOpen(false); invalidate(); },
+    onError: (e) => toast.error(e.message || 'Erro ao cancelar'),
+  });
+  const finalizeMutation = trpc.hiring.markHiringActive.useMutation({
+    onSuccess: () => { toast.success('Contratação finalizada'); invalidate(); },
+    onError: (e) => toast.error(e.message || 'Erro ao finalizar'),
+  });
+  const updateFeeMutation = trpc.hiring.updateHiringFee.useMutation({
+    onSuccess: () => { toast.success('Taxa atualizada'); setIsFeeOpen(false); invalidate(); },
+    onError: (e) => toast.error(e.message || 'Erro ao atualizar taxa'),
+  });
+  const uploadMutation = trpc.hiring.uploadHiringContract.useMutation({
+    onSuccess: () => { toast.success('Contrato enviado'); invalidate(); },
+    onError: (e) => toast.error(e.message || 'Erro ao enviar contrato'),
+  });
+
+  const onFileChosen = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error('Arquivo muito grande. Máximo 10MB.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      const base64 = result.split(',')[1] || '';
+      uploadMutation.mutate({ hiringProcessId: hp.id, fileBase64: base64, fileName: file.name });
+    };
+    reader.readAsDataURL(file);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const onSaveFee = () => {
+    const reais = parseFloat(feeReais.replace(',', '.'));
+    if (isNaN(reais) || reais < 0) {
+      toast.error('Valor inválido');
+      return;
+    }
+    updateFeeMutation.mutate({ hiringProcessId: hp.id, fee: Math.round(reais * 100) });
+  };
+
+  const isCancelled = hp.status === 'cancelled';
+  const isActive = hp.status === 'active';
+  const isCLT = hp.hiring_type === 'clt';
+  const feeReaisDisplay = ((hp.calculated_fee || 0) / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  return (
+    <div className="mt-4 pt-4 border-t border-slate-200 space-y-3">
+      {/* Fee + edit */}
+      <div className="flex items-center justify-between gap-2">
+        <div className="text-sm">
+          <span className="text-slate-500">Taxa:</span>{' '}
+          <span className="font-medium text-[#0A2342]">R$ {feeReaisDisplay}</span>
+        </div>
+        {!isCancelled && (
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 text-xs"
+            onClick={() => { setFeeReais(((hp.calculated_fee || 0) / 100).toFixed(2)); setIsFeeOpen(true); }}
+          >
+            <Pencil className="w-3 h-3 mr-1" />
+            Editar taxa
+          </Button>
+        )}
+      </div>
+
+      {/* CLT contract upload + view */}
+      {isCLT && !isCancelled && (
+        <div className="flex items-center justify-between gap-2">
+          <div className="text-sm flex items-center gap-2">
+            <FileText className="w-4 h-4 text-slate-400" />
+            {hp.contract_document_url ? (
+              <a
+                href={hp.contract_document_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[#1B4D7A] hover:underline inline-flex items-center gap-1"
+              >
+                Ver contrato <ExternalLink className="w-3 h-3" />
+              </a>
+            ) : (
+              <span className="text-slate-500">Nenhum contrato anexado</span>
+            )}
+          </div>
+          <div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".pdf,.docx"
+              className="hidden"
+              onChange={onFileChosen}
+            />
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-xs"
+              disabled={uploadMutation.isPending}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              {uploadMutation.isPending ? (
+                <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+              ) : (
+                <Upload className="w-3 h-3 mr-1" />
+              )}
+              {hp.contract_document_url ? 'Substituir' : 'Enviar contrato'}
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Action buttons */}
+      {!isCancelled && (
+        <div className="flex flex-wrap gap-2 pt-1">
+          {!isActive && (
+            <Button
+              size="sm"
+              className="h-8 bg-green-600 hover:bg-green-700 text-white"
+              disabled={finalizeMutation.isPending}
+              onClick={() => finalizeMutation.mutate({ hiringProcessId: hp.id })}
+            >
+              {finalizeMutation.isPending ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <CheckCircle className="w-3 h-3 mr-1" />}
+              Finalizar contratação
+            </Button>
+          )}
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8 text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700"
+            disabled={cancelMutation.isPending || finalizeMutation.isPending}
+            onClick={() => setIsCancelOpen(true)}
+          >
+            <Trash2 className="w-3 h-3 mr-1" />
+            Cancelar contratação
+          </Button>
+        </div>
+      )}
+
+      {/* Edit fee dialog */}
+      <Dialog open={isFeeOpen} onOpenChange={setIsFeeOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Editar valor da taxa</DialogTitle>
+            <DialogDescription>Valor cobrado da empresa por esta contratação.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label htmlFor="fee-input">Taxa (R$)</Label>
+            <Input
+              id="fee-input"
+              type="number"
+              step="0.01"
+              min="0"
+              value={feeReais}
+              onChange={(e) => setFeeReais(e.target.value)}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setIsFeeOpen(false)}>Cancelar</Button>
+            <Button
+              className="bg-[#0A2342] hover:bg-[#1B4D7A]"
+              disabled={updateFeeMutation.isPending}
+              onClick={onSaveFee}
+            >
+              {updateFeeMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Salvar'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Cancel confirmation dialog */}
+      <Dialog open={isCancelOpen} onOpenChange={setIsCancelOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Cancelar contratação</DialogTitle>
+            <DialogDescription>
+              Esta ação marcará a contratação como cancelada. Você poderá iniciar uma nova contratação para o mesmo candidato depois.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label htmlFor="cancel-reason">Motivo (opcional)</Label>
+            <Textarea
+              id="cancel-reason"
+              value={cancelReason}
+              onChange={(e) => setCancelReason(e.target.value)}
+              placeholder="Ex: Candidato desistiu, empresa cancelou..."
+              rows={3}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setIsCancelOpen(false)}>Voltar</Button>
+            <Button
+              variant="destructive"
+              disabled={cancelMutation.isPending}
+              onClick={() => cancelMutation.mutate({ hiringProcessId: hp.id, reason: cancelReason.trim() || undefined })}
+            >
+              {cancelMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Confirmar cancelamento'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
 // Helper component to handle individual job workflow state
 function JobWithWorkflow({ job, contractTypeLabels, companyName }: { job: any; contractTypeLabels: Record<string, string>; companyName: string }) {
   const [hasCreatedGroup, setHasCreatedGroup] = useState(false);
@@ -2473,6 +2697,9 @@ function JobWithWorkflow({ job, contractTypeLabels, companyName }: { job: any; c
                             onAssigned={() => utils.hiring.getHiringProcessesByJobId.invalidate({ jobId: job.id })}
                           />
                         )}
+
+                        {/* Cancel / Finalize / Edit fee / Upload CLT contract */}
+                        <HiringFinalizationActions hp={hp} jobId={job.id} />
 
                         {/* Signature progress for estágio — 4 parties */}
                         {isEstagio && hp.status === 'pending_signatures' && (

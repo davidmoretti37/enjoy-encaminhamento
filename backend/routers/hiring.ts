@@ -1679,6 +1679,249 @@ export const hiringRouter = router({
       return { success: true, count: input.documents.length };
     }),
 
+  /**
+   * Cancel a hiring process. Sets status to 'cancelled' so the partial unique
+   * index on (candidate_id, job_id) frees up — agency can start a new process
+   * for the same candidate+job afterwards. Also expires pending signing
+   * invitations, voids Autentique docs, cancels pending payments, and
+   * notifies candidate + company.
+   */
+  cancelHiring: agencyProcedure
+    .input(z.object({
+      hiringProcessId: z.string().uuid(),
+      reason: z.string().max(500).optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const process = await assertAgencyOwnsHiringProcess(ctx, input.hiringProcessId);
+      if (process.status === 'cancelled') {
+        return { success: true, alreadyCancelled: true };
+      }
+
+      const audit = `[Cancelado em ${new Date().toISOString()} por ${(ctx.user as any).email || ctx.user.id}]${input.reason ? ` ${input.reason}` : ''}`;
+      const newNotes = process.notes ? `${process.notes}\n${audit}` : audit;
+      await hiringDb.updateHiringProcess(input.hiringProcessId, {
+        status: 'cancelled',
+        notes: newNotes,
+      });
+
+      // Expire pending signing invitations so existing tokens stop working
+      try {
+        await supabaseAdmin
+          .from('signing_invitations')
+          .update({ expires_at: new Date(Date.now() - 1000).toISOString() })
+          .eq('hiring_process_id', input.hiringProcessId)
+          .is('signed_at', null);
+      } catch (e) {
+        console.error('[cancelHiring] failed to expire signing_invitations', e);
+      }
+
+      // Cancel pending payments tied to this hire's contract
+      if (process.contract_id) {
+        try {
+          await supabaseAdmin
+            .from('payments')
+            .update({ status: 'cancelled' })
+            .eq('contract_id', process.contract_id)
+            .eq('status', 'pending');
+        } catch (e) {
+          console.error('[cancelHiring] failed to cancel payments', e);
+        }
+      }
+
+      // Void Autentique documents (best-effort)
+      if (isAutentiqueConfigured() && Array.isArray(process.autentique_document_ids)) {
+        try {
+          const { deleteDocument: deleteAutentiqueDoc } = await import('../integrations/autentique');
+          for (const docId of process.autentique_document_ids) {
+            try {
+              await deleteAutentiqueDoc(docId);
+            } catch (e) {
+              console.error(`[cancelHiring] Failed to delete Autentique doc ${docId}`, e);
+            }
+          }
+        } catch (e) {
+          console.error('[cancelHiring] autentique cleanup failed', e);
+        }
+      }
+
+      // Notify candidate + company
+      try {
+        if (process.candidate?.user_id) {
+          await db.createNotification({
+            user_id: process.candidate.user_id,
+            title: 'Contratação cancelada',
+            message: `O processo de contratação para "${process.job?.title || 'a vaga'}" foi cancelado.${input.reason ? ` Motivo: ${input.reason}` : ''}`,
+            type: 'warning',
+            related_to_type: 'hiring',
+            related_to_id: input.hiringProcessId,
+          });
+        }
+        const { data: companyRow } = await supabaseAdmin
+          .from('companies').select('user_id, company_name').eq('id', process.company_id).single();
+        if (companyRow?.user_id) {
+          await db.createNotification({
+            user_id: companyRow.user_id,
+            title: 'Contratação cancelada',
+            message: `A contratação de ${process.candidate?.full_name || 'candidato'} foi cancelada pela agência.`,
+            type: 'warning',
+            related_to_type: 'hiring',
+            related_to_id: input.hiringProcessId,
+          });
+        }
+      } catch (e) {
+        console.error('[cancelHiring] notification failed', e);
+      }
+
+      return { success: true };
+    }),
+
+  /**
+   * Edit the calculated fee on a hiring process. Blocked once the process is
+   * active/completed/cancelled to prevent rewriting historical billing. Logs
+   * the change to `notes` for audit.
+   */
+  updateHiringFee: agencyProcedure
+    .input(z.object({
+      hiringProcessId: z.string().uuid(),
+      fee: z.number().int().min(0), // in cents
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const process = await assertAgencyOwnsHiringProcess(ctx, input.hiringProcessId);
+      if (['active', 'completed', 'cancelled'].includes(process.status)) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Não é possível editar a taxa de uma contratação ativa, finalizada ou cancelada',
+        });
+      }
+      const oldFee = process.calculated_fee || 0;
+      const audit = `[Taxa: R$${(oldFee/100).toFixed(2)} → R$${(input.fee/100).toFixed(2)} por ${(ctx.user as any).email || ctx.user.id} em ${new Date().toISOString()}]`;
+      const newNotes = process.notes ? `${process.notes}\n${audit}` : audit;
+      await hiringDb.updateHiringProcess(input.hiringProcessId, {
+        calculated_fee: input.fee,
+        notes: newNotes,
+      });
+      return { success: true, fee: input.fee };
+    }),
+
+  /**
+   * Upload a CLT contract document. Magic-byte validates the file is really
+   * PDF or DOCX (extension alone is not enough), aligns to the existing
+   * `employees/{companyId}/{hiringProcessId}/...` storage convention, and
+   * deletes the prior contract blob on replacement.
+   */
+  uploadHiringContract: agencyProcedure
+    .input(z.object({
+      hiringProcessId: z.string().uuid(),
+      fileBase64: z.string().max(15 * 1024 * 1024),
+      fileName: z.string(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const process = await assertAgencyOwnsHiringProcess(ctx, input.hiringProcessId);
+
+      const buffer = Buffer.from(input.fileBase64, 'base64');
+      if (buffer.length > 10 * 1024 * 1024) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Arquivo muito grande. Máximo 10MB.' });
+      }
+      if (buffer.length < 4) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Arquivo inválido' });
+      }
+
+      // Magic-byte check: PDF "%PDF" (25 50 44 46), DOCX (zip) (50 4B 03 04)
+      const head = buffer.subarray(0, 4);
+      const isPdfMagic = head[0] === 0x25 && head[1] === 0x50 && head[2] === 0x44 && head[3] === 0x46;
+      const isZipMagic = head[0] === 0x50 && head[1] === 0x4B && head[2] === 0x03 && head[3] === 0x04;
+      const lcName = input.fileName.toLowerCase();
+      const isPdfName = lcName.endsWith('.pdf');
+      const isDocxName = lcName.endsWith('.docx');
+      if (!((isPdfMagic && isPdfName) || (isZipMagic && isDocxName))) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Apenas arquivos PDF ou DOCX são permitidos',
+        });
+      }
+
+      const safeName = input.fileName
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-zA-Z0-9._-]/g, '_');
+      const mimeType = isPdfMagic
+        ? 'application/pdf'
+        : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+      const key = `employees/${process.company_id}/${input.hiringProcessId}/${Date.now()}-${safeName}`;
+      const { storagePut, storageDelete } = await import('../storage');
+
+      const priorUrl: string | null = process.contract_document_url || null;
+      const { url } = await storagePut(key, buffer, mimeType);
+
+      await hiringDb.updateHiringProcess(input.hiringProcessId, {
+        contract_document_url: url,
+      });
+
+      // Delete prior blob (best-effort)
+      if (priorUrl) {
+        const m = priorUrl.match(/\/storage\/v1\/object\/public\/contracts\/(.+)$/);
+        if (m && m[1]) {
+          try {
+            await storageDelete(m[1]);
+          } catch (e) {
+            console.error('[uploadHiringContract] failed to delete prior contract', e);
+          }
+        }
+      }
+
+      return { url };
+    }),
+
+  /**
+   * Manually mark a hiring process active. For estágio this also runs the
+   * full post-signature side effects (recurring monthly-fee payments,
+   * follow-ups, notifications) so manual finalization matches what
+   * auto-activation does after the 4-party signing flow completes.
+   */
+  markHiringActive: agencyProcedure
+    .input(z.object({
+      hiringProcessId: z.string().uuid(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const process = await assertAgencyOwnsHiringProcess(ctx, input.hiringProcessId);
+      if (process.status === 'active') {
+        return { success: true, alreadyActive: true };
+      }
+      if (process.status === 'cancelled') {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Não é possível ativar uma contratação cancelada' });
+      }
+      if (process.status === 'completed') {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Contratação já está concluída' });
+      }
+
+      const audit = `[Finalizada manualmente por ${(ctx.user as any).email || ctx.user.id} em ${new Date().toISOString()}]`;
+      const newNotes = process.notes ? `${process.notes}\n${audit}` : audit;
+
+      await hiringDb.updateHiringProcess(input.hiringProcessId, {
+        status: 'active',
+        notes: newNotes,
+      });
+
+      // Side effects matching the auto-activation path
+      const { data: company } = await supabaseAdmin
+        .from('companies').select('*').eq('id', process.company_id).single();
+
+      try {
+        await sendSignaturesCompleteNotifications(input.hiringProcessId, process, company);
+      } catch (e) {
+        console.error('[markHiringActive] notification failed', e);
+      }
+
+      if (process.hiring_type === 'estagio') {
+        try {
+          await handleEstagioSignaturesComplete(input.hiringProcessId, process, company);
+        } catch (e) {
+          console.error('[markHiringActive] estagio side effects failed', e);
+        }
+      }
+
+      return { success: true };
+    }),
+
   getHiringDocuments: agencyProcedure
     .input(z.object({
       hiringProcessId: z.string().uuid(),
@@ -1903,6 +2146,34 @@ export const publicSigningRouter = router({
 // ============================================
 // HELPER FUNCTIONS
 // ============================================
+
+/**
+ * Assert that the current agency owns the given hiring process. Admins
+ * (admin/super_admin) bypass the ownership check. Returns the loaded
+ * hiring process row when ownership is confirmed.
+ */
+async function assertAgencyOwnsHiringProcess(ctx: any, hiringProcessId: string): Promise<any> {
+  const process = await hiringDb.getHiringProcessById(hiringProcessId);
+  if (!process) {
+    throw new TRPCError({ code: 'NOT_FOUND', message: 'Processo de contratação não encontrado' });
+  }
+  if (ctx.user.role === 'admin' || ctx.user.role === 'super_admin') {
+    return process;
+  }
+  const agency = await db.getAgencyForUserContext(ctx.user.id, ctx.user.role);
+  if (!agency) {
+    throw new TRPCError({ code: 'FORBIDDEN', message: 'Sem agência associada ao usuário' });
+  }
+  const { data: company } = await supabaseAdmin
+    .from('companies')
+    .select('id, agency_id')
+    .eq('id', process.company_id)
+    .single();
+  if (!company || company.agency_id !== agency.id) {
+    throw new TRPCError({ code: 'FORBIDDEN', message: 'Esta contratação não pertence à sua agência' });
+  }
+  return process;
+}
 
 /**
  * Handle estágio follow-ups and payment generation when all signatures complete
