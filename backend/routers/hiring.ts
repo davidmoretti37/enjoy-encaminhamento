@@ -1793,6 +1793,23 @@ export const hiringRouter = router({
           message: 'Não é possível editar a taxa de uma contratação ativa, finalizada ou cancelada',
         });
       }
+      // If the contract already has a pending payment (CLT invoice generated),
+      // refuse — the agency must cancel/reissue the invoice through the
+      // payments flow instead of silently desyncing fee vs invoice.
+      if (process.status === 'pending_payment' && process.contract_id) {
+        const { data: existingPayments } = await supabaseAdmin
+          .from('payments')
+          .select('id, amount')
+          .eq('contract_id', process.contract_id)
+          .eq('status', 'pending')
+          .limit(1);
+        if (existingPayments && existingPayments.length > 0) {
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: 'A fatura já foi gerada. Cancele a contratação e crie uma nova para alterar a taxa.',
+          });
+        }
+      }
       const oldFee = process.calculated_fee || 0;
       const audit = `[Taxa: R$${(oldFee/100).toFixed(2)} → R$${(input.fee/100).toFixed(2)} por ${(ctx.user as any).email || ctx.user.id} em ${new Date().toISOString()}]`;
       const newNotes = process.notes ? `${process.notes}\n${audit}` : audit;
@@ -1912,10 +1929,28 @@ export const hiringRouter = router({
       }
 
       if (process.hiring_type === 'estagio') {
-        try {
-          await handleEstagioSignaturesComplete(input.hiringProcessId, process, company);
-        } catch (e) {
-          console.error('[markHiringActive] estagio side effects failed', e);
+        // Idempotency: if recurring monthly-fee payments already exist for
+        // this contract (e.g. an earlier run already produced them, or
+        // auto-activation fired), skip the side-effect chain so we don't
+        // double-bill the company.
+        let alreadyHasPayments = false;
+        if (process.contract_id) {
+          const { data: existingPayments } = await supabaseAdmin
+            .from('payments')
+            .select('id')
+            .eq('contract_id', process.contract_id)
+            .eq('payment_type', 'monthly-fee')
+            .limit(1);
+          alreadyHasPayments = !!(existingPayments && existingPayments.length > 0);
+        }
+        if (!alreadyHasPayments) {
+          try {
+            await handleEstagioSignaturesComplete(input.hiringProcessId, process, company);
+          } catch (e) {
+            console.error('[markHiringActive] estagio side effects failed', e);
+          }
+        } else {
+          console.log('[markHiringActive] payments already exist, skipping side effects');
         }
       }
 

@@ -144,7 +144,7 @@ export async function getHiringProcessById(id: string): Promise<any | null> {
       application:applications(*),
       contract:contracts(*),
       company:companies(id, company_name, email, cnpj),
-      candidate:candidates(id, full_name, email, phone, cpf, parent_guardian_name, parent_guardian_email, parent_guardian_cpf, educational_institution_name, educational_institution_email),
+      candidate:candidates(id, user_id, full_name, email, phone, cpf, parent_guardian_name, parent_guardian_email, parent_guardian_cpf, educational_institution_name, educational_institution_email),
       job:jobs(id, title, contract_type, salary),
       signing_invitations:signing_invitations(*)
     `)
@@ -169,6 +169,8 @@ export async function getHiringProcessesByJobId(jobId: string): Promise<any[]> {
     .select(`
       id, status, hiring_type, created_at, start_date, end_date,
       company_signed, candidate_signed, parent_signed, school_signed,
+      calculated_fee, contract_document_url, notes,
+      contract_id, company_id, autentique_document_ids,
       candidate:candidates(id, full_name),
       signing_invitations:signing_invitations(id, signer_role, signer_name, signer_email, signed_at, email_sent_at, token)
     `)
