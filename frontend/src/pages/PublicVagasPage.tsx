@@ -56,6 +56,7 @@ interface Job {
   salary_min: number | null;
   work_schedule: string | null;
   published_at: string | null;
+  description: string | null;
 }
 
 export default function PublicVagasPage() {
@@ -227,6 +228,11 @@ export default function PublicVagasPage() {
                               </span>
                             )}
                           </div>
+                          {job.description && (
+                            <p className="mt-3 text-sm text-slate-600 line-clamp-3 leading-relaxed">
+                              {job.description}
+                            </p>
+                          )}
                           <div className="flex items-center gap-4 mt-2">
                             {(job.salary_min || job.salary) && (
                               <span className="text-sm font-semibold text-[#0A2342]">
