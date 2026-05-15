@@ -12,6 +12,7 @@ import { createDocument as createAutentiqueDocument, isAutentiqueConfigured, get
 import { ENV } from "../_core/env";
 import { supabaseAdmin as _supabaseAdmin } from "../supabase";
 const supabaseAdmin = _supabaseAdmin as any;
+import { parseCompensation } from "../lib/parseCompensation";
 import { escapeHtml } from "../_core/htmlEscape";
 import { passwordSchema } from "../_core/passwordSchema";
 import { generateCompanySummary } from "../services/ai/summarizer";
@@ -657,6 +658,76 @@ export const outreachRouter = router({
       }
     }),
 
+  // Manually attach a meeting link (Zoom personal room, Teams, etc.) when
+  // the automatic Zoom/Meet integrations aren't configured or are failing.
+  setManualMeetingLink: agencyProcedure
+    .input(
+      z.object({
+        meetingId: z.string().uuid(),
+        meetingLink: z.string().url("Link inválido — deve começar com https://"),
+        sendEmail: z.boolean().default(true),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      let agencyId: string | undefined;
+      if (ctx.user.role === "admin") {
+        agencyId = (await db.getAdminAgencyContext(ctx.user.id)) || undefined;
+      } else if (ctx.user.role === "agency") {
+        const agency = await db.getAgencyByUserId(ctx.user.id);
+        agencyId = agency?.id;
+      }
+
+      const meeting = await db.getMeetingById(input.meetingId, ctx.user.id, agencyId);
+      if (!meeting) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Reunião não encontrada" });
+      }
+
+      await db.updateMeetingLink(
+        input.meetingId,
+        ctx.user.id,
+        {
+          meetingLink: input.meetingLink,
+          meetingPlatform: "manual",
+          meetingId: input.meetingId,
+        },
+        agencyId
+      );
+
+      // Notify the company by email so they have the link too
+      if (input.sendEmail) {
+        const date = new Date(meeting.scheduled_at);
+        const dateStr = date.toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric" });
+        const timeStr = date.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+        try {
+          await sendEmail(
+            meeting.company_email,
+            "Link da Sua Reunião",
+            `
+              <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                <h2>Link da Sua Reunião</h2>
+                <p>Olá ${escapeHtml(meeting.contact_name || "Cliente")},</p>
+                <div style="background: #f5f5f5; padding: 15px; border-radius: 8px; margin: 20px 0;">
+                  <p><strong>📅 Data:</strong> ${dateStr}</p>
+                  <p><strong>🕐 Horário:</strong> ${timeStr}</p>
+                </div>
+                <div style="text-align: center; margin: 30px 0;">
+                  <a href="${input.meetingLink}" style="background: #0A2342; color: white; padding: 14px 28px; text-decoration: none; border-radius: 8px; font-weight: bold; display: inline-block;">
+                    Entrar na Reunião
+                  </a>
+                </div>
+                <p style="font-size: 12px; color: #666;">Ou copie e cole este link: ${escapeHtml(input.meetingLink)}</p>
+              </div>
+            `
+          );
+        } catch (e: any) {
+          // Email failure shouldn't roll back the link save
+          console.error("[setManualMeetingLink] Email send failed:", e?.message || e);
+        }
+      }
+
+      return { success: true, meetingUrl: input.meetingLink };
+    }),
+
   // Update company pipeline status (admin only)
   updatePipelineStatus: adminProcedure
     .input(
@@ -1172,7 +1243,8 @@ export const outreachRouter = router({
 
       // Create/update the companies row so it appears in the agency dashboard.
       // Without this, only company_forms gets written and the agency never sees
-      // the registration.
+      // the registration. We also create a matching jobs row so the requested
+      // vaga shows up in the agency's job listings.
       try {
         const existing = await db.getCompanyByEmail(input.email);
         const companyData = {
@@ -1195,15 +1267,64 @@ export const outreachRouter = router({
           state: input.state || null,
           agency_id: resolvedAgencyId || null,
         };
+        let companyId: string;
         if (existing) {
           await db.updateCompany(existing.id, companyData);
+          companyId = existing.id;
         } else {
-          await db.createCompany(companyData as any);
+          companyId = await db.createCompany(companyData as any);
         }
+
+        // Create the job from the form data (mirrors agency.registerCompany)
+        const description = `${input.mainActivities}\n\nRequisitos: ${input.requiredSkills}${input.notes ? `\n\nObservações: ${input.notes}` : ''}`;
+        const contractTypeMap: Record<string, 'estagio' | 'clt' | 'menor-aprendiz'> = {
+          'clt': 'clt',
+          'estagio': 'estagio',
+          'jovem_aprendiz': 'menor-aprendiz',
+          'pj': 'clt',
+          'temporario': 'clt',
+        };
+        const contractType = contractTypeMap[input.employmentType || 'clt'] || 'clt';
+        const salary = input.compensation ? parseCompensation(input.compensation) : null;
+        const educationMap: Record<string, 'fundamental' | 'medio' | 'superior' | 'pos-graduacao'> = {
+          'fundamental_incompleto': 'fundamental',
+          'fundamental_completo': 'fundamental',
+          'medio_incompleto': 'medio',
+          'medio_completo': 'medio',
+          'tecnico': 'medio',
+          'superior_incompleto': 'superior',
+          'superior_completo': 'superior',
+          'pos_graduacao': 'pos-graduacao',
+          'mestrado': 'pos-graduacao',
+          'doutorado': 'pos-graduacao',
+        };
+        const location = input.city && input.state
+          ? `${input.city}, ${input.state}`
+          : input.city || input.state || null;
+
+        await db.createJobForOnboarding(companyId, {
+          title: input.jobTitle,
+          description,
+          contract_type: contractType,
+          work_type: 'presencial',
+          salary: salary ? Math.round(salary) : null,
+          salary_min: salary,
+          salary_max: salary,
+          benefits: input.benefits || [],
+          min_education_level: educationMap[input.educationLevel] || null,
+          required_skills: input.requiredSkills ? [input.requiredSkills] : [],
+          requirements: input.requiredSkills || null,
+          work_schedule: input.workSchedule,
+          location,
+          openings: input.positionsCount ? parseInt(input.positionsCount) : 1,
+          status: 'open',
+          published_at: new Date().toISOString(),
+          agency_id: resolvedAgencyId || null,
+        } as any);
       } catch (e: any) {
-        // Don't fail the form submission if company sync has an issue —
+        // Don't fail the form submission if company/job sync has an issue —
         // company_forms is still the authoritative record.
-        console.error('[submitCompanyForm] Failed to sync companies row:', e?.message || e);
+        console.error('[submitCompanyForm] Failed to sync companies/jobs row:', e?.message || e);
       }
 
       return { success: true, formId: form.id };

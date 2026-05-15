@@ -27,6 +27,7 @@ import {
   Trash2,
   Loader2,
   GraduationCap,
+  Link2,
 } from "lucide-react";
 import { MeetingLoader } from "@/components/ui/MeetingLoader";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -100,6 +101,9 @@ export default function CalendarPage() {
   const [loadingAction, setLoadingAction] = useState<string | null>(null);
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [meetingToCancel, setMeetingToCancel] = useState<any>(null);
+  const [manualLinkDialogOpen, setManualLinkDialogOpen] = useState(false);
+  const [manualLinkMeeting, setManualLinkMeeting] = useState<any>(null);
+  const [manualLinkUrl, setManualLinkUrl] = useState("");
   const [meetingLoaderState, setMeetingLoaderState] = useState<{
     isLoading: boolean;
     platform: 'zoom' | 'google_meet' | null;
@@ -292,6 +296,19 @@ export default function CalendarPage() {
       } else {
         toast.error(`Erro ao criar Google Meet: ${error.message}`);
       }
+    },
+  });
+
+  const setManualLinkMutation = (trpc.outreach as any).setManualMeetingLink.useMutation({
+    onSuccess: () => {
+      toast.success("Link salvo e enviado para a empresa por email.");
+      refetchMeetings();
+      setManualLinkDialogOpen(false);
+      setManualLinkMeeting(null);
+      setManualLinkUrl("");
+    },
+    onError: (err: any) => {
+      toast.error(err.message || "Erro ao salvar link");
     },
   });
 
@@ -518,6 +535,19 @@ export default function CalendarPage() {
             >
               <Video className="h-4 w-4 mr-1" />
               Google Meet
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={createZoomMeetingMutation.isPending || createGoogleMeetingMutation.isPending}
+              onClick={() => {
+                setManualLinkMeeting(meeting);
+                setManualLinkUrl("");
+                setManualLinkDialogOpen(true);
+              }}
+            >
+              <Link2 className="h-4 w-4 mr-1" />
+              Colar Link
             </Button>
           </>
         )}
@@ -1220,6 +1250,53 @@ export default function CalendarPage() {
                 disabled={updateMeetingStatusMutation.isPending}
               >
                 {updateMeetingStatusMutation.isPending ? "Cancelando..." : "Sim, Cancelar"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Manual Link Dialog */}
+        <Dialog open={manualLinkDialogOpen} onOpenChange={setManualLinkDialogOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Colar link da reunião</DialogTitle>
+              <DialogDescription>
+                Cole o link de uma reunião do Zoom, Google Meet, Teams ou qualquer outra plataforma. O link será enviado para a empresa por email.
+              </DialogDescription>
+            </DialogHeader>
+            {manualLinkMeeting && (
+              <div className="space-y-3 py-2">
+                <div className="text-sm space-y-1">
+                  <p><strong>Empresa:</strong> {manualLinkMeeting.company_name || 'N/A'}</p>
+                  <p><strong>Data:</strong> {format(new Date(manualLinkMeeting.scheduled_at), "dd/MM/yyyy 'às' HH:mm")}</p>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="manual-link-url">Link da reunião</Label>
+                  <Input
+                    id="manual-link-url"
+                    type="url"
+                    placeholder="https://meet.google.com/abc-defg-hij"
+                    value={manualLinkUrl}
+                    onChange={(e) => setManualLinkUrl(e.target.value)}
+                    autoFocus
+                  />
+                </div>
+              </div>
+            )}
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setManualLinkDialogOpen(false)}>Cancelar</Button>
+              <Button
+                onClick={() => {
+                  if (!manualLinkMeeting || !manualLinkUrl.trim()) return;
+                  setManualLinkMutation.mutate({
+                    meetingId: manualLinkMeeting.id,
+                    meetingLink: manualLinkUrl.trim(),
+                    sendEmail: true,
+                  });
+                }}
+                disabled={setManualLinkMutation.isPending || !manualLinkUrl.trim()}
+              >
+                {setManualLinkMutation.isPending ? "Salvando..." : "Salvar e enviar"}
               </Button>
             </DialogFooter>
           </DialogContent>

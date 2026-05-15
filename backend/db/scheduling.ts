@@ -898,7 +898,7 @@ export async function updateMeetingLink(
   adminId: string,
   data: {
     meetingLink: string;
-    meetingPlatform: "zoom" | "google_meet";
+    meetingPlatform: "zoom" | "google_meet" | "manual";
     meetingId: string;
   },
   agencyId?: string
