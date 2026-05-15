@@ -315,6 +315,7 @@ export const candidateRouter = router({
       available_for_apprentice: z.boolean().optional(),
       preferred_work_type: z.string().optional(),
       photo_url: z.string().optional(),
+      is_school_student: z.boolean().optional(),
       experience: z.array(z.union([
         z.string(),
         z.object({
@@ -607,6 +608,35 @@ export const candidateRouter = router({
       }
       await db.updateCandidate(candidateId, updateData as any);
       return { success: true };
+    }),
+
+  // Candidate withdraws their own application
+  withdrawApplication: candidateProcedure
+    .input(z.object({ applicationId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const candidate = await db.getCandidateByUserId(ctx.user.id);
+      if (!candidate) throw new TRPCError({ code: 'NOT_FOUND' });
+      const application = await db.getApplicationById(input.applicationId);
+      if (!application || application.candidate_id !== candidate.id) {
+        throw new TRPCError({ code: 'FORBIDDEN' });
+      }
+      await db.updateApplication(input.applicationId, { status: 'withdrawn' });
+      return { success: true };
+    }),
+
+  // Upload resume PDF
+  uploadResume: candidateProcedure
+    .input(z.object({ base64: z.string(), fileName: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const candidate = await db.getCandidateByUserId(ctx.user.id);
+      if (!candidate) throw new TRPCError({ code: 'NOT_FOUND' });
+      const { storagePut } = await import('../storage');
+      const buffer = Buffer.from(input.base64, 'base64');
+      const safe = input.fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const key = `resumes/${candidate.id}/${Date.now()}-${safe}`;
+      const { url } = await storagePut(key, buffer, 'application/pdf');
+      await db.updateCandidate(candidate.id, { resume_url: url } as any);
+      return { success: true, url };
     }),
 
   // Generate candidate profile PDF (agency access)

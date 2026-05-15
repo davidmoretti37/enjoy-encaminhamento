@@ -1,13 +1,26 @@
 import { useCandidateFunnel } from "@/contexts/CandidateFunnelContext";
 import { CardEntrance } from "@/components/funnel";
-import { Clock, Calendar, CheckCircle, Video } from "lucide-react";
+import { Clock, Calendar, CheckCircle, Video, AlertTriangle } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
+import { useState } from "react";
+import { toast } from "sonner";
 
 export default function StepCandidaturaEnviada() {
   const { selectedApplication, refreshData } = useCandidateFunnel();
+  const [confirmWithdraw, setConfirmWithdraw] = useState(false);
+
+  const withdrawMutation = (trpc.candidate as any).withdrawApplication.useMutation({
+    onSuccess: () => {
+      toast.success("Candidatura cancelada.");
+      refreshData();
+    },
+    onError: (err: any) => {
+      toast.error(err.message || "Erro ao cancelar candidatura");
+    },
+  });
 
   const jobId = selectedApplication?.job?.id;
   const { data: meetingInfo } = trpc.batch.getCandidateMeetingInfo.useQuery(
@@ -92,6 +105,32 @@ export default function StepCandidaturaEnviada() {
           </div>
         </CardEntrance>
       )}
+
+      {/* Withdraw */}
+      <CardEntrance delay={0.05}>
+        {!confirmWithdraw ? (
+          <button
+            onClick={() => setConfirmWithdraw(true)}
+            className="w-full text-sm text-slate-400 hover:text-red-500 transition-colors py-1"
+          >
+            Desistir desta candidatura
+          </button>
+        ) : (
+          <div className="rounded-xl border border-red-200 bg-red-50 p-4 flex items-start gap-3">
+            <AlertTriangle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="text-sm font-medium text-red-700 mb-2">Confirmar desistência?</p>
+              <p className="text-xs text-red-600 mb-3">Esta ação não pode ser desfeita.</p>
+              <div className="flex gap-2">
+                <Button size="sm" variant="destructive" onClick={() => withdrawMutation.mutate({ applicationId: selectedApplication.id })} disabled={withdrawMutation.isPending}>
+                  {withdrawMutation.isPending ? "Cancelando..." : "Sim, desistir"}
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => setConfirmWithdraw(false)}>Voltar</Button>
+              </div>
+            </div>
+          </div>
+        )}
+      </CardEntrance>
 
       {/* What happens next */}
       <CardEntrance delay={meetingInfo?.meeting_scheduled_at ? 0.15 : 0.1}>

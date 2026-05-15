@@ -892,6 +892,30 @@ export default function CandidateGroupManagement({ jobId, companyInterviewCandid
                     </div>
                   )}
 
+                  {/* PDP Competencies */}
+                  {(candidate as any).pdp_competencies?.length > 0 && (
+                    <div>
+                      <h5 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Competências PDP</h5>
+                      <div className="flex flex-wrap gap-1.5">
+                        {((candidate as any).pdp_competencies as string[]).map((c: string, i: number) => (
+                          <span key={i} className="px-2 py-0.5 text-xs bg-blue-50 text-blue-700 rounded-full border border-blue-100">{c}</span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* PDP Technical Skills */}
+                  {(candidate as any).pdp_skills && Object.keys((candidate as any).pdp_skills).length > 0 && (
+                    <div>
+                      <h5 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Habilidades Técnicas (PDP)</h5>
+                      <div className="flex flex-wrap gap-1.5">
+                        {Object.values((candidate as any).pdp_skills as Record<string, string[]>).flat().map((v: string, i: number) => (
+                          <span key={i} className="px-2 py-0.5 text-xs bg-violet-50 text-violet-700 rounded-full border border-violet-100">{v}</span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   {/* AI Summary */}
                   {candidate.summary && (
                     <div>

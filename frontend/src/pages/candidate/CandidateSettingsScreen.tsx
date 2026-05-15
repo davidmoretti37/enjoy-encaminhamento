@@ -108,6 +108,7 @@ export default function CandidateSettingsScreen() {
     available_for_internship: true,
     available_for_apprentice: true,
     preferred_work_type: 'presencial',
+    is_school_student: false,
   });
 
   const [newSkill, setNewSkill] = useState('');
@@ -180,7 +181,7 @@ export default function CandidateSettingsScreen() {
         cpf: profile.cpf || '',
         email: profile.email || '',
         phone: profile.phone || '',
-        date_of_birth: profile.date_of_birth || '',
+        date_of_birth: profile.date_of_birth ? profile.date_of_birth.substring(0, 10) : '',
         city: profile.city || '',
         state: profile.state || '',
         education_level: normalizeEducationLevel(profile.education_level),
@@ -194,6 +195,7 @@ export default function CandidateSettingsScreen() {
         available_for_internship: profile.available_for_internship ?? true,
         available_for_apprentice: profile.available_for_apprentice ?? true,
         preferred_work_type: profile.preferred_work_type || 'presencial',
+        is_school_student: (profile as any).is_school_student ?? false,
       });
       setExperiences((profile.experience as any[]) || []);
     }
@@ -508,7 +510,7 @@ export default function CandidateSettingsScreen() {
                       placeholder="Nome do curso"
                     />
                   </div>
-                  <div className="flex items-center gap-2 mt-6">
+                  <div className="flex items-center gap-2 mt-2">
                     <input
                       type="checkbox"
                       id="currently_studying_personal"
@@ -517,6 +519,16 @@ export default function CandidateSettingsScreen() {
                       className="rounded"
                     />
                     <Label htmlFor="currently_studying_personal">Cursando atualmente</Label>
+                  </div>
+                  <div className="flex items-center gap-2 mt-2">
+                    <input
+                      type="checkbox"
+                      id="is_school_student_personal"
+                      checked={formData.is_school_student}
+                      onChange={(e) => handleInputChange('is_school_student', e.target.checked)}
+                      className="rounded"
+                    />
+                    <Label htmlFor="is_school_student_personal">Aluno(a) da escola ANEC</Label>
                   </div>
                 </div>
               </div>
@@ -1376,26 +1388,94 @@ function CandidateAssessmentsTab({ profile }: { profile: any }) {
 
 function CandidateDocumentsTab() {
   const { data: docs, isLoading } = trpc.candidate.getMyDocuments.useQuery();
+  const { data: profile, refetch: refetchProfile } = trpc.candidate.getProfile.useQuery();
+  const [uploadingResume, setUploadingResume] = useState(false);
+
+  const uploadResumeMutation = (trpc.candidate as any).uploadResume.useMutation({
+    onSuccess: () => {
+      toast.success("Currículo enviado com sucesso!");
+      refetchProfile();
+      setUploadingResume(false);
+    },
+    onError: (err: any) => {
+      toast.error(err.message || "Erro ao enviar currículo");
+      setUploadingResume(false);
+    },
+  });
+
+  const handleResumeUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.type !== 'application/pdf') { toast.error("Selecione um arquivo PDF"); return; }
+    if (file.size > 5 * 1024 * 1024) { toast.error("Arquivo muito grande. Máximo 5MB"); return; }
+    setUploadingResume(true);
+    const reader = new FileReader();
+    reader.onload = () => {
+      const base64 = (reader.result as string).split(',')[1];
+      uploadResumeMutation.mutate({ base64, fileName: file.name });
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  };
+
+  const resumeSection = (
+    <CardEntrance>
+      <div className="bg-white rounded-xl border-2 border-slate-200 shadow-sm p-6">
+        <h3 className="text-[#0A2342] font-semibold mb-4">Currículo</h3>
+        {(profile as any)?.resume_url ? (
+          <div className="flex items-center gap-4 flex-wrap">
+            <a
+              href={(profile as any).resume_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-50 text-blue-700 border border-blue-200 text-sm font-medium hover:bg-blue-100 transition-colors"
+            >
+              <ExternalLink className="w-4 h-4" />
+              Ver currículo atual
+            </a>
+            <label className="cursor-pointer inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-100 text-slate-700 border border-slate-200 text-sm font-medium hover:bg-slate-200 transition-colors">
+              <Upload className="w-4 h-4" />
+              {uploadingResume ? "Enviando..." : "Substituir"}
+              <input type="file" accept=".pdf" className="hidden" onChange={handleResumeUpload} disabled={uploadingResume} />
+            </label>
+          </div>
+        ) : (
+          <label className="cursor-pointer inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[#FF6B35] text-white text-sm font-medium hover:bg-[#FF6B35]/90 transition-colors shadow-sm">
+            <Upload className="w-4 h-4" />
+            {uploadingResume ? "Enviando..." : "Enviar currículo (PDF)"}
+            <input type="file" accept=".pdf" className="hidden" onChange={handleResumeUpload} disabled={uploadingResume} />
+          </label>
+        )}
+        <p className="text-xs text-slate-400 mt-2">PDF, máximo 5MB</p>
+      </div>
+    </CardEntrance>
+  );
 
   if (isLoading) {
     return (
-      <CardEntrance>
-        <div className="py-4">
-          <FormSkeleton fields={5} />
-        </div>
-      </CardEntrance>
+      <div className="space-y-4">
+        {resumeSection}
+        <CardEntrance>
+          <div className="py-4">
+            <FormSkeleton fields={5} />
+          </div>
+        </CardEntrance>
+      </div>
     );
   }
 
   if (!docs || docs.length === 0) {
     return (
-      <CardEntrance>
-        <div className="bg-white rounded-xl border-2 border-slate-200 shadow-sm p-12 text-center">
-          <FileText className="w-12 h-12 text-slate-400 mx-auto mb-3" />
-          <p className="text-slate-500">Nenhum documento assinado</p>
-          <p className="text-slate-400 text-sm mt-1">Seus contratos assinados aparecerão aqui</p>
-        </div>
-      </CardEntrance>
+      <div className="space-y-4">
+        {resumeSection}
+        <CardEntrance>
+          <div className="bg-white rounded-xl border-2 border-slate-200 shadow-sm p-12 text-center">
+            <FileText className="w-12 h-12 text-slate-400 mx-auto mb-3" />
+            <p className="text-slate-500">Nenhum documento assinado</p>
+            <p className="text-slate-400 text-sm mt-1">Seus contratos assinados aparecerão aqui</p>
+          </div>
+        </CardEntrance>
+      </div>
     );
   }
 
@@ -1409,6 +1489,7 @@ function CandidateDocumentsTab() {
 
   return (
     <div className="space-y-6">
+      {resumeSection}
       {Object.entries(grouped).map(([cat, catDocs]) => (
         <CardEntrance key={cat}>
           <div className="bg-white rounded-xl border-2 border-slate-200 shadow-sm p-6">
