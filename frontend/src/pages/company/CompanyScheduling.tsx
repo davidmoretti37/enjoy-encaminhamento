@@ -46,20 +46,24 @@ export default function CompanyScheduling() {
 
   const utils = trpc.useUtils();
 
-  const { data: visits, isLoading: visitsLoading } = trpc.company.getVisits.useQuery(
+  // getVisits + getPendingFeedback throw NOT_IMPLEMENTED — defaults to [] so the
+  // page renders empty sections instead of crashing.
+  const { data: visitsRaw, isLoading: visitsLoading } = trpc.company.getVisits.useQuery(
     undefined,
-    { enabled: !!user && user.role === 'company' }
+    { enabled: !!user && user.role === 'company', retry: false }
   );
+  const visits = (visitsRaw as any[] | undefined) ?? [];
 
   const { data: interviews, isLoading: interviewsLoading } = trpc.company.getInterviews.useQuery(
     undefined,
     { enabled: !!user && user.role === 'company' }
   );
 
-  const { data: pendingFeedback, isLoading: feedbackLoading } = trpc.company.getPendingFeedback.useQuery(
+  const { data: pendingFeedbackRaw, isLoading: feedbackLoading } = trpc.company.getPendingFeedback.useQuery(
     undefined,
-    { enabled: !!user && user.role === 'company' }
+    { enabled: !!user && user.role === 'company', retry: false }
   );
+  const pendingFeedback = (pendingFeedbackRaw as any[] | undefined) ?? [];
 
   const submitAvailabilityMutation = trpc.company.submitVisitAvailability.useMutation({
     onSuccess: () => {
@@ -134,9 +138,9 @@ export default function CompanyScheduling() {
     submitAvailabilityMutation.mutate({ presentationId, scheduledAt });
   };
 
-  const scheduledVisits = visits?.filter((v: any) => v.status === 'scheduled') || [];
-  const pendingAvailabilityVisits = visits?.filter((v: any) => v.status === 'pending_availability') || [];
-  const completedVisits = visits?.filter((v: any) => v.status === 'completed') || [];
+  const scheduledVisits = visits.filter((v: any) => v.status === 'scheduled');
+  const pendingAvailabilityVisits = visits.filter((v: any) => v.status === 'pending_availability');
+  const completedVisits = visits.filter((v: any) => v.status === 'completed');
 
   const scheduledInterviews = interviews?.filter((i: any) => i.status === 'interview-scheduled') || [];
 
@@ -311,7 +315,7 @@ export default function CompanyScheduling() {
                 )}
 
                 {/* Pending Feedback */}
-                {pendingFeedback && pendingFeedback.length > 0 && (
+                {pendingFeedback.length > 0 && (
                   <Card className="border-amber-200">
                     <CardHeader>
                       <CardTitle className="text-lg flex items-center gap-2 text-amber-700">
@@ -338,7 +342,7 @@ export default function CompanyScheduling() {
                   </Card>
                 )}
 
-                {scheduledInterviews.length === 0 && (!pendingFeedback || pendingFeedback.length === 0) && (
+                {scheduledInterviews.length === 0 && pendingFeedback.length === 0 && (
                   <div className="flex flex-col items-center justify-center py-16">
                     <div className="w-20 h-24 border-2 border-dashed border-gray-300 rounded-xl bg-gray-50/50 flex flex-col items-center justify-center gap-2 mb-6">
                       <Users className="h-8 w-8 text-gray-300" />

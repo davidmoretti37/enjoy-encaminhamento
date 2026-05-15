@@ -441,15 +441,13 @@ export const candidateRouter = router({
 
   // Admin-only routes for candidate management
   getAllForAdmin: adminProcedure.query(async () => {
-    // TODO: implement getAllCandidatesForAdmin
-    return [];
+    throw new TRPCError({ code: "NOT_IMPLEMENTED", message: "candidate.getAllForAdmin not implemented" });
   }),
 
   getByIdForAdmin: adminProcedure
     .input(z.object({ id: z.string().uuid() }))
-    .query(async ({ input }) => {
-      // TODO: implement getCandidateByIdForAdmin
-      return null;
+    .query(async () => {
+      throw new TRPCError({ code: "NOT_IMPLEMENTED", message: "candidate.getByIdForAdmin not implemented" });
     }),
 
   updateStatus: adminProcedure
@@ -457,9 +455,8 @@ export const candidateRouter = router({
       id: z.string().uuid(),
       status: z.enum(['active', 'inactive', 'employed'])
     }))
-    .mutation(async ({ input }) => {
-      // TODO: implement updateCandidateStatus
-      return { success: true };
+    .mutation(async () => {
+      throw new TRPCError({ code: "NOT_IMPLEMENTED", message: "candidate.updateStatus not implemented" });
     }),
 
   searchForAdmin: adminProcedure
@@ -471,9 +468,8 @@ export const candidateRouter = router({
       availableForInternship: z.boolean().optional(),
       availableForCLT: z.boolean().optional(),
     }))
-    .query(async ({ input }) => {
-      // TODO: implement searchCandidatesForAdmin
-      return [];
+    .query(async () => {
+      throw new TRPCError({ code: "NOT_IMPLEMENTED", message: "candidate.searchForAdmin not implemented" });
     }),
 
   getApplications: adminProcedure
@@ -484,9 +480,8 @@ export const candidateRouter = router({
 
   getStats: adminProcedure
     .input(z.object({ candidateId: z.string().uuid() }))
-    .query(async ({ input }) => {
-      // TODO: implement getCandidateStats
-      return { totalApplications: 0, interviews: 0, hired: 0 };
+    .query(async () => {
+      throw new TRPCError({ code: "NOT_IMPLEMENTED", message: "candidate.getStats not implemented" });
     }),
 
   // Get matching jobs for the current candidate (using vector similarity)

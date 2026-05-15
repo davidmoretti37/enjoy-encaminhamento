@@ -63,7 +63,10 @@ export default function AgencyManagement() {
   const [createdInvitation, setCreatedInvitation] = useState<any>(null);
 
   const { data: agencies, isLoading, refetch } = trpc.agency.getAll.useQuery();
-  const { data: invitations, refetch: refetchInvitations } = trpc.invitation.list.useQuery();
+  // invitation.list throws NOT_IMPLEMENTED — data will be undefined.
+  // Cast keeps the consuming UI rendering as an empty state until the procedure is real.
+  const { data: invitations, refetch: refetchInvitations } = trpc.invitation.list.useQuery(undefined, { retry: false });
+  const invitationList = (invitations as any[] | undefined) ?? [];
   const { data: franchises } = (trpc.invitation as any).getFranchises.useQuery();
 
   const updateStatusMutation = trpc.agency.updateStatus.useMutation({
@@ -242,7 +245,7 @@ export default function AgencyManagement() {
         </div>
 
         {/* Invitations Table */}
-        {invitations && invitations.length > 0 && (
+        {invitationList.length > 0 && (
           <Card className="shadow-lg">
             <CardHeader className="bg-gradient-to-r from-purple-50 to-pink-50">
               <div className="flex items-center gap-2">
@@ -267,7 +270,7 @@ export default function AgencyManagement() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {invitations.filter((inv: any) => inv.status === 'pending').map((invitation: any) => (
+                  {invitationList.filter((inv: any) => inv.status === 'pending').map((invitation: any) => (
                     <TableRow key={invitation.id}>
                       <TableCell className="font-medium">{invitation.email}</TableCell>
                       <TableCell>{invitation.franchises?.name || 'N/A'}</TableCell>

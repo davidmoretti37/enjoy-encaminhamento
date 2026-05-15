@@ -35,7 +35,10 @@ export default function FeedbackManagement() {
   const [, setLocation] = useLocation();
   const [searchTerm, setSearchTerm] = useState("");
 
-  const { data: feedbacks, isLoading, refetch } = trpc.admin.getAllFeedback.useQuery();
+  // admin.getAllFeedback throws NOT_IMPLEMENTED — falls back to an empty array
+  // so the page renders an empty state instead of crashing.
+  const { data: feedbacksRaw, isLoading, refetch } = trpc.admin.getAllFeedback.useQuery(undefined, { retry: false });
+  const feedbacks = (feedbacksRaw as any[] | undefined) ?? [];
   const updateStatusMutation = trpc.admin.updateFeedbackStatus.useMutation({
     onSuccess: () => {
       refetch();
@@ -116,14 +119,14 @@ export default function FeedbackManagement() {
   };
 
   // Calculate summary statistics
-  const totalFeedbacks = feedbacks?.length || 0;
-  const pendingFeedbacks = feedbacks?.filter((f: any) => f.status === 'pending').length || 0;
-  const submittedFeedbacks = feedbacks?.filter((f: any) => f.status === 'submitted').length || 0;
-  const reviewedFeedbacks = feedbacks?.filter((f: any) => f.status === 'reviewed').length || 0;
-  const requiresReplacement = feedbacks?.filter((f: any) => f.requires_replacement === true).length || 0;
+  const totalFeedbacks = feedbacks.length;
+  const pendingFeedbacks = feedbacks.filter((f: any) => f.status === 'pending').length;
+  const submittedFeedbacks = feedbacks.filter((f: any) => f.status === 'submitted').length;
+  const reviewedFeedbacks = feedbacks.filter((f: any) => f.status === 'reviewed').length;
+  const requiresReplacement = feedbacks.filter((f: any) => f.requires_replacement === true).length;
 
   // Filter feedbacks based on search term
-  const filteredFeedbacks = feedbacks?.filter((feedback: any) => {
+  const filteredFeedbacks = feedbacks.filter((feedback: any) => {
     if (!searchTerm) return true;
     const searchLower = searchTerm.toLowerCase();
     return (

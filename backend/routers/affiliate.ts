@@ -29,8 +29,7 @@ export const affiliateRouter = router({
 
   // Get all invitations (super admin only)
   getInvitations: adminProcedure.query(async () => {
-    // TODO: implement getAllAffiliateInvitations
-    return [];
+    throw new TRPCError({ code: "NOT_IMPLEMENTED", message: "affiliate.getInvitations not implemented" });
   }),
 
   // Create affiliate invitation (super admin only) - admin fills all details
@@ -66,17 +65,15 @@ export const affiliateRouter = router({
       })).min(1),
       commission_rate: z.number().min(0).max(100).default(10).optional(),
     }))
-    .mutation(async ({ ctx, input }) => {
-      // TODO: implement createAffiliateInvitation
-      return { success: true, token: '' };
+    .mutation(async () => {
+      throw new TRPCError({ code: "NOT_IMPLEMENTED", message: "affiliate.createInvitation not implemented" });
     }),
 
   // Verify invitation token (public - anyone with link can check)
   verifyInvitation: publicProcedure
     .input(z.object({ token: z.string() }))
-    .query(async ({ input }) => {
-      // TODO: implement verifyAffiliateInvitation
-      return null;
+    .query(async () => {
+      throw new TRPCError({ code: "NOT_IMPLEMENTED", message: "affiliate.verifyInvitation not implemented" });
     }),
 
   // Accept invitation - affiliate only provides name, phone, password
@@ -87,9 +84,8 @@ export const affiliateRouter = router({
       phone: z.string().min(1),
       password: z.string().min(6),
     }))
-    .mutation(async ({ input }) => {
-      // TODO: implement acceptAffiliateInvitation
-      throw new TRPCError({ code: 'NOT_FOUND', message: 'Invitation not found' });
+    .mutation(async () => {
+      throw new TRPCError({ code: "NOT_IMPLEMENTED", message: "affiliate.acceptInvitation not implemented" });
     }),
 
   // Update affiliate status (super admin only)

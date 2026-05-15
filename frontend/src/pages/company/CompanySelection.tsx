@@ -37,11 +37,14 @@ export default function CompanySelection() {
 
   const utils = trpc.useUtils();
 
-  // Existing presentations query
-  const { data: presentations, isLoading } = trpc.company.getPresentedCandidates.useQuery(
+  // company.getPresentedCandidates throws NOT_IMPLEMENTED — defaults to [] so the
+  // batch-based UI still renders. The "presentations" code path will be revived
+  // when the procedure is implemented.
+  const { data: presentationsRaw, isLoading } = trpc.company.getPresentedCandidates.useQuery(
     undefined,
-    { enabled: !!user && user.role === 'company' }
+    { enabled: !!user && user.role === 'company', retry: false }
   );
+  const presentations = (presentationsRaw as any[] | undefined) ?? [];
 
   // Batch query - get all batches with full candidate details
   const { data: companyBatches, isLoading: batchesLoading } = trpc.batch.getCompanyBatches.useQuery(
@@ -125,13 +128,13 @@ export default function CompanySelection() {
   };
 
   // Filter presentations that need selection (have candidates but not all selected yet)
-  const pendingPresentations = presentations?.filter((p: any) =>
+  const pendingPresentations = presentations.filter((p: any) =>
     p.candidates.length > 0 && p.candidates.some((c: any) => !c.selected)
-  ) || [];
+  );
 
-  const completedPresentations = presentations?.filter((p: any) =>
+  const completedPresentations = presentations.filter((p: any) =>
     p.candidates.length > 0 && p.candidates.every((c: any) => c.selected)
-  ) || [];
+  );
 
   // Mini card component for empty state - BIGGER size
   const MiniCard = ({ className = "" }: { className?: string }) => (
@@ -147,7 +150,7 @@ export default function CompanySelection() {
 
   // Empty state when no presentations and no batches
   const hasBatches = companyBatches && companyBatches.length > 0;
-  const hasPresentations = presentations && presentations.length > 0;
+  const hasPresentations = presentations.length > 0;
 
   if (!isLoading && !batchesLoading && !hasBatches && !hasPresentations) {
     return (

@@ -46,15 +46,19 @@ export default function CompanyEmployees() {
 
   const utils = trpc.useUtils();
 
-  const { data: contracts, isLoading } = trpc.company.getContracts.useQuery(
+  // company.getContracts + getExpiringContracts throw NOT_IMPLEMENTED — fall back
+  // to empty arrays so the rest of the page renders an empty state.
+  const { data: contractsRaw, isLoading } = trpc.company.getContracts.useQuery(
     undefined,
-    { enabled: !!user && user.role === 'company' }
+    { enabled: !!user && user.role === 'company', retry: false }
   );
+  const contracts = (contractsRaw as any[] | undefined) ?? [];
 
-  const { data: expiringContracts } = trpc.company.getExpiringContracts.useQuery(
+  const { data: expiringContractsRaw } = trpc.company.getExpiringContracts.useQuery(
     undefined,
-    { enabled: !!user && user.role === 'company' }
+    { enabled: !!user && user.role === 'company', retry: false }
   );
+  const expiringContracts = (expiringContractsRaw as any[] | undefined) ?? [];
 
   // Fetch hiring processes (pending signatures)
   const { data: hiringProcesses, isLoading: hiringLoading } = trpc.hiring.getCompanyHiringProcesses.useQuery(
@@ -136,8 +140,8 @@ export default function CompanyEmployees() {
     });
   };
 
-  const activeContracts = contracts?.filter((c: any) => c.status === 'active') || [];
-  const endedContracts = contracts?.filter((c: any) => c.status !== 'active') || [];
+  const activeContracts = contracts.filter((c: any) => c.status === 'active');
+  const endedContracts = contracts.filter((c: any) => c.status !== 'active');
 
   // Pending hiring processes (waiting for signatures)
   const pendingHiring = hiringProcesses?.filter((h: any) => h.status === 'pending_signatures') || [];
@@ -174,7 +178,7 @@ export default function CompanyEmployees() {
         </div>
 
         {/* Expiring Warning */}
-        {expiringContracts && expiringContracts.length > 0 && (
+        {expiringContracts.length > 0 && (
           <Alert className="border-amber-200 bg-amber-50">
             <AlertTriangle className="h-4 w-4 text-amber-600" />
             <AlertTitle className="text-amber-700">Contratos Expirando em Breve</AlertTitle>

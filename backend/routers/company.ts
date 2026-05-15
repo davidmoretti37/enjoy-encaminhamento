@@ -718,11 +718,8 @@ export const companyRouter = router({
     }),
 
   // Scheduling
-  getVisits: companyProcedure.query(async ({ ctx }) => {
-    const company = await db.getCompanyByUserId(ctx.user.id);
-    if (!company) return [];
-    // TODO: implement getJobPresentations
-    return [];
+  getVisits: companyProcedure.query(async () => {
+    throw new TRPCError({ code: "NOT_IMPLEMENTED", message: "company.getVisits not implemented" });
   }),
 
   submitVisitAvailability: companyProcedure
@@ -730,13 +727,8 @@ export const companyRouter = router({
       presentationId: z.string(),
       scheduledAt: z.string(),
     }))
-    .mutation(async ({ ctx, input }) => {
-      const company = await db.getCompanyByUserId(ctx.user.id);
-      if (!company) {
-        throw new TRPCError({ code: 'NOT_FOUND', message: 'Company not found' });
-      }
-      // TODO: implement submitVisitAvailability
-      return { success: true };
+    .mutation(async () => {
+      throw new TRPCError({ code: "NOT_IMPLEMENTED", message: "company.submitVisitAvailability not implemented" });
     }),
 
   getInterviews: companyProcedure.query(async ({ ctx }) => {
@@ -745,11 +737,8 @@ export const companyRouter = router({
     return await db.getInterviewSessionsByCompany(company.id);
   }),
 
-  getPendingFeedback: companyProcedure.query(async ({ ctx }) => {
-    const company = await db.getCompanyByUserId(ctx.user.id);
-    if (!company) return [];
-    // TODO: implement getInterviewsPendingFeedback
-    return [];
+  getPendingFeedback: companyProcedure.query(async () => {
+    throw new TRPCError({ code: "NOT_IMPLEMENTED", message: "company.getPendingFeedback not implemented" });
   }),
 
   submitInterviewFeedback: companyProcedure
@@ -760,19 +749,15 @@ export const companyRouter = router({
       rejectionReason: z.string().optional(),
       notes: z.string().optional(),
     }))
-    .mutation(async ({ ctx, input }) => {
-      // TODO: implement submitInterviewFeedback
-      return { success: true };
+    .mutation(async () => {
+      throw new TRPCError({ code: "NOT_IMPLEMENTED", message: "company.submitInterviewFeedback not implemented" });
     }),
 
   // Selection
   getPresentedCandidates: companyProcedure
     .input(z.object({ jobId: z.string().optional() }).optional())
-    .query(async ({ ctx, input }) => {
-      const company = await db.getCompanyByUserId(ctx.user.id);
-      if (!company) return [];
-      // TODO: implement getPresentedCandidates
-      return [];
+    .query(async () => {
+      throw new TRPCError({ code: "NOT_IMPLEMENTED", message: "company.getPresentedCandidates not implemented" });
     }),
 
   getCandidateProfile: companyProcedure
@@ -827,23 +812,15 @@ export const companyRouter = router({
       presentationId: z.string(),
       candidateIds: z.array(z.string()),
     }))
-    .mutation(async ({ ctx, input }) => {
-      const company = await db.getCompanyByUserId(ctx.user.id);
-      if (!company) {
-        throw new TRPCError({ code: 'NOT_FOUND', message: 'Company not found' });
-      }
-      // TODO: implement selectCandidatesForInterview
-      return { success: true };
+    .mutation(async () => {
+      throw new TRPCError({ code: "NOT_IMPLEMENTED", message: "company.selectCandidatesForInterview not implemented" });
     }),
 
   // Contracts
   getContracts: companyProcedure
     .input(z.object({ status: z.string().optional() }).optional())
-    .query(async ({ ctx, input }) => {
-      const company = await db.getCompanyByUserId(ctx.user.id);
-      if (!company) return [];
-      // TODO: implement getCompanyContractsWithDetails
-      return [];
+    .query(async () => {
+      throw new TRPCError({ code: "NOT_IMPLEMENTED", message: "company.getContracts not implemented" });
     }),
 
   getContractDocuments: companyProcedure
@@ -856,11 +833,8 @@ export const companyRouter = router({
       return await db.getDocumentTemplates(company.agency_id, input.category);
     }),
 
-  getExpiringContracts: companyProcedure.query(async ({ ctx }) => {
-    const company = await db.getCompanyByUserId(ctx.user.id);
-    if (!company) return [];
-    // TODO: implement getExpiringContracts
-    return [];
+  getExpiringContracts: companyProcedure.query(async () => {
+    throw new TRPCError({ code: "NOT_IMPLEMENTED", message: "company.getExpiringContracts not implemented" });
   }),
 
   // Employee details for detail page
@@ -928,11 +902,8 @@ export const companyRouter = router({
 
   getContractReports: companyProcedure
     .input(z.object({ contractId: z.string() }))
-    .query(async ({ ctx, input }) => {
-      const company = await db.getCompanyByUserId(ctx.user.id);
-      if (!company) return [];
-      // TODO: implement getContractReports
-      return [];
+    .query(async () => {
+      throw new TRPCError({ code: "NOT_IMPLEMENTED", message: "company.getContractReports not implemented" });
     }),
 
   submitMonthlyReport: companyProcedure
@@ -1097,7 +1068,8 @@ export const companyRouter = router({
         whatsapp_new_candidates: false,
       };
     }
-    // TODO: implement getCompanyNotificationPrefs
+    // Notification prefs are not yet persisted — defaults are returned.
+    // Pairs with updateNotificationPrefs which throws NOT_IMPLEMENTED.
     return {
       email_new_candidates: true,
       email_interview_reminders: true,
@@ -1119,13 +1091,8 @@ export const companyRouter = router({
       whatsapp_payment_overdue: z.boolean().optional(),
       whatsapp_new_candidates: z.boolean().optional(),
     }))
-    .mutation(async ({ ctx, input }) => {
-      const company = await db.getCompanyByUserId(ctx.user.id);
-      if (!company) {
-        throw new TRPCError({ code: 'NOT_FOUND', message: 'Company not found' });
-      }
-      // TODO: implement updateCompanyNotificationPrefs
-      return { success: true };
+    .mutation(async () => {
+      throw new TRPCError({ code: "NOT_IMPLEMENTED", message: "company.updateNotificationPrefs not implemented — prefs are not persisted" });
     }),
 
   // AI-powered smart search: search companies via their jobs' embeddings

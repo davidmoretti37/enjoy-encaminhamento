@@ -155,16 +155,14 @@ export const invitationRouter = router({
 
   // List all invitations (admin only)
   list: adminProcedure.query(async () => {
-    // TODO: implement getAllInvitations
-    return [];
+    throw new TRPCError({ code: "NOT_IMPLEMENTED", message: "invitation.list not implemented" });
   }),
 
   // Revoke invitation (admin only)
   revoke: adminProcedure
     .input(z.object({ token: z.string().uuid() }))
-    .mutation(async ({ ctx, input }) => {
-      // TODO: implement revokeInvitation
-      return { success: true };
+    .mutation(async () => {
+      throw new TRPCError({ code: "NOT_IMPLEMENTED", message: "invitation.revoke not implemented" });
     }),
 
   // Get all affiliates for dropdown (admin only)

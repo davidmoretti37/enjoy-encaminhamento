@@ -54,8 +54,7 @@ export const adminRouter = router({
 
   // Application management (admin-only)
   getAllApplications: adminProcedure.query(async () => {
-    // TODO: implement getAllApplications
-    return [];
+    throw new TRPCError({ code: "NOT_IMPLEMENTED", message: "admin.getAllApplications not implemented" });
   }),
 
   updateApplicationStatus: adminProcedure
@@ -63,15 +62,13 @@ export const adminRouter = router({
       id: z.string().uuid(),
       status: z.enum(['applied', 'screening', 'interview-scheduled', 'interviewed', 'selected', 'rejected', 'withdrawn']),
     }))
-    .mutation(async ({ input }) => {
-      // TODO: implement updateApplicationStatus
-      return { success: true };
+    .mutation(async () => {
+      throw new TRPCError({ code: "NOT_IMPLEMENTED", message: "admin.updateApplicationStatus not implemented" });
     }),
 
   // Contract management — agency + admin
   getAllContracts: adminProcedure.query(async () => {
-    // TODO: implement getAllContracts
-    return [];
+    throw new TRPCError({ code: "NOT_IMPLEMENTED", message: "admin.getAllContracts not implemented" });
   }),
 
   updateContractStatus: agencyProcedure
@@ -310,8 +307,7 @@ export const adminRouter = router({
 
   // Feedback management (admin-only — platform oversight)
   getAllFeedback: adminProcedure.query(async () => {
-    // TODO: implement getAllFeedback
-    return [];
+    throw new TRPCError({ code: "NOT_IMPLEMENTED", message: "admin.getAllFeedback not implemented" });
   }),
 
   updateFeedbackStatus: adminProcedure
@@ -319,19 +315,16 @@ export const adminRouter = router({
       id: z.string().uuid(),
       status: z.enum(['pending', 'submitted', 'reviewed']),
     }))
-    .mutation(async ({ input }) => {
-      // TODO: implement updateFeedbackStatus
-      return { success: true };
+    .mutation(async () => {
+      throw new TRPCError({ code: "NOT_IMPLEMENTED", message: "admin.updateFeedbackStatus not implemented" });
     }),
 
   // AI Matching oversight (admin-only)
   getAIMatchingStats: adminProcedure.query(async () => {
-    // TODO: implement getAIMatchingStats
-    return { totalMatches: 0, averageScore: 0, matchesByJob: [] };
+    throw new TRPCError({ code: "NOT_IMPLEMENTED", message: "admin.getAIMatchingStats not implemented" });
   }),
 
   getApplicationsWithScores: adminProcedure.query(async () => {
-    // TODO: implement getApplicationsWithScores
-    return [];
+    throw new TRPCError({ code: "NOT_IMPLEMENTED", message: "admin.getApplicationsWithScores not implemented" });
   }),
 });
