@@ -19,6 +19,7 @@ interface CandidateCardData {
   education?: string | null;
   institution?: string | null;
   course?: string | null;
+  currently_studying?: boolean | null;
   skills?: string[] | null;
   languages?: Array<{ language: string; level?: string }> | string[] | null;
   experience?: Array<{ company?: string; role?: string; description?: string }> | null;
@@ -29,6 +30,10 @@ interface CandidateCardData {
   disc_conforme?: number | null;
   pdp_top_10_competencies?: string[] | null;
   pdp_develop_competencies?: string[] | null;
+  available_for_clt?: boolean | null;
+  available_for_internship?: boolean | null;
+  available_for_apprentice?: boolean | null;
+  is_school_student?: boolean | null;
   interview?: {
     interview_type: string;
     scheduled_at: string;
@@ -368,6 +373,10 @@ export async function generateCandidateCardPdf(
       page.drawText(data.course, { x: margin, y, size: 9, font, color: GRAY_600 });
       y -= 13;
     }
+    if (data.currently_studying) {
+      page.drawText("Cursando atualmente", { x: margin, y, size: 9, font, color: BRAND_MED });
+      y -= 13;
+    }
   }
 
   // ─── Experience ──────────────────────────────────────────────────────
@@ -399,6 +408,28 @@ export async function generateCandidateCardPdf(
       }
       y -= 6;
     }
+  }
+
+  // ─── Availability ────────────────────────────────────────────────────
+  const availTypes: string[] = [];
+  if (data.available_for_internship) availTypes.push("Estágio");
+  if (data.available_for_clt) availTypes.push("CLT");
+  if (data.available_for_apprentice) availTypes.push("Jovem Aprendiz");
+  if (availTypes.length > 0) {
+    drawSectionTitle("Disponibilidade");
+    addNewPageIfNeeded(20);
+    const availLine = availTypes.join("  •  ");
+    page.drawText(availLine, { x: margin, y, size: 10, font, color: BRAND_MED });
+    y -= 14;
+    if (data.is_school_student) {
+      page.drawText("Aluno(a) ANEC", { x: margin, y, size: 9, font: fontBold, color: BRAND_ORANGE });
+      y -= 13;
+    }
+  } else if (data.is_school_student) {
+    drawSectionTitle("Informações Adicionais");
+    addNewPageIfNeeded(20);
+    page.drawText("Aluno(a) ANEC", { x: margin, y, size: 9, font: fontBold, color: BRAND_ORANGE });
+    y -= 13;
   }
 
   // ─── Footer ──────────────────────────────────────────────────────────

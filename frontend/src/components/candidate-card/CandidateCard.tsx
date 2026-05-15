@@ -1048,6 +1048,17 @@ export function CandidateCard({
               {isPdfLoading ? "Gerando..." : "Baixar PDF"}
             </Button>
           )}
+          {profile.resume_url && (
+            <a
+              href={profile.resume_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md border border-slate-200 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
+            >
+              <Download className="w-4 h-4" />
+              Currículo
+            </a>
+          )}
           {onHire && (
             <Button size="sm" onClick={onHire} className="bg-[#0A2342] text-white hover:bg-[#1B4D7A] flex items-center gap-2">
               <Briefcase className="w-4 h-4" />
