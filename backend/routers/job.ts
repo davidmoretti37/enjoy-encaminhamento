@@ -674,12 +674,14 @@ export const jobRouter = router({
       return filtered.map((job: any) => ({
         id: job.id,
         title: job.title,
+        description: job.description,
         contract_type: job.contract_type,
         work_type: job.work_type,
         location: job.location,
         salary: job.salary,
         salary_min: job.salary_min,
         hours_per_week: job.hours_per_week,
+        work_schedule: job.work_schedule,
         published_at: job.published_at,
       }));
     }),
