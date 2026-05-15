@@ -403,7 +403,7 @@ export async function generateCandidateCardPdf(
 
   // ─── Footer ──────────────────────────────────────────────────────────
   const firstPage = doc.getPages()[0];
-  firstPage.drawText("Gerado por Enjoy Encaminhamento", {
+  firstPage.drawText("Gerado por ANEC - Agência Nacional de Encaminhamento e Carreira", {
     x: margin,
     y: 25,
     size: 7,

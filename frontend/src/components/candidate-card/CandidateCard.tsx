@@ -58,6 +58,7 @@ interface CandidateProfile {
   pdp_action_plans?: Record<string, string[]>;
   photo_url?: string;
   resume_url?: string;
+  is_school_student?: boolean;
 }
 
 interface InterviewInfo {
@@ -542,7 +543,7 @@ export function CandidateCard({
   const hasDISC = profile.disc_dominante != null;
   const topCompetencies = profile.pdp_top_10_competencies || [];
   const developCompetencies = profile.pdp_develop_competencies || [];
-  const hasExperience = profile.has_work_experience && profile.experience && profile.experience.length > 0;
+  const hasExperience = (profile.experience && profile.experience.length > 0) || profile.has_work_experience;
   const hasSkills = (profile.skills && profile.skills.length > 0) || (profile.languages && profile.languages.length > 0);
   const discProfiles = hasDISC ? getDISCProfiles(profile) : null;
   const summaryText = profile.summary || profile.profile_summary;
@@ -615,6 +616,11 @@ export function CandidateCard({
               {profile.preferred_work_type === "presencial" ? "Presencial" :
                profile.preferred_work_type === "remoto" ? "Remoto" :
                profile.preferred_work_type === "hibrido" ? "Híbrido" : profile.preferred_work_type}
+            </span>
+          )}
+          {profile.is_school_student && (
+            <span className="flex items-center gap-1.5 text-sm text-amber-200 bg-amber-500/30 px-3 py-1 rounded-full font-medium">
+              Aluno(a) ANEC
             </span>
           )}
         </div>
