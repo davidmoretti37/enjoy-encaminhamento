@@ -1220,8 +1220,17 @@ function DISCBar({ label, value, color }: { label: string; value: number; color:
 }
 
 function CandidateAssessmentsTab({ profile }: { profile: any }) {
+  const [, navigate] = useLocation();
   const hasDisc = profile?.disc_completed_at || profile?.disc_dominante != null;
   const hasPdp = profile?.pdp_completed_at || profile?.pdp_competencies?.length > 0;
+
+  const resetMutation = (trpc.candidate as any).resetAssessments.useMutation({
+    onSuccess: () => {
+      toast.success("Avaliações resetadas. Redirecionando...");
+      setTimeout(() => navigate('/candidate/onboarding'), 800);
+    },
+    onError: (err: any) => toast.error(err.message || "Erro ao resetar avaliações"),
+  });
 
   if (!hasDisc && !hasPdp) {
     return (
@@ -1230,6 +1239,12 @@ function CandidateAssessmentsTab({ profile }: { profile: any }) {
           <FileText className="w-12 h-12 text-slate-400 mx-auto mb-3" />
           <p className="text-slate-500">Nenhuma avaliação concluída</p>
           <p className="text-slate-400 text-sm mt-1">Complete o DISC e PDP no processo de onboarding</p>
+          <button
+            onClick={() => navigate('/candidate/onboarding')}
+            className="mt-4 px-4 py-2 rounded-lg bg-[#FF6B35] text-white text-sm font-medium"
+          >
+            Fazer avaliações
+          </button>
         </div>
       </CardEntrance>
     );
@@ -1237,6 +1252,22 @@ function CandidateAssessmentsTab({ profile }: { profile: any }) {
 
   return (
     <div className="space-y-6">
+      {/* Redo button */}
+      <CardEntrance>
+        <div className="bg-amber-50 rounded-xl border border-amber-200 p-4 flex items-center justify-between gap-4">
+          <div>
+            <p className="text-sm font-medium text-amber-800">Quer refazer suas avaliações?</p>
+            <p className="text-xs text-amber-600 mt-0.5">Isso irá apagar seus resultados atuais de DISC e PDP.</p>
+          </div>
+          <button
+            onClick={() => resetMutation.mutate({ which: 'both' })}
+            disabled={resetMutation.isPending}
+            className="shrink-0 px-3 py-1.5 rounded-lg bg-amber-600 text-white text-xs font-medium hover:bg-amber-700 transition-colors disabled:opacity-50"
+          >
+            {resetMutation.isPending ? "Resetando..." : "Refazer avaliações"}
+          </button>
+        </div>
+      </CardEntrance>
       {/* DISC Results */}
       {hasDisc && (
         <CardEntrance>

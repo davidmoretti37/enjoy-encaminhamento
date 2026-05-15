@@ -610,6 +610,28 @@ export const candidateRouter = router({
       return { success: true };
     }),
 
+  // Reset DISC and PDP so the candidate can redo assessments
+  resetAssessments: candidateProcedure
+    .input(z.object({ which: z.enum(['disc', 'pdp', 'both']).default('both') }))
+    .mutation(async ({ ctx, input }) => {
+      const candidate = await db.getCandidateByUserId(ctx.user.id);
+      if (!candidate) throw new TRPCError({ code: 'NOT_FOUND' });
+      const clearDisc = {
+        disc_dominante: null, disc_influente: null,
+        disc_estavel: null, disc_conforme: null,
+        disc_completed_at: null,
+      };
+      const clearPdp = {
+        pdp_competencies: null, pdp_intrapersonal: null,
+        pdp_interpersonal: null, pdp_skills: null,
+        pdp_top_10_competencies: null, pdp_develop_competencies: null,
+        pdp_completed_at: null,
+      };
+      const data = input.which === 'disc' ? clearDisc : input.which === 'pdp' ? clearPdp : { ...clearDisc, ...clearPdp };
+      await db.updateCandidate(candidate.id, data as any);
+      return { success: true };
+    }),
+
   // Candidate withdraws their own application
   withdrawApplication: candidateProcedure
     .input(z.object({ applicationId: z.string().uuid() }))

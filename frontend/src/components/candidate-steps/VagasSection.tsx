@@ -189,10 +189,10 @@ function JobCard({ job, isApplied, isApplying, onApply, onViewApplication }: Job
 
           {/* Details */}
           <div className="flex flex-wrap items-center gap-4 mt-3 text-sm text-slate-600">
-            {job.city && (
+            {(job.location || job.city) && (
               <span className="flex items-center gap-1.5">
                 <MapPin className="w-4 h-4" />
-                {job.city}
+                {job.location || job.city}
               </span>
             )}
             {job.salary_min && (
