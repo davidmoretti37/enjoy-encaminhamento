@@ -433,9 +433,22 @@ export const outreachRouter = router({
       })
     )
     .mutation(async ({ input }) => {
+      // Resolve agency from the URL param when present, otherwise fall back to
+      // the admin's selected agency context. Without this, bookings made via
+      // older email links (no ?agency= param) end up with agency_id=null and
+      // never show up in the agency calendar.
+      let agencyId: string | undefined = input.agencyId;
+      if (!agencyId) {
+        try {
+          agencyId = (await db.getAdminAgencyContext(input.adminId)) || undefined;
+        } catch (e) {
+          console.warn('[createBooking] Could not resolve admin agency context', e);
+        }
+      }
+
       const meeting = await db.createScheduledMeeting({
         adminId: input.adminId,
-        agencyId: input.agencyId,
+        agencyId,
         scheduledAt: input.scheduledAt,
         companyEmail: input.companyEmail,
         companyName: input.companyName,
@@ -1109,6 +1122,7 @@ export const outreachRouter = router({
     .input(
       z.object({
         adminId: z.string().uuid(),
+        agencyId: z.string().uuid().optional(),
         email: z.string().email(),
         contactPerson: z.string().optional(),
         contactPhone: z.string().optional(),
@@ -1143,6 +1157,55 @@ export const outreachRouter = router({
     )
     .mutation(async ({ input }) => {
       const form = await db.createCompanyForm(input);
+
+      // Resolve which agency this submission belongs to. Prefer the explicit
+      // agencyId from the URL; otherwise fall back to the admin's selected
+      // agency context so the company still shows up in someone's dashboard.
+      let resolvedAgencyId: string | undefined = input.agencyId;
+      if (!resolvedAgencyId) {
+        try {
+          resolvedAgencyId = (await db.getAdminAgencyContext(input.adminId)) || undefined;
+        } catch (e) {
+          console.warn('[submitCompanyForm] Could not resolve admin agency context', e);
+        }
+      }
+
+      // Create/update the companies row so it appears in the agency dashboard.
+      // Without this, only company_forms gets written and the agency never sees
+      // the registration.
+      try {
+        const existing = await db.getCompanyByEmail(input.email);
+        const companyData = {
+          company_name: input.legalName,
+          business_name: input.businessName || null,
+          cnpj: input.cnpj,
+          email: input.email,
+          contact_person: input.contactPerson || null,
+          contact_phone: input.contactPhone || input.mobilePhone || null,
+          mobile_phone: input.mobilePhone || null,
+          landline_phone: input.landlinePhone || null,
+          website: input.website || null,
+          social_media: input.socialMedia || null,
+          employee_count: input.employeeCount || null,
+          cep: input.cep || null,
+          address: input.address || null,
+          complement: input.complement || null,
+          neighborhood: input.neighborhood || null,
+          city: input.city || null,
+          state: input.state || null,
+          agency_id: resolvedAgencyId || null,
+        };
+        if (existing) {
+          await db.updateCompany(existing.id, companyData);
+        } else {
+          await db.createCompany(companyData as any);
+        }
+      } catch (e: any) {
+        // Don't fail the form submission if company sync has an issue —
+        // company_forms is still the authoritative record.
+        console.error('[submitCompanyForm] Failed to sync companies row:', e?.message || e);
+      }
+
       return { success: true, formId: form.id };
     }),
 

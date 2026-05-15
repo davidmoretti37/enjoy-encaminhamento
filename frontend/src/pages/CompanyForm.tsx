@@ -90,6 +90,7 @@ export default function CompanyForm() {
   const urlParams = new URLSearchParams(searchString);
   const emailFromUrl = urlParams.get('email') || "";
   const contractToken = urlParams.get('contract') || "";
+  const agencyIdFromUrl = urlParams.get('agency') || undefined;
 
   const [showIntro, setShowIntro] = useState(true);
   const [submitted, setSubmitted] = useState(false);
@@ -192,6 +193,7 @@ export default function CompanyForm() {
 
     submitFormMutation.mutate({
       adminId: adminId!,
+      agencyId: agencyIdFromUrl,
       email: formData.email,
       contactPerson: formData.contactPerson || undefined,
       contactPhone: formData.contactPhone || undefined,

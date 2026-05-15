@@ -599,6 +599,7 @@ export const candidateRouter = router({
       available_for_apprentice: z.boolean().optional(),
       preferred_work_type: z.string().optional(),
       date_of_birth: z.string().optional(),
+      is_school_student: z.boolean().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       const { candidateId, ...updateData } = input;

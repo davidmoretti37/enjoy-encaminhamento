@@ -495,7 +495,9 @@ export function CandidateCard({
     full_name: profile.name || "",
     email: profile.email || "",
     phone: profile.phone || "",
-    date_of_birth: profile.date_of_birth || "",
+    // The DB stores date_of_birth as an ISO timestamp; HTML <input type="date">
+    // requires YYYY-MM-DD, so strip the time portion or the field renders empty.
+    date_of_birth: profile.date_of_birth ? String(profile.date_of_birth).substring(0, 10) : "",
     city: profile.city || "",
     state: profile.state || "",
     education_level: profile.education || "",
@@ -507,6 +509,7 @@ export function CandidateCard({
     available_for_internship: profile.available_for_internship || false,
     available_for_apprentice: profile.available_for_apprentice || false,
     preferred_work_type: profile.preferred_work_type || "",
+    is_school_student: profile.is_school_student || false,
   });
   const [skillInput, setSkillInput] = useState("");
   const [langInput, setLangInput] = useState("");
@@ -688,6 +691,14 @@ export function CandidateCard({
               <option value="remoto">Remoto</option>
               <option value="hibrido">Híbrido</option>
             </select>
+          </div>
+
+          {/* ANEC student flag */}
+          <div>
+            <label className="flex items-center gap-1.5 text-sm cursor-pointer">
+              <input type="checkbox" checked={editForm.is_school_student} onChange={e => setEditForm({...editForm, is_school_student: e.target.checked})} className="rounded" />
+              <span className="font-medium">Aluno(a) da escola ANEC</span>
+            </label>
           </div>
 
           {/* Skills */}

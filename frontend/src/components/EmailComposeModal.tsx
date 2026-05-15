@@ -62,6 +62,24 @@ export default function EmailComposeModal({
 
   const sendEmailMutation = trpc.outreach.sendEmail.useMutation();
 
+  // Resolve agency id for the current user so booking/form URLs carry agency context.
+  // Agency users hit getProfile; admins use the agency-switcher context (loaded
+  // from localStorage in AgencyContext but we read it directly to keep this
+  // component self-contained).
+  const { data: agencyProfile } = trpc.agency.getProfile.useQuery(undefined, {
+    enabled: user?.role === 'agency',
+    retry: false,
+  });
+  const agencyIdForLinks: string | null = (() => {
+    if (user?.role === 'agency') return agencyProfile?.id || null;
+    try {
+      const stored = localStorage.getItem('admin_agency_context');
+      return stored ? JSON.parse(stored) : null;
+    } catch {
+      return null;
+    }
+  })();
+
   // Handle prefilled email when modal opens
   useEffect(() => {
     if (open && prefilledEmail && !recipientEmails.includes(prefilledEmail)) {
@@ -115,16 +133,24 @@ export default function EmailComposeModal({
     const to = finalEmails.join(',');
     const baseUrl = window.location.origin;
     const adminId = user?.id || '';
+    const agencyParam = agencyIdForLinks ? `&agency=${agencyIdForLinks}` : '';
 
-    // Build full body with links appended
+    // Build full body with links appended. We embed each recipient's email + the
+    // agency context so the booking/form lands attributed to the right agency.
     let fullBody = body;
     if (includeFormLink || includeBookingLink) {
       fullBody += '\n\n---\n';
+      // For multi-recipient sends, the per-recipient email param doesn't survive
+      // a shared link, so only inline the email when there's exactly one.
+      const singleEmail = finalEmails.length === 1 ? `email=${encodeURIComponent(finalEmails[0])}` : '';
+      const linkSuffix = (singleEmail || agencyParam.slice(1))
+        ? `?${[singleEmail, agencyParam.replace(/^&/, '')].filter(Boolean).join('&')}`
+        : '';
       if (includeFormLink) {
-        fullBody += `\n📋 Preencher formulário de cadastro:\n${baseUrl}/form/${adminId}\n`;
+        fullBody += `\n📋 Preencher formulário de cadastro:\n${baseUrl}/form/${adminId}${linkSuffix}\n`;
       }
       if (includeBookingLink) {
-        fullBody += `\n📅 Agendar uma reunião:\n${baseUrl}/book/${adminId}\n`;
+        fullBody += `\n📅 Agendar uma reunião:\n${baseUrl}/book/${adminId}${linkSuffix}\n`;
       }
     }
 
