@@ -106,7 +106,6 @@ function AgencyJobList({
   );
 }
 
-// Renders all of one company's jobs as standalone cards (no company name shown).
 function CompanyJobsBlock({
   company,
   onJobClick,
@@ -141,13 +140,13 @@ function CompanyJobsBlock({
   return (
     <>
       {visibleJobs.map((job: any) => (
-        <JobCard key={job.id} job={job} onClick={() => onJobClick(company.id)} />
+        <JobCard key={job.id} job={job} companyName={company.name} onClick={() => onJobClick(company.id)} />
       ))}
     </>
   );
 }
 
-function JobCard({ job, onClick }: { job: any; onClick: () => void }) {
+function JobCard({ job, companyName, onClick }: { job: any; companyName?: string; onClick: () => void }) {
   const contractLabelMap: Record<string, string> = {
     estagio: "Estágio",
     clt: "CLT",
@@ -167,7 +166,7 @@ function JobCard({ job, onClick }: { job: any; onClick: () => void }) {
       onClick={onClick}
       className="group relative p-4 bg-white rounded-lg border-2 border-slate-200 hover:border-orange-300 hover:shadow-lg transition-all duration-200 text-left h-full flex flex-col"
     >
-      <div className="flex items-start justify-between gap-3 mb-2">
+      <div className="flex items-start justify-between gap-3 mb-1">
         <h3 className="text-base font-semibold text-[#0A2342] group-hover:text-orange-600 transition-colors line-clamp-2">
           {job.title || "Vaga sem título"}
         </h3>
@@ -175,6 +174,13 @@ function JobCard({ job, onClick }: { job: any; onClick: () => void }) {
           {contractLabel}
         </span>
       </div>
+
+      {companyName && (
+        <div className="flex items-center gap-1 mb-2">
+          <Building2 className="w-3 h-3 text-slate-400" />
+          <span className="text-xs text-slate-500 font-medium">{companyName}</span>
+        </div>
+      )}
 
       {job.description && (
         <p className="text-xs text-slate-600 line-clamp-3 mb-3">
