@@ -10,6 +10,8 @@ import { createZoomMeeting, isZoomConfigured } from "../integrations/zoom";
 import { createGoogleMeeting, isGoogleMeetConfigured } from "../integrations/googleMeet";
 import { createDocument as createAutentiqueDocument, isAutentiqueConfigured, getDocumentStatus as getAutentiqueDocStatus } from "../integrations/autentique";
 import { ENV } from "../_core/env";
+import { supabaseAdmin as _supabaseAdmin } from "../supabase";
+const supabaseAdmin = _supabaseAdmin as any;
 import { escapeHtml } from "../_core/htmlEscape";
 import { passwordSchema } from "../_core/passwordSchema";
 import { generateCompanySummary } from "../services/ai/summarizer";
@@ -1385,13 +1387,29 @@ export const outreachRouter = router({
       const { storagePut } = await import('../storage');
       const { url } = await storagePut(key, buffer, 'application/pdf');
 
-      // Update meeting with contract info
+      // Update meeting with contract info (backward compat)
       await db.updateMeetingContract(meeting.id, {
         contract_pdf_url: url,
         contract_pdf_key: key,
         contract_signed_at: new Date().toISOString(),
         contract_signer_name: input.signerName || null,
       });
+
+      // Also append to companies.contract_files so the file appears in the modal
+      const { data: company } = await supabaseAdmin
+        .from('companies')
+        .select('id, contract_files')
+        .eq('email', input.companyEmail)
+        .single();
+
+      if (company?.id) {
+        const existingFiles = Array.isArray(company.contract_files) ? company.contract_files : [];
+        const newFile = { url, key, name: input.fileName };
+        await supabaseAdmin
+          .from('companies')
+          .update({ contract_files: [...existingFiles, newFile] })
+          .eq('id', company.id);
+      }
 
       return { success: true, url };
     }),
