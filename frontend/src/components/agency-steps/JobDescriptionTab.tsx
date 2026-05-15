@@ -1,33 +1,29 @@
 import { useAgencyFunnel } from "@/contexts/AgencyFunnelContext";
 import { useAgencyContext } from "@/contexts/AgencyContext";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Building2, Briefcase, TrendingUp } from "lucide-react";
+import { Building2, Briefcase, MapPin, TrendingUp } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import CompanyJobFlow from "./CompanyJobFlow";
+import { useMemo } from "react";
 
+// Show actual jobs (title + description) instead of grouping by company.
+// Company names are intentionally NOT displayed in the cards.
 export default function JobDescriptionTab() {
   const { companies, selectedCompanyId, setSelectedCompanyId, isCompaniesLoading } = useAgencyFunnel();
   const { isAllAgenciesMode, availableAgencies } = useAgencyContext();
 
-  console.log('[JobDescriptionTab] selectedCompanyId:', selectedCompanyId);
-
-  // If a company is selected, show the job flow
   if (selectedCompanyId) {
     return <CompanyJobFlow />;
   }
 
-  // Otherwise, show the company cards grid
   if (isCompaniesLoading) {
     return (
-      <div className="space-y-3">
-        {Array.from({ length: 3 }).map((_, i) => (
-          <div key={i} className="flex items-center gap-3 p-3">
-            <Skeleton className="h-10 w-10 rounded-lg" />
-            <div className="flex-1 space-y-2">
-              <Skeleton className="h-4 w-32" />
-              <Skeleton className="h-3 w-24" />
-            </div>
-            <Skeleton className="h-6 w-16 rounded-full" />
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <div key={i} className="p-4 rounded-lg border border-slate-200 space-y-3">
+            <Skeleton className="h-5 w-3/4" />
+            <Skeleton className="h-3 w-full" />
+            <Skeleton className="h-3 w-5/6" />
           </div>
         ))}
       </div>
@@ -55,14 +51,13 @@ export default function JobDescriptionTab() {
       <div className="text-center mb-6">
         <h2 className="text-2xl font-bold text-[#0A2342]">Descrição de Vagas</h2>
         <p className="text-slate-600 mt-1">
-          Selecione uma empresa para visualizar suas vagas e candidatos
+          Selecione uma vaga para visualizar candidatos
         </p>
       </div>
 
-      {/* Company Cards Grid */}
       {isAllAgenciesMode ? (
         <div className="space-y-6">
-          {availableAgencies.map(agency => {
+          {availableAgencies.map((agency) => {
             const agencyCompanies = companies.filter((c: any) => c.agency_id === agency.id);
             return (
               <div key={agency.id}>
@@ -71,94 +66,149 @@ export default function JobDescriptionTab() {
                   <span className="font-semibold text-gray-700">{agency.name}</span>
                   <span className="text-xs text-gray-400">({agencyCompanies.length})</span>
                 </div>
-                {agencyCompanies.length > 0 ? (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mt-3">
-                    {agencyCompanies.map((company: any) => (
-                      <CompanyCard
-                        key={company.id}
-                        company={company}
-                        onClick={() => setSelectedCompanyId(company.id)}
-                      />
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-sm text-gray-400 py-4 px-3">Nenhuma empresa nesta agência</p>
-                )}
+                <AgencyJobList
+                  companies={agencyCompanies}
+                  onJobClick={(companyId) => setSelectedCompanyId(companyId)}
+                />
               </div>
             );
           })}
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {companies.map((company: any) => (
-            <CompanyCard
-              key={company.id}
-              company={company}
-              onClick={() => setSelectedCompanyId(company.id)}
-            />
-          ))}
-        </div>
+        <AgencyJobList
+          companies={companies}
+          onJobClick={(companyId) => setSelectedCompanyId(companyId)}
+        />
       )}
     </div>
   );
 }
 
-// Individual company card component
-function CompanyCard({ company, onClick }: { company: any; onClick: () => void }) {
-  // Query to get job count for this company
-  const { data: jobs } = trpc.job.getByCompanyId.useQuery(
+// Fetches jobs for every company in `companies` and renders one card per job.
+// Internally uses one query per company (existing endpoint), then flattens.
+function AgencyJobList({
+  companies,
+  onJobClick,
+}: {
+  companies: any[];
+  onJobClick: (companyId: string) => void;
+}) {
+  if (companies.length === 0) {
+    return <p className="text-sm text-gray-400 py-4 px-3">Nenhuma empresa nesta agência</p>;
+  }
+
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-3">
+      {companies.map((company: any) => (
+        <CompanyJobsBlock key={company.id} company={company} onJobClick={onJobClick} />
+      ))}
+    </div>
+  );
+}
+
+// Renders all of one company's jobs as standalone cards (no company name shown).
+function CompanyJobsBlock({
+  company,
+  onJobClick,
+}: {
+  company: any;
+  onJobClick: (companyId: string) => void;
+}) {
+  const { data: jobs, isLoading } = trpc.job.getByCompanyId.useQuery(
     { companyId: company.id },
     { enabled: !!company.id, staleTime: 30000 }
   );
 
-  const jobCount = jobs?.length || 0;
-  const activeJobs = jobs?.filter((j: any) => j.status === 'open' || j.status === 'searching' || j.status === 'candidates_found').length || 0;
+  const visibleJobs = useMemo(
+    () =>
+      (jobs ?? []).filter((j: any) =>
+        ["open", "searching", "candidates_found", "in_selection"].includes(j.status)
+      ),
+    [jobs]
+  );
+
+  if (isLoading) {
+    return (
+      <div className="p-4 rounded-lg border border-slate-200 space-y-2">
+        <Skeleton className="h-5 w-3/4" />
+        <Skeleton className="h-3 w-full" />
+      </div>
+    );
+  }
+
+  if (visibleJobs.length === 0) return null;
+
+  return (
+    <>
+      {visibleJobs.map((job: any) => (
+        <JobCard key={job.id} job={job} onClick={() => onJobClick(company.id)} />
+      ))}
+    </>
+  );
+}
+
+function JobCard({ job, onClick }: { job: any; onClick: () => void }) {
+  const contractLabelMap: Record<string, string> = {
+    estagio: "Estágio",
+    clt: "CLT",
+    "menor-aprendiz": "Jovem Aprendiz",
+    pj: "PJ",
+  };
+  const workTypeMap: Record<string, string> = {
+    presencial: "Presencial",
+    remoto: "Remoto",
+    hibrido: "Híbrido",
+  };
+  const contractLabel = contractLabelMap[job.contract_type] || job.contract_type;
+  const isActive = ["open", "searching", "candidates_found", "in_selection"].includes(job.status);
 
   return (
     <button
       onClick={onClick}
       className="group relative p-4 bg-white rounded-lg border-2 border-slate-200 hover:border-orange-300 hover:shadow-lg transition-all duration-200 text-left h-full flex flex-col"
     >
-      {/* Company Icon/Initial */}
-      <div className="mb-3">
-        <div className="w-10 h-10 rounded-lg bg-[#0A2342] flex items-center justify-center">
-          <span className="text-white text-base font-bold">
-            {company.company_name?.charAt(0)?.toUpperCase() || 'E'}
-          </span>
-        </div>
+      <div className="flex items-start justify-between gap-3 mb-2">
+        <h3 className="text-base font-semibold text-[#0A2342] group-hover:text-orange-600 transition-colors line-clamp-2">
+          {job.title || "Vaga sem título"}
+        </h3>
+        <span className="shrink-0 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+          {contractLabel}
+        </span>
       </div>
 
-      {/* Company Name */}
-      <h3 className="text-base font-semibold text-[#0A2342] mb-1 group-hover:text-orange-600 transition-colors">
-        {company.company_name || 'Empresa sem nome'}
-      </h3>
-
-      {/* Contact Name */}
-      {company.contact_name && (
-        <p className="text-xs text-slate-600 mb-3">
-          {company.contact_name}
+      {job.description && (
+        <p className="text-xs text-slate-600 line-clamp-3 mb-3">
+          {job.description}
         </p>
       )}
 
-      {/* Stats */}
-      <div className="mt-auto space-y-1">
-        <div className="flex items-center gap-1.5 text-xs">
-          <Briefcase className="w-3 h-3 text-orange-600" />
-          <span className="text-slate-700">
-            {jobCount} {jobCount === 1 ? 'vaga' : 'vagas'}
-          </span>
-        </div>
-        {activeJobs > 0 && (
-          <div className="flex items-center gap-1.5 text-xs">
-            <TrendingUp className="w-3 h-3 text-green-600" />
-            <span className="text-green-700">
-              {activeJobs} ativa{activeJobs !== 1 ? 's' : ''}
+      <div className="mt-auto space-y-1.5 text-xs">
+        {(job.location || job.work_type) && (
+          <div className="flex items-center gap-1.5 text-slate-600">
+            <MapPin className="w-3 h-3" />
+            <span>
+              {[job.location, job.work_type ? workTypeMap[job.work_type] : null]
+                .filter(Boolean)
+                .join(" · ")}
             </span>
+          </div>
+        )}
+        {job.openings ? (
+          <div className="flex items-center gap-1.5 text-slate-600">
+            <Briefcase className="w-3 h-3 text-orange-600" />
+            <span>
+              {job.openings} {job.openings === 1 ? "vaga" : "vagas"}
+            </span>
+          </div>
+        ) : null}
+        {isActive && (
+          <div className="flex items-center gap-1.5 text-green-700">
+            <TrendingUp className="w-3 h-3" />
+            <span>Ativa</span>
           </div>
         )}
       </div>
 
-      {/* Hover arrow indicator */}
       <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity">
         <div className="w-6 h-6 rounded-full bg-orange-100 flex items-center justify-center">
           <svg className="w-3 h-3 text-orange-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
