@@ -277,10 +277,10 @@ export default function EmpresasPage() {
                     <Icon className="h-5 w-5 text-[#0A2342]" />
                   </div>
                   <div className="min-w-0">
-                    <h3 className="font-bold text-[#0A2342] mb-1 break-words">
+                    <h3 className="text-lg font-bold text-[#0A2342] mb-1">
                       {benefit.title}
                     </h3>
-                    <p className="text-slate-600 text-sm leading-relaxed break-words">
+                    <p className="text-slate-600 text-sm leading-relaxed">
                       {benefit.description}
                     </p>
                   </div>
