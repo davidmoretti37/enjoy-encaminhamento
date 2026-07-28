@@ -149,8 +149,9 @@ describe("job router", () => {
         select: vi.fn().mockReturnThis(),
         insert: vi.fn().mockReturnThis(),
         eq: vi.fn().mockReturnThis(),
+        // company must belong to the caller's agency for the tenant guard to pass
         single: vi.fn().mockResolvedValue({
-          data: { id: MOCK_IDS.job },
+          data: { id: MOCK_IDS.job, agency_id: MOCK_IDS.agency },
           error: null,
         }),
       };
@@ -237,12 +238,15 @@ describe("job router", () => {
 
   describe("triggerMatchingForAgency", () => {
     it("allows admin to trigger matching", async () => {
+      vi.mocked(db.getJobById).mockResolvedValue({ id: MOCK_IDS.job, agency_id: MOCK_IDS.agency } as any);
       const caller = createCaller(adminContext());
       const result = await caller.triggerMatchingForAgency({ jobId: MOCK_IDS.job });
       expect(result.success).toBe(true);
     });
 
     it("allows agency to trigger matching", async () => {
+      vi.mocked(db.getJobById).mockResolvedValue({ id: MOCK_IDS.job, agency_id: MOCK_IDS.agency } as any);
+      vi.mocked(db.getAgencyForUserContext).mockResolvedValue(mockAgency() as any);
       const caller = createCaller(agencyContext());
       const result = await caller.triggerMatchingForAgency({ jobId: MOCK_IDS.job });
       expect(result.success).toBe(true);

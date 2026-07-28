@@ -11,6 +11,8 @@ import { Calendar as CalendarIcon, Clock, CheckCircle, Loader2, ArrowLeft, Arrow
 import { format, addDays, isBefore, startOfDay } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
+import { getConsultantForRegion } from "@/config/consultants";
+import ConsultantContactCard from "@/components/ConsultantContactCard";
 
 type BookingStep = 'date' | 'time' | 'info' | 'confirmation';
 
@@ -23,6 +25,9 @@ export default function PublicBooking() {
   const urlParams = new URLSearchParams(searchString);
   const emailFromUrl = urlParams.get('email') || "";
   const agencyIdFromUrl = urlParams.get('agency') || undefined;
+  // Report #13: no agency in the link = a região não atendida pelas unidades
+  // (Ipatinga/Uberlândia) → oferecer contato com o consultor em vez de agendar.
+  const isOutOfRegion = !agencyIdFromUrl;
 
   const [step, setStep] = useState<BookingStep>('date');
   const [selectedDate, setSelectedDate] = useState<Date | undefined>();
@@ -134,6 +139,30 @@ export default function PublicBooking() {
             <p className="text-sm text-muted-foreground text-center">
               Guarde esta página ou verifique seu email para detalhes da reunião.
             </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // Report #13: out-of-region visitors talk to a consultant instead of the
+  // date/time scheduler (which is scoped to the served units' availability).
+  if (isOutOfRegion) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white flex items-center justify-center p-4">
+        <Card className="max-w-lg w-full shadow-xl">
+          <CardHeader className="text-center">
+            <CardTitle className="text-2xl">Sua região é atendida por um consultor</CardTitle>
+            <CardDescription>
+              As unidades de Ipatinga e Uberlândia não cobrem diretamente a sua região.
+              Fale com o nosso consultor responsável para prosseguir.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ConsultantContactCard
+              consultant={getConsultantForRegion(agencyIdFromUrl)}
+              message="Olá! Sou de uma região fora de Ipatinga/Uberlândia e gostaria de falar com um consultor."
+            />
           </CardContent>
         </Card>
       </div>

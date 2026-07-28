@@ -86,7 +86,8 @@ export default function CandidateOnboarding() {
   const [formData, setFormData] = useState<{
     full_name: string; cpf: string; email: string; phone: string;
     date_of_birth: string; city: string; state: string; social_media: string;
-    education_level: string; institution: string;
+    education_level: string; institution: string; course_period: string;
+    is_school_student: boolean | null;
     courses: string[]; skills: string[]; languages: string[]; experiences: string[];
   }>(draft?.formData || {
     full_name: '',
@@ -99,6 +100,8 @@ export default function CandidateOnboarding() {
     social_media: '',
     education_level: '',
     institution: '',
+    course_period: '',
+    is_school_student: null,
     courses: [] as string[],
     skills: [] as string[],
     languages: [] as string[],
@@ -162,6 +165,30 @@ export default function CandidateOnboarding() {
   const [newSkill, setNewSkill] = useState('');
   const [newLanguage, setNewLanguage] = useState('');
   const [newExperience, setNewExperience] = useState('');
+  // Profile photo — required at cadastro (item #3). Held as base64 until submit.
+  const [photoData, setPhotoData] = useState<{ base64: string; mime: string; preview: string } | null>(
+    draft?.photoData || null
+  );
+
+  const handlePhotoSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const allowed = ['image/jpeg', 'image/png', 'image/webp'];
+    if (!allowed.includes(file.type)) {
+      toast.error('Formato inválido. Use JPEG, PNG ou WebP.');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Imagem muito grande. Máximo 5MB.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      setPhotoData({ base64: result, mime: file.type, preview: result });
+    };
+    reader.readAsDataURL(file);
+  };
 
   const submitOnboarding = trpc.candidate.submitOnboarding.useMutation({
     onSuccess: () => {
@@ -272,6 +299,14 @@ export default function CandidateOnboarding() {
       toast.error("Selecione seu nível de escolaridade");
       return false;
     }
+    if (formData.is_school_student === null) {
+      toast.error("Informe se você é aluno(a) da Inexxa Formação Profissionalizante");
+      return false;
+    }
+    if (!photoData) {
+      toast.error("Adicione uma foto de perfil");
+      return false;
+    }
     if (formData.skills.length === 0) {
       toast.error("Adicione pelo menos uma habilidade");
       return false;
@@ -331,11 +366,19 @@ export default function CandidateOnboarding() {
       cpf: formData.cpf.replace(/\D/g, ""),
       date_of_birth: formData.date_of_birth || undefined,
       experience: formData.experiences,
+      // Profile photo (item #3) — sent as base64, uploaded server-side.
+      photo_base64: photoData?.base64,
+      photo_mime: photoData?.mime,
       // DISC results
       disc_influente: discResults.influente,
       disc_estavel: discResults.estavel,
       disc_dominante: discResults.dominante,
       disc_conforme: discResults.conforme,
+      // Raw DISC picks (chosen profile per question) so the team can review the
+      // actual answers, not just the scores. Keys coerced to strings for JSON.
+      disc_answers: Object.fromEntries(
+        Object.entries(discAnswers).map(([k, v]) => [String(k), v])
+      ),
       // PDP results
       pdp_intrapersonal: Object.fromEntries(
         Object.entries(pdpResults.intrapersonal).map(([k, v]) => [String(k), v])
@@ -420,6 +463,37 @@ export default function CandidateOnboarding() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
+                {/* Profile photo — required (item #3) */}
+                <div className="flex flex-col items-center gap-3 pb-2">
+                  <Label className="self-start">Foto de Perfil *</Label>
+                  <div className="flex items-center gap-4">
+                    <div className="h-24 w-24 rounded-full overflow-hidden bg-muted border flex items-center justify-center">
+                      {photoData?.preview ? (
+                        <img src={photoData.preview} alt="Prévia da foto" className="h-full w-full object-cover" />
+                      ) : (
+                        <span className="text-xs text-muted-foreground text-center px-2">Sem foto</span>
+                      )}
+                    </div>
+                    <div className="space-y-1">
+                      <input
+                        id="onboarding-photo"
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp"
+                        className="hidden"
+                        onChange={handlePhotoSelect}
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => document.getElementById('onboarding-photo')?.click()}
+                      >
+                        {photoData ? 'Trocar foto' : 'Adicionar foto'}
+                      </Button>
+                      <p className="text-xs text-muted-foreground">JPEG, PNG ou WebP. Máx. 5MB.</p>
+                    </div>
+                  </div>
+                </div>
+
                 <div className="grid md:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="full_name">Nome Completo *</Label>
@@ -632,6 +706,38 @@ export default function CandidateOnboarding() {
                       onChange={(e) => handleInputChange('institution', e.target.value)}
                       placeholder="Nome da escola/universidade"
                     />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="course_period">Período / Ano do curso</Label>
+                    <Input
+                      id="course_period"
+                      value={formData.course_period}
+                      onChange={(e) => handleInputChange('course_period', e.target.value)}
+                      placeholder="Ex: 3º período, 2º ano, 2024/1"
+                    />
+                  </div>
+                </div>
+
+                {/* Inexxa student — required */}
+                <div className="space-y-2">
+                  <Label>É aluno(a) da Inexxa Formação Profissionalizante? *</Label>
+                  <div className="flex gap-3">
+                    <Button
+                      type="button"
+                      variant={formData.is_school_student === true ? 'default' : 'outline'}
+                      className="flex-1"
+                      onClick={() => handleInputChange('is_school_student', true)}
+                    >
+                      Sim
+                    </Button>
+                    <Button
+                      type="button"
+                      variant={formData.is_school_student === false ? 'default' : 'outline'}
+                      className="flex-1"
+                      onClick={() => handleInputChange('is_school_student', false)}
+                    >
+                      Não
+                    </Button>
                   </div>
                 </div>
 

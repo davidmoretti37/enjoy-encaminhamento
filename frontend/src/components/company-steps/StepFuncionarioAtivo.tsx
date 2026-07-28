@@ -223,6 +223,24 @@ function EmployeeCard({ employee, onOpenReport }: { employee: any; onOpenReport:
       toast.error(error.message || 'Erro ao enviar contrato');
     },
   });
+
+  // Report #23 — view-only document downloads (generated on read by ANEC-controlled endpoints).
+  const downloadPdfBase64 = (base64: string, filename: string) => {
+    const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+    const url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
+    const a = document.createElement('a');
+    a.href = url; a.download = filename; a.click();
+    URL.revokeObjectURL(url);
+  };
+  const profilePdfMutation = (trpc.company as any).generateEmployeeProfilePdf.useMutation({
+    onSuccess: (res: any) => downloadPdfBase64(res.base64, res.filename),
+    onError: (e: any) => toast.error(e.message || 'Erro ao gerar o relatório'),
+  });
+  const referralMutation = (trpc.company as any).generateReferralLetter.useMutation({
+    onSuccess: (res: any) => downloadPdfBase64(res.base64, res.filename),
+    onError: (e: any) => toast.error(e.message || 'Erro ao gerar a carta'),
+  });
+
   const candidate = employee.candidate;
   const isEstagio = employee.hiring_type === "estagio";
   const startDate = employee.start_date ? new Date(employee.start_date) : null;
@@ -390,8 +408,43 @@ function EmployeeCard({ employee, onOpenReport }: { employee: any; onOpenReport:
                 <p className="text-sm font-semibold text-[#0A2342]">
                   {employee.insurance_status === "active" ? "Ativo" : employee.insurance_status === "expired" ? "Expirado" : "Pendente"}
                 </p>
+                {employee.insurance_document_url ? (
+                  <a href={employee.insurance_document_url} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline flex items-center gap-1 mt-1">
+                    <FileText className="w-3 h-3" /> Ver apólice
+                  </a>
+                ) : (
+                  <p className="text-xs text-slate-400 mt-1">Aguardando ANEC anexar a apólice</p>
+                )}
               </div>
             )}
+
+            {/* Documentos (controlados pela ANEC — empresa apenas visualiza) — report #23 */}
+            <div className="p-3 rounded-lg bg-slate-50 border border-slate-100">
+              <p className="text-xs text-slate-500 flex items-center gap-1 mb-2"><FileText className="w-3 h-3" /> Documentos do Funcionário</p>
+              <div className="flex flex-wrap gap-2">
+                {candidate?.resume_url && (
+                  <a href={candidate.resume_url} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline inline-flex items-center gap-1 px-2 py-1 border border-slate-200 rounded">
+                    <FileText className="w-3 h-3" /> Currículo
+                  </a>
+                )}
+                <button
+                  type="button"
+                  onClick={() => profilePdfMutation.mutate({ hiringProcessId: employee.id })}
+                  disabled={profilePdfMutation.isPending}
+                  className="text-xs text-slate-700 hover:text-[#0A2342] inline-flex items-center gap-1 px-2 py-1 border border-slate-200 rounded disabled:opacity-50"
+                >
+                  <BarChart className="w-3 h-3" /> {profilePdfMutation.isPending ? "Gerando..." : "Relatório DISC/PDP"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => referralMutation.mutate({ hiringProcessId: employee.id })}
+                  disabled={referralMutation.isPending}
+                  className="text-xs text-slate-700 hover:text-[#0A2342] inline-flex items-center gap-1 px-2 py-1 border border-slate-200 rounded disabled:opacity-50"
+                >
+                  <FileText className="w-3 h-3" /> {referralMutation.isPending ? "Gerando..." : "Carta de Encaminhamento"}
+                </button>
+              </div>
+            </div>
 
             {/* Contract document upload */}
             <div className="p-3 rounded-lg bg-slate-50 border border-slate-100">

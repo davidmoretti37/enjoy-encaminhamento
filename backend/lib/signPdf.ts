@@ -1,5 +1,6 @@
 // Embed a signature image + signer info into a PDF's last page
 import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
+import { storageGetBytes } from "../storage";
 
 export async function embedSignatureInPdf(
   pdfUrl: string,
@@ -7,12 +8,9 @@ export async function embedSignatureInPdf(
   signerName: string,
   signerCpf: string
 ): Promise<Uint8Array> {
-  // Fetch original PDF
-  const pdfResponse = await fetch(pdfUrl);
-  if (!pdfResponse.ok) {
-    throw new Error(`Failed to fetch PDF: ${pdfResponse.status}`);
-  }
-  const pdfBytes = new Uint8Array(await pdfResponse.arrayBuffer());
+  // Fetch original PDF via authenticated storage access so this keeps working
+  // once the bucket is private (external template URLs still fetch directly).
+  const pdfBytes = await storageGetBytes(pdfUrl);
 
   // Load PDF
   const pdfDoc = await PDFDocument.load(pdfBytes);

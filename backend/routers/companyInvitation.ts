@@ -3,6 +3,7 @@ import { z } from "zod";
 import { router, publicProcedure, protectedProcedure } from "../_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { agencyProcedure } from "./procedures";
+import { assertAgencyOwnsCompany } from "./agency";
 import { sendEmail } from "./email";
 import * as db from "../db/companyInvitations";
 import { supabaseAdmin } from "../supabase";
@@ -60,6 +61,11 @@ export const companyInvitationRouter = router({
       companyId: z.string().uuid(),
     }))
     .mutation(async ({ ctx, input }) => {
+      // Tenant guard: only the owning agency (or admin) may invite this company.
+      // Without this, any agency could mint + read a registration token for
+      // another agency's unregistered company (cross-tenant account takeover).
+      await assertAgencyOwnsCompany(ctx, input.companyId);
+
       // Get company details
       const { data: company, error: companyError } = await (supabaseAdmin as any)
         .from("companies")
@@ -128,6 +134,9 @@ export const companyInvitationRouter = router({
       companyId: z.string().uuid(),
     }))
     .mutation(async ({ ctx, input }) => {
+      // Tenant guard: only the owning agency (or admin) may resend to this company.
+      await assertAgencyOwnsCompany(ctx, input.companyId);
+
       // Get company details
       const { data: company, error: companyError } = await (supabaseAdmin as any)
         .from("companies")
@@ -310,7 +319,11 @@ export const companyInvitationRouter = router({
     .input(z.object({
       companyId: z.string().uuid(),
     }))
-    .query(async ({ input }) => {
+    .query(async ({ ctx, input }) => {
+      // Tenant guard: only the owning agency (or admin) may read this company's
+      // onboarding/invitation state.
+      await assertAgencyOwnsCompany(ctx, input.companyId);
+
       // Check if company has user linked
       const { data: company } = await (supabaseAdmin as any)
         .from("companies")

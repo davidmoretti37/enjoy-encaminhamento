@@ -192,6 +192,10 @@ export default function CompanySettingsScreen() {
     e.preventDefault();
     setPasswordError(null);
 
+    if (!currentPassword) {
+      setPasswordError('Informe sua senha atual');
+      return;
+    }
     if (newPassword.length < 8) {
       setPasswordError('Nova senha deve ter pelo menos 8 caracteres');
       return;
@@ -307,16 +311,9 @@ export default function CompanySettingsScreen() {
                             </div>
                           </TableCell>
                           <TableCell className="text-right">
-                            {!companyUser.isOwner && (
-                              <div className="flex items-center justify-end gap-2">
-                                <button className="p-2 rounded-lg text-slate-600 hover:text-[#0A2342] hover:bg-slate-100 transition-all">
-                                  <Edit2 className="w-4 h-4" />
-                                </button>
-                                <button className="p-2 rounded-lg text-red-600 hover:bg-red-50 transition-all">
-                                  <Trash2 className="w-4 h-4" />
-                                </button>
-                              </div>
-                            )}
+                            {/* Edit/delete user actions removed — they were dead no-op
+                                buttons (no backend mutation exists). Cell kept for
+                                column alignment; only the Users invite flow is wired. */}
                           </TableCell>
                         </TableRow>
                       ))}
@@ -524,6 +521,16 @@ export default function CompanySettingsScreen() {
 
               <form onSubmit={handleChangePassword} className="space-y-4 max-w-md">
                 <div>
+                  <Label htmlFor="current_password">Senha atual</Label>
+                  <Input
+                    id="current_password"
+                    type="password"
+                    value={currentPassword}
+                    onChange={(e) => setCurrentPassword(e.target.value)}
+                    required
+                  />
+                </div>
+                <div>
                   <Label htmlFor="new_password">Nova senha</Label>
                   <Input
                     id="new_password"
@@ -717,6 +724,11 @@ function CompanyDataTab({ companyInfo, isLoading, onSaved }: { companyInfo: any;
         email: companyInfo.email || '',
         contactPerson: companyInfo.contact_person || '',
         phone: companyInfo.phone || '',
+        mobilePhone: companyInfo.mobile_phone || '',
+        landlinePhone: companyInfo.landline_phone || '',
+        socialMedia: companyInfo.social_media || '',
+        neighborhood: companyInfo.neighborhood || '',
+        complement: companyInfo.complement || '',
         address: companyInfo.address || '',
         city: companyInfo.city || '',
         state: companyInfo.state || '',
@@ -763,11 +775,16 @@ function CompanyDataTab({ companyInfo, isLoading, onSaved }: { companyInfo: any;
             <div><Label>Email</Label><Input value={form.email} onChange={e => setForm({...form, email: e.target.value})} /></div>
             <div><Label>Responsável</Label><Input value={form.contactPerson} onChange={e => setForm({...form, contactPerson: e.target.value})} /></div>
             <div><Label>Telefone</Label><Input value={form.phone} onChange={e => setForm({...form, phone: e.target.value})} /></div>
+            <div><Label>Celular</Label><Input value={form.mobilePhone} onChange={e => setForm({...form, mobilePhone: e.target.value})} /></div>
+            <div><Label>Telefone Fixo</Label><Input value={form.landlinePhone} onChange={e => setForm({...form, landlinePhone: e.target.value})} /></div>
             <div><Label>CEP</Label><Input value={form.zipCode} onChange={e => setForm({...form, zipCode: e.target.value})} /></div>
             <div><Label>Endereço</Label><Input value={form.address} onChange={e => setForm({...form, address: e.target.value})} /></div>
+            <div><Label>Bairro</Label><Input value={form.neighborhood} onChange={e => setForm({...form, neighborhood: e.target.value})} /></div>
+            <div><Label>Complemento</Label><Input value={form.complement} onChange={e => setForm({...form, complement: e.target.value})} /></div>
             <div><Label>Cidade</Label><Input value={form.city} onChange={e => setForm({...form, city: e.target.value})} /></div>
             <div><Label>Estado</Label><Input value={form.state} onChange={e => setForm({...form, state: e.target.value})} /></div>
             <div><Label>Site</Label><Input value={form.website} onChange={e => setForm({...form, website: e.target.value})} /></div>
+            <div><Label>Rede Social</Label><Input value={form.socialMedia} onChange={e => setForm({...form, socialMedia: e.target.value})} /></div>
             <div><Label>Setor</Label><Input value={form.industry} onChange={e => setForm({...form, industry: e.target.value})} /></div>
             <div><Label>Nº de Funcionários</Label><Input value={form.employeeCount} onChange={e => setForm({...form, employeeCount: e.target.value})} /></div>
             <div><Label>Porte da Empresa</Label>

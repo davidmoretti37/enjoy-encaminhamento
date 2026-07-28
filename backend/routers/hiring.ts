@@ -306,8 +306,12 @@ export const hiringRouter = router({
       // For estágio: signing invitations and payments are created later in configureAndSendContract
       // For CLT: create invitations and payment immediately
       if (hiringType !== "estagio") {
-        // For CLT, create one-time payment
-        await db.createPayment({
+        // For CLT/PJ, create the one-time setup-fee payment (pending). Tag it with
+        // hiring_process_id + job_id so confirmCLTPayment can find THIS hire's
+        // payment idempotently instead of grabbing any pending company payment.
+        await supabaseAdmin.from("payments").insert({
+          hiring_process_id: hiringProcess.id,
+          job_id: job.id,
           company_id: company.id,
           amount: calculatedFee,
           payment_type: "setup-fee",
@@ -361,16 +365,20 @@ export const hiringRouter = router({
       hiringProcessId: z.string().uuid(),
       durationMonths: z.number().int().min(1).max(36),
       monthlyFee: z.number().int().min(0), // In cents
+      // MUST stay <= 28. Estágio monthly-fee billing builds due dates as
+      // new Date(year, month+i, paymentDay); a day > 28 overflows short months
+      // (Feb) into a duplicate billing_period, which the uniq_payments_hp_type_period
+      // index rejects → the whole batch fails. Billing also clamps to 28 defensively,
+      // but keep this bound in lockstep with that invariant.
       paymentDay: z.number().int().min(1).max(28),
       monthlySalary: z.number().int().min(0).optional(), // In cents
       selectedTemplateIds: z.array(z.string().uuid()).min(1), // Agency selects which documents to send
       manualFields: z.record(z.string()).optional(), // Manual overrides for template placeholders
     }))
-    .mutation(async ({ input }) => {
-      const process = await hiringDb.getHiringProcessById(input.hiringProcessId);
-      if (!process) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Hiring process not found" });
-      }
+    .mutation(async ({ ctx, input }) => {
+      // Tenant guard: agencyProcedure only checks role, so verify this agency
+      // actually owns the hiring process before configuring fees / sending.
+      const process = await assertAgencyOwnsHiringProcess(ctx, input.hiringProcessId);
       if (process.status !== "awaiting_configuration") {
         throw new TRPCError({ code: "BAD_REQUEST", message: "This contract has already been configured" });
       }
@@ -563,9 +571,9 @@ export const hiringRouter = router({
             const autentiqueDocIds: string[] = [];
 
             for (const template of templates) {
-              // Download file from storage
-              const fileResponse = await fetch(template.file_url);
-              const fileBuffer = Buffer.from(await fileResponse.arrayBuffer());
+              // Download file from storage (authenticated → works on private bucket)
+              const { storageGetBytes } = await import("../storage");
+              const fileBuffer = Buffer.from(await storageGetBytes(template.file_key || template.file_url));
 
               // Check if DOCX - if so, fill placeholders and convert to PDF
               const isDocx = template.file_url?.endsWith(".docx") || template.name?.endsWith(".docx");
@@ -722,20 +730,26 @@ export const hiringRouter = router({
 
       const processes = await hiringDb.getHiringProcessesByCompany(company.id, input?.status);
 
-      // Enrich with payment status
+      // Enrich with PER-HIRE payment status. The old logic matched ANY paid payment
+      // for the company and stamped it on every hire — so a company's 2nd hire read
+      // as paid when only the 1st was, hiding its payment button and stranding it.
+      // paymentPaid now comes from the hire's own setup_fee_paid flag; the receipt is
+      // looked up by hiring_process_id.
       if (processes.length > 0) {
+        const hpIds = processes.map((p: any) => p.id);
         const { data: payments } = await supabaseAdmin
           .from("payments")
-          .select("id, status, receipt_url, company_id")
-          .eq("company_id", company.id)
-          .in("status", ["paid", "pending"]);
-
+          .select("hiring_process_id, status, receipt_url")
+          .in("hiring_process_id", hpIds)
+          .eq("payment_type", "setup-fee");
+        const byHire = new Map<string, any>();
+        for (const p of payments || []) {
+          if (!byHire.has(p.hiring_process_id)) byHire.set(p.hiring_process_id, p);
+        }
         for (const hp of processes) {
-          const payment = (payments || []).find((p: any) =>
-            p.status === "paid" || p.receipt_url
-          );
-          (hp as any).paymentPaid = payment?.status === "paid";
-          (hp as any).paymentReceiptUrl = payment?.receipt_url || null;
+          const pay = byHire.get((hp as any).id);
+          (hp as any).paymentPaid = !!(hp as any).setup_fee_paid || pay?.status === "paid";
+          (hp as any).paymentReceiptUrl = pay?.receipt_url || null;
         }
       }
 
@@ -807,9 +821,15 @@ export const hiringRouter = router({
         );
       }
 
-      // If estágio and all signed, create follow-ups and generate payments
+      // If estágio and all signed, create follow-ups and generate payments.
+      // Billing failure releases the completion marker and throws; swallow it here
+      // so the signer's action still succeeds — the reconcile cron picks it up.
       if (signatureStatus.complete && process.hiring_type === "estagio") {
-        await handleEstagioSignaturesComplete(input.hiringProcessId, process, company);
+        try {
+          await handleEstagioSignaturesComplete(input.hiringProcessId, process, company);
+        } catch (e: any) {
+          console.error("[hiring] estágio billing failed (marker released for reconcile cron):", e?.message);
+        }
       }
 
       return {
@@ -840,27 +860,38 @@ export const hiringRouter = router({
         return { success: true, alreadySigned: true };
       }
 
-      // Verify on Autentique that the company actually signed
+      // Verify on Autentique that the company actually signed.
       const { data: autentiqueDocs } = await supabaseAdmin
         .from("autentique_documents")
         .select("*")
         .eq("context_type", "hiring_contract")
         .eq("context_id", input.hiringProcessId);
 
-      if (autentiqueDocs && autentiqueDocs.length > 0) {
-        // Check that the company signer has signed all documents
-        const companyEmail = company.email;
-        const allSignedByCompany = autentiqueDocs.every((doc: any) => {
-          const companySigner = doc.signers?.find((s: any) => s.email === companyEmail);
-          return companySigner?.signed_at != null;
+      // Fail CLOSED: with no Autentique documents there is nothing proving the
+      // company signed, so we must NOT mark the process as signed. (Previously
+      // this branch was skipped entirely when no docs existed, which let a
+      // company mark itself "signed" without any real signature and activate
+      // the hire + billing.)
+      if (!autentiqueDocs || autentiqueDocs.length === 0) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message:
+            "Não há documentos da Autentique vinculados a este processo — a assinatura não pode ser confirmada.",
         });
+      }
 
-        if (!allSignedByCompany) {
-          throw new TRPCError({
-            code: "BAD_REQUEST",
-            message: "A empresa ainda não assinou todos os documentos na Autentique",
-          });
-        }
+      // Check that the company signer has signed all documents
+      const companyEmail = company.email;
+      const allSignedByCompany = autentiqueDocs.every((doc: any) => {
+        const companySigner = doc.signers?.find((s: any) => s.email === companyEmail);
+        return companySigner?.signed_at != null;
+      });
+
+      if (!allSignedByCompany) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "A empresa ainda não assinou todos os documentos na Autentique",
+        });
       }
 
       // Record company signature
@@ -879,17 +910,21 @@ export const hiringRouter = router({
         await sendSignaturesCompleteNotifications(input.hiringProcessId, process, company);
       }
 
-      // If estágio and all signed, create follow-ups and generate payments
+      // If estágio and all signed, create follow-ups and generate payments.
+      // Billing failure releases the completion marker and throws; swallow it here
+      // so the signer's action still succeeds — the reconcile cron picks it up.
       if (signatureStatus.complete && process.hiring_type === "estagio") {
-        await handleEstagioSignaturesComplete(input.hiringProcessId, process, company);
+        try {
+          await handleEstagioSignaturesComplete(input.hiringProcessId, process, company);
+        } catch (e: any) {
+          console.error("[hiring] estágio billing failed (marker released for reconcile cron):", e?.message);
+        }
       }
 
-      // For CLT/PJ, activate when both company + candidate have signed
-      if (signatureStatus.complete && (process.hiring_type === "clt" || process.hiring_type === "pj")) {
-        await hiringDb.updateHiringProcess(input.hiringProcessId, {
-          status: "active",
-        });
-      }
+      // For CLT/PJ, do NOT force 'active' on signing. The DB trigger
+      // check_hiring_signatures_complete sets pending_payment so the setup fee is
+      // collected; confirmCLTPayment activates once the company pays. (Forcing
+      // 'active' here was the setup-fee revenue leak.)
 
       return { success: true, signatureStatus };
     }),
@@ -1115,31 +1150,37 @@ export const hiringRouter = router({
         receiptUrl = url;
       }
 
-      // Record payment receipt
-      const updates: any = {};
-      if (process.status === "pending_payment") {
-        updates.status = "pending_signatures";
+      // Record that the setup fee is paid and advance the status. Both orderings
+      // converge on 'active' with the fee collected:
+      //   * sign-first → status is already pending_payment (both signed): activate
+      //     now. Writing 'active' directly survives the trigger (it only overrides
+      //     pending_signatures writes).
+      //   * pay-first → status is pending_signatures (candidate hasn't signed yet):
+      //     just set setup_fee_paid. The DB trigger (migration 120) activates the
+      //     hire on the candidate's final signature because the flag is now set.
+      // Setting setup_fee_paid unconditionally is the fix for the stranding bug
+      // where a company paid before the last signature and nobody ever activated it.
+      const isCltPj = process.hiring_type === "clt" || process.hiring_type === "pj";
+      const bothSigned = !!(process.company_signed && process.candidate_signed);
+      const updates: any = { setup_fee_paid: true };
+      if (isCltPj && bothSigned) {
+        updates.status = "active";
       }
-      // For PJ: if already in pending_signatures and all docs signed, activate
-      if (process.status === "pending_signatures" && (process.hiring_type === "pj" || process.hiring_type === "clt")) {
-        if (process.company_signed && process.candidate_signed) {
-          updates.status = "active";
-        }
-      }
-      if (Object.keys(updates).length > 0) {
-        await hiringDb.updateHiringProcess(input.hiringProcessId, updates);
-      }
+      await supabaseAdmin.from("hiring_processes").update(updates).eq("id", input.hiringProcessId);
 
-      // Update or create payment record with receipt
+      // Update or create the setup-fee payment record. Scope the lookup to THIS
+      // hire (hiring_process_id) — the old lookup grabbed any pending payment for
+      // the company and, once it was paid, a re-confirmation found none and created
+      // a SECOND paid setup-fee (double charge). Now it's idempotent per hire.
       if (receiptUrl) {
         const { data: existingPayment } = await supabaseAdmin
           .from("payments")
           .select("id")
-          .eq("company_id", company.id)
-          .eq("status", "pending")
+          .eq("hiring_process_id", input.hiringProcessId)
+          .eq("payment_type", "setup-fee")
           .order("created_at", { ascending: false })
           .limit(1)
-          .single();
+          .maybeSingle();
 
         if (existingPayment) {
           await supabaseAdmin
@@ -1147,8 +1188,9 @@ export const hiringRouter = router({
             .update({ receipt_url: receiptUrl, status: "paid", paid_at: new Date().toISOString() })
             .eq("id", existingPayment.id);
         } else {
-          // Create payment record if none exists
-          await db.createPayment({
+          await supabaseAdmin.from("payments").insert({
+            hiring_process_id: input.hiringProcessId,
+            job_id: process.job_id || null,
             company_id: company.id,
             amount: process.calculated_fee || 0,
             payment_type: "setup-fee",
@@ -1189,12 +1231,36 @@ export const hiringRouter = router({
         // Follow-up may already exist from initiateHiring
       }
 
-      // Notify candidate that documents are ready for signing
-      if (process.candidate?.user_id) {
+      // Completion notice. If this payment closed the setup-fee gate (paid + both
+      // signed → active), tell both parties the hire is DONE. Otherwise (paid but
+      // signatures still pending) keep the original "documents ready to sign" nudge.
+      const jobTitle = process.job?.title || "a vaga";
+      if (updates.status === "active") {
+        if (process.candidate?.user_id) {
+          await db.createNotification({
+            user_id: process.candidate.user_id,
+            title: "Você foi contratado!",
+            message: `Seu contrato para "${jobTitle}" foi finalizado. Parabéns!`,
+            type: "success",
+            related_to_type: "hiring",
+            related_to_id: input.hiringProcessId,
+          });
+        }
+        if (company.user_id) {
+          await db.createNotification({
+            user_id: company.user_id,
+            title: "Contratação concluída!",
+            message: `A contratação de ${process.candidate?.full_name || "o candidato"} para "${jobTitle}" foi finalizada (pagamento e assinaturas concluídos).`,
+            type: "success",
+            related_to_type: "hiring",
+            related_to_id: input.hiringProcessId,
+          });
+        }
+      } else if (process.candidate?.user_id) {
         await db.createNotification({
           user_id: process.candidate.user_id,
           title: "Documentos prontos para assinatura",
-          message: `Os documentos da vaga "${process.job?.title}" estão prontos. Acesse sua candidatura para assinar.`,
+          message: `Os documentos da vaga "${jobTitle}" estão prontos. Acesse sua candidatura para assinar.`,
           type: "info",
           related_to_type: "hiring",
           related_to_id: input.hiringProcessId,
@@ -1223,7 +1289,26 @@ export const hiringRouter = router({
    */
   getHiringProcessesByJobId: agencyProcedure
     .input(z.object({ jobId: z.string().uuid() }))
-    .query(async ({ input }) => {
+    .query(async ({ ctx, input }) => {
+      // Tenant guard: this returns signing-invitation TOKENS for the job's
+      // hiring processes. agencyProcedure only checks role, so without this any
+      // agency could harvest another tenant's tokens and forge signatures.
+      if (ctx.user.role !== 'admin' && ctx.user.role !== 'super_admin') {
+        const agency = await db.getAgencyForUserContext(ctx.user.id, ctx.user.role);
+        const job = await db.getJobById(input.jobId);
+        let ok = false;
+        if (agency && job?.company_id) {
+          const { data: company } = await supabaseAdmin
+            .from('companies')
+            .select('id, agency_id')
+            .eq('id', job.company_id)
+            .single();
+          ok = !!company && company.agency_id === agency.id;
+        }
+        if (!ok) {
+          throw new TRPCError({ code: 'FORBIDDEN', message: 'Esta vaga não pertence à sua agência' });
+        }
+      }
       return await hiringDb.getHiringProcessesByJobId(input.jobId);
     }),
 
@@ -1234,7 +1319,8 @@ export const hiringRouter = router({
     .input(z.object({
       hiringProcessId: z.string().uuid(),
     }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
+      await assertAgencyOwnsHiringProcess(ctx, input.hiringProcessId);
       const unsent = await hiringDb.getUnsentInvitations(input.hiringProcessId);
 
       if (unsent.length === 0) {
@@ -1274,7 +1360,10 @@ export const hiringRouter = router({
       signerName: z.string().min(1),
       signerEmail: z.string().email(),
     }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
+      // Tenant guard: only the owning agency may mint a signing invitation
+      // (and receive its token) for this process.
+      await assertAgencyOwnsHiringProcess(ctx, input.hiringProcessId);
       // Check no existing invitation for this role
       const existing = await hiringDb.getSigningInvitationsByHiringProcess(input.hiringProcessId);
       const alreadyExists = existing.find((inv: any) => inv.signer_role === input.signerRole);
@@ -1301,11 +1390,10 @@ export const hiringRouter = router({
       hiringProcessId: z.string().uuid(),
       selectedTemplateIds: z.array(z.string().uuid()).min(1),
     }))
-    .mutation(async ({ input }) => {
-      const process = await hiringDb.getHiringProcessById(input.hiringProcessId);
-      if (!process) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Hiring process not found" });
-      }
+    .mutation(async ({ ctx, input }) => {
+      // Tenant guard: template placeholders expose candidate PII (CPF/RG/parent
+      // CPF/address/DOB) — restrict to the owning agency.
+      const process = await assertAgencyOwnsHiringProcess(ctx, input.hiringProcessId);
 
       const candidate = await db.getCandidateById(process.candidate_id);
       const company = await db.getCompanyById(process.company_id);
@@ -1404,8 +1492,8 @@ export const hiringRouter = router({
         }
 
         try {
-          const response = await fetch(template.file_url);
-          const buffer = Buffer.from(await response.arrayBuffer());
+          const { storageGetBytes } = await import("../storage");
+          const buffer = Buffer.from(await storageGetBytes(template.file_key || template.file_url));
           const placeholders = scanPlaceholders(buffer);
 
           const autoFilled: Record<string, string> = {};
@@ -1536,12 +1624,8 @@ export const hiringRouter = router({
           company
         );
 
-        // For CLT/PJ, activate when both company + candidate have signed
-        if (process.hiring_type === "clt" || process.hiring_type === "pj") {
-          await hiringDb.updateHiringProcess(input.hiringProcessId, {
-            status: "active",
-          });
-        }
+        // For CLT/PJ, do NOT force 'active' on signing — the trigger sets
+        // pending_payment (setup-fee gate); confirmCLTPayment activates on payment.
       }
 
       return { success: true, signatureStatus };
@@ -1559,11 +1643,10 @@ export const hiringRouter = router({
         target: z.enum(['company', 'candidate', 'both']),
       })),
     }))
-    .mutation(async ({ input }) => {
-      const process = await hiringDb.getHiringProcessById(input.hiringProcessId);
-      if (!process) {
-        throw new TRPCError({ code: 'NOT_FOUND', message: 'Hiring process not found' });
-      }
+    .mutation(async ({ ctx, input }) => {
+      // Tenant guard: this deletes/replaces document assignments and dispatches
+      // contract signing — restrict to the owning agency.
+      const process = await assertAgencyOwnsHiringProcess(ctx, input.hiringProcessId);
 
       // Delete existing assignments
       await supabaseAdmin
@@ -1626,6 +1709,8 @@ export const hiringRouter = router({
           },
         });
 
+        let created = 0;
+        let failed = 0;
         for (const doc of input.documents) {
           const template = templates.find((t: any) => t.id === doc.templateId);
           if (!template) continue;
@@ -1644,8 +1729,8 @@ export const hiringRouter = router({
           if (signers.length === 0) continue;
 
           try {
-            const fileResponse = await fetch(template.file_url);
-            const fileBuffer = Buffer.from(await fileResponse.arrayBuffer());
+            const { storageGetBytes } = await import("../storage");
+            const fileBuffer = Buffer.from(await storageGetBytes(template.file_key || template.file_url));
             const isDocx = template.file_url?.endsWith('.docx') || template.name?.endsWith('.docx');
             let pdfBuffer: Buffer;
             if (isDocx) {
@@ -1670,13 +1755,29 @@ export const hiringRouter = router({
                   autentiqueSignerId: apiSigner.public_id, signUrl: apiSigner.signUrl };
               }),
             });
+            created++;
           } catch (err) {
+            failed++;
             console.error(`[Hiring] Failed to create Autentique doc for template ${template.name}:`, err);
           }
         }
+
+        // Do NOT report success when nothing was actually created. The DOCX→PDF
+        // conversion (fillDocxTemplate) runs LibreOffice in-process and throws on
+        // any host without the soffice binary — previously this returned
+        // success:true with the full input count, so the agency believed
+        // contracts were sent when zero documents existed.
+        if (created === 0 && input.documents.length > 0) {
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message:
+              "Nenhum documento pôde ser gerado/enviado (falha na conversão do contrato). Nenhum contrato foi enviado.",
+          });
+        }
+        return { success: true, count: created, failed };
       }
 
-      return { success: true, count: input.documents.length };
+      return { success: true, count: 0, failed: 0 };
     }),
 
   /**
@@ -1888,6 +1989,73 @@ export const hiringRouter = router({
       return { url };
     }),
 
+  // Report items #20/#23: ANEC uploads the intern's life-insurance policy
+  // (apólice). Uploading it also marks the insurance 'active' (off "Pendente")
+  // and, when an expiry is given, feeds the life-insurance expiry notification
+  // (#18). ANEC-controlled — company only views (see company.getEmployee* views).
+  uploadInsurancePolicy: agencyProcedure
+    .input(z.object({
+      hiringProcessId: z.string().uuid(),
+      fileBase64: z.string().max(15 * 1024 * 1024),
+      fileName: z.string(),
+      expiresAt: z.string().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const process = await assertAgencyOwnsHiringProcess(ctx, input.hiringProcessId);
+
+      const buffer = Buffer.from(input.fileBase64, 'base64');
+      if (buffer.length > 10 * 1024 * 1024) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Arquivo muito grande. Máximo 10MB.' });
+      }
+      if (buffer.length < 12) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Arquivo inválido' });
+      }
+
+      // Apólices arrive as PDFs or scanned images — validate content by magic bytes.
+      const head = buffer.subarray(0, 12);
+      let mimeType: string | null = null;
+      let ext = '';
+      if (head[0] === 0x25 && head[1] === 0x50 && head[2] === 0x44 && head[3] === 0x46) {
+        mimeType = 'application/pdf'; ext = 'pdf';
+      } else if (head[0] === 0xFF && head[1] === 0xD8 && head[2] === 0xFF) {
+        mimeType = 'image/jpeg'; ext = 'jpg';
+      } else if (head[0] === 0x89 && head[1] === 0x50 && head[2] === 0x4E && head[3] === 0x47) {
+        mimeType = 'image/png'; ext = 'png';
+      } else if (
+        head[0] === 0x52 && head[1] === 0x49 && head[2] === 0x46 && head[3] === 0x46 &&
+        head[8] === 0x57 && head[9] === 0x45 && head[10] === 0x42 && head[11] === 0x50
+      ) {
+        mimeType = 'image/webp'; ext = 'webp';
+      }
+      if (!mimeType) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Apenas PDF ou imagem (JPG, PNG, WebP) são permitidos' });
+      }
+
+      const key = `insurance/${process.company_id}/${input.hiringProcessId}/${Date.now()}-apolice.${ext}`;
+      const { storagePut, storageDelete } = await import('../storage');
+      const priorUrl: string | null = process.insurance_document_url || null;
+      const { url } = await storagePut(key, buffer, mimeType);
+
+      await hiringDb.updateHiringProcess(input.hiringProcessId, {
+        insurance_document_url: url,
+        insurance_status: 'active',
+        ...(input.expiresAt ? { insurance_expires_at: input.expiresAt } : {}),
+      } as any);
+
+      if (priorUrl) {
+        const m = priorUrl.match(/\/storage\/v1\/object\/public\/contracts\/(.+)$/);
+        if (m && m[1]) {
+          try {
+            await storageDelete(m[1]);
+          } catch (e) {
+            console.error('[uploadInsurancePolicy] failed to delete prior apólice', e);
+          }
+        }
+      }
+
+      return { url };
+    }),
+
   /**
    * Manually mark a hiring process active. For estágio this also runs the
    * full post-signature side effects (recurring monthly-fee payments,
@@ -1929,20 +2097,18 @@ export const hiringRouter = router({
       }
 
       if (process.hiring_type === 'estagio') {
-        // Idempotency: if recurring monthly-fee payments already exist for
-        // this contract (e.g. an earlier run already produced them, or
-        // auto-activation fired), skip the side-effect chain so we don't
-        // double-bill the company.
-        let alreadyHasPayments = false;
-        if (process.contract_id) {
-          const { data: existingPayments } = await supabaseAdmin
-            .from('payments')
-            .select('id')
-            .eq('contract_id', process.contract_id)
-            .eq('payment_type', 'monthly-fee')
-            .limit(1);
-          alreadyHasPayments = !!(existingPayments && existingPayments.length > 0);
-        }
+        // Idempotency: if recurring monthly-fee payments already exist for THIS
+        // hire, skip the side-effect chain so we don't double-bill. Keyed on
+        // hiring_process_id — the old guard keyed on contract_id, which is never
+        // populated, so it was dead code that always ran the billing (the marker
+        // CAS + unique index were the only real defenses).
+        const { data: existingPayments } = await supabaseAdmin
+          .from('payments')
+          .select('id')
+          .eq('hiring_process_id', input.hiringProcessId)
+          .eq('payment_type', 'monthly-fee')
+          .limit(1);
+        const alreadyHasPayments = !!(existingPayments && existingPayments.length > 0);
         if (!alreadyHasPayments) {
           try {
             await handleEstagioSignaturesComplete(input.hiringProcessId, process, company);
@@ -1961,7 +2127,9 @@ export const hiringRouter = router({
     .input(z.object({
       hiringProcessId: z.string().uuid(),
     }))
-    .query(async ({ input }) => {
+    .query(async ({ ctx, input }) => {
+      // Tenant guard: leaks document list + signing status/URLs otherwise.
+      await assertAgencyOwnsHiringProcess(ctx, input.hiringProcessId);
       const { data, error } = await supabaseAdmin
         .from('hiring_process_documents')
         .select('*, template:agency_document_templates(id, name, file_url, category)')
@@ -2218,29 +2386,53 @@ async function handleEstagioSignaturesComplete(
   process: any,
   company: any
 ): Promise<void> {
-  const startDate = new Date(process.start_date);
+  // Idempotency (money-safety): if recurring monthly-fee payments already exist
+  // for this contract, a prior completion already ran — skip so concurrent or
+  // replayed signature-completion events cannot double-bill (up to 12 charges)
+  // or duplicate follow-ups. Previously ONLY markHiringActive guarded this;
+  // signAsCompany / confirmCompanyAutentiqueSign called it unguarded, so two
+  // completion triggers could both pass the per-role TOCTOU check and each
+  // generate a full set of charges.
+  // Idempotency (money-safety): compare-and-set the completion marker so the
+  // recurring monthly-fee billing runs AT MOST ONCE per hire across every path —
+  // the Autentique webhook AND all in-app signing paths — even though the DB
+  // trigger advances status early and hiring_processes.contract_id is never
+  // populated (so a status/contract_id-based guard can't dedup). Whichever caller
+  // wins the CAS bills; every other caller (and a replayed webhook) skips.
+  const { data: wonCompletion } = await supabaseAdmin
+    .from('hiring_processes')
+    .update({ completion_processed_at: new Date().toISOString() })
+    .eq('id', hiringProcessId)
+    .is('completion_processed_at', null)
+    .select('id');
+  if (!wonCompletion || wonCompletion.length === 0) {
+    console.log('[handleEstagioSignaturesComplete] completion already processed — skipping (idempotent)');
+    return;
+  }
 
-  // Create follow-up schedule
-  await hiringDb.createEstagioFollowUps(
-    hiringProcessId,
-    process.contract_id,
-    company.id,
-    startDate
-  );
-
-  // Generate recurring payments using configured values
-  const paymentDay = process.payment_day || hiringDb.calculatePaymentDay(startDate);
+  // Build due dates from the calendar parts of the YYYY-MM-DD string. `new Date(str)`
+  // + setMonth() day-overflow produced DUPLICATE/SKIPPED billing periods (now caught
+  // by the migration-120 unique index); from-parts construction is correct.
+  const [baseYear, baseMonth1, baseDay] = String(process.start_date).slice(0, 10).split("-").map(Number);
+  const baseMonth0 = (baseMonth1 || 1) - 1;
+  const startDate = new Date(baseYear, baseMonth0, baseDay || 1);
+  const paymentDay = Math.min(process.payment_day || baseDay || 5, 28); // clamp <=28 so no month has >28 days -> no setMonth overflow -> distinct periods
   const monthlyFee = process.calculated_fee;
   const durationMonths = process.contract_duration_months || 12;
 
+  // Build the full monthly-fee schedule and insert it in ONE batch (all-or-nothing).
+  // A mid-loop failure in the old 12-sequential-insert version left the hire
+  // PARTIALLY billed with the completion marker already consumed — unrecoverable.
+  // Now: zero rows land on failure, so we RELEASE the marker and the reconcile cron
+  // (or any later completion event) retries cleanly with no duplicate charges.
+  const payments = [] as any[];
   for (let i = 0; i < durationMonths; i++) {
-    const dueDate = new Date(startDate);
-    dueDate.setMonth(dueDate.getMonth() + i);
-    dueDate.setDate(paymentDay);
-
-    await db.createPayment({
-      contract_id: process.contract_id || undefined,
+    const dueDate = new Date(baseYear, baseMonth0 + i, paymentDay);
+    payments.push({
+      contract_id: process.contract_id || null,
       company_id: company.id,
+      job_id: process.job_id || null,
+      hiring_process_id: hiringProcessId,
       amount: monthlyFee,
       payment_type: "monthly-fee",
       due_date: dueDate.toISOString(),
@@ -2248,6 +2440,28 @@ async function handleEstagioSignaturesComplete(
       billing_period: `${dueDate.getFullYear()}-${String(dueDate.getMonth() + 1).padStart(2, "0")}`,
       notes: `Taxa mensal estágio - ${process.candidate?.full_name}`,
     });
+  }
+  const { error: payErr } = await supabaseAdmin.from("payments").insert(payments);
+  if (payErr) {
+    // Release the marker for retry ONLY if nothing landed. A single batch insert is
+    // atomic — if rows exist despite the error, it committed (e.g. connection dropped
+    // after commit) and releasing would let the reconcile cron double-bill.
+    const { count } = await supabaseAdmin.from("payments").select("*", { count: "exact", head: true })
+      .eq("hiring_process_id", hiringProcessId).eq("payment_type", "monthly-fee");
+    if (!count) {
+      console.error("[handleEstagioSignaturesComplete] BILLING INSERT FAILED (0 rows) — releasing marker for retry:", payErr.message);
+      await supabaseAdmin.from("hiring_processes").update({ completion_processed_at: null }).eq("id", hiringProcessId);
+      throw new Error(`estágio billing insert failed: ${payErr.message}`);
+    }
+    console.error(`[handleEstagioSignaturesComplete] insert errored but ${count} rows exist — keeping marker (no double-bill):`, payErr.message);
+  }
+
+  // Follow-up schedule (non-money) only AFTER billing succeeds, so a billing retry
+  // never duplicates follow-ups.
+  try {
+    await hiringDb.createEstagioFollowUps(hiringProcessId, process.contract_id, company.id, startDate);
+  } catch (e: any) {
+    console.error("[handleEstagioSignaturesComplete] follow-up schedule insert failed (non-fatal):", e?.message);
   }
 }
 

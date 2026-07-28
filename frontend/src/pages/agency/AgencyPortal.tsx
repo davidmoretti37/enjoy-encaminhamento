@@ -18,7 +18,6 @@ function AgencyPortalContent() {
     isLoading,
   } = useAgencyFunnel();
 
-  console.log('[AgencyPortalContent] Rendering, activeTab:', activeTab, 'isLoading:', isLoading);
 
   if (isLoading) {
     return (
@@ -54,9 +53,8 @@ export default function AgencyPortal() {
     return null;
   }
 
-  // Both admin and agency users see the new portal
-  if (user.role === "admin" || user.role === "agency") {
-    console.log('[AgencyPortal] User detected:', user.role, '- rendering new portal');
+  // Both admin and agency users see the new portal (AC-9: super_admin is head-level too)
+  if (user.role === "admin" || user.role === "super_admin" || user.role === "agency") {
     return (
       <AgencyFunnelProvider>
         <AgencyPortalContent />

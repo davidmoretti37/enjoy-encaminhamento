@@ -70,8 +70,19 @@ export async function getAllCandidates(): Promise<Candidate[]> {
 }
 
 export async function updateCandidate(id: string, data: Partial<InsertCandidate>): Promise<void> {
+  // Postgres enum columns reject "" (they need a valid label or NULL). A blank
+  // <select> in an edit form sends an empty string — e.g. preferred_work_type or
+  // education_level — and the whole save fails with
+  // `invalid input value for enum work_type: ""`. Coerce blank enum values to
+  // NULL ("no value") at this single write choke-point so EVERY edit path is
+  // protected, regardless of what the form sent.
+  const clean: any = { ...data };
+  for (const f of ["education_level", "preferred_work_type"] as const) {
+    if (clean[f] === "") clean[f] = null;
+  }
+
   // Use admin client to bypass RLS (needed during onboarding flow)
-  const { error } = await db.from("candidates").update(data).eq("id", id);
+  const { error } = await db.from("candidates").update(clean).eq("id", id);
 
   if (error) throw error;
 }

@@ -1,4 +1,5 @@
 import { PDFDocument, rgb, StandardFonts, PDFFont, PDFPage } from "pdf-lib";
+import { computeDiscInterpretation } from "./discProfiles";
 
 const BRAND_DARK = rgb(10 / 255, 35 / 255, 66 / 255); // #0A2342
 const BRAND_ORANGE = rgb(255 / 255, 107 / 255, 53 / 255); // #FF6B35
@@ -306,6 +307,70 @@ export async function generateCandidateCardPdf(
       });
       y -= 18;
     }
+
+    // ─── Interpretive DISC analysis (report item #7) ──────────────────
+    // Rule-based (computeDiscInterpretation) so it matches the on-screen card.
+    const interp = computeDiscInterpretation(
+      data.disc_dominante,
+      data.disc_influente,
+      data.disc_estavel,
+      data.disc_conforme,
+    );
+
+    // Small local helpers scoped to this block.
+    const drawParagraph = (text: string, size = 9, color = GRAY_600) => {
+      for (const line of wrapText(text, font, size, contentWidth)) {
+        addNewPageIfNeeded(size + 4);
+        page.drawText(line, { x: margin, y, size, font, color });
+        y -= size + 4;
+      }
+    };
+    const drawLabeled = (label: string, value: string) => {
+      for (const line of wrapText(`${label}: ${value}`, font, 9, contentWidth)) {
+        addNewPageIfNeeded(13);
+        page.drawText(line, { x: margin, y, size: 9, font, color: GRAY_600 });
+        y -= 13;
+      }
+    };
+
+    if (interp.primary) {
+      y -= 6;
+      addNewPageIfNeeded(16);
+      page.drawText(`Perfil Predominante: ${interp.primary.title} (${interp.primary.value}%)`, {
+        x: margin, y, size: 11, font: fontBold, color: BRAND_DARK,
+      });
+      y -= 16;
+      drawParagraph(interp.primary.description);
+      drawLabeled("Foco", interp.primary.focus);
+      drawLabeled("Motivação", interp.primary.motivation);
+      drawLabeled("Forças", interp.primary.strengths.join(", "));
+      drawLabeled("Comunicação", interp.primary.communication);
+      drawLabeled("Pontos de atenção", interp.primary.risks.join(", "));
+
+      if (interp.secondary) {
+        y -= 6;
+        addNewPageIfNeeded(15);
+        page.drawText(`Perfil Secundário: ${interp.secondary.title} (${interp.secondary.value}%)`, {
+          x: margin, y, size: 10, font: fontBold, color: BRAND_MED,
+        });
+        y -= 15;
+        drawParagraph(interp.secondary.description);
+        drawLabeled("Forças", interp.secondary.strengths.join(", "));
+      }
+
+      if (interp.combined) {
+        y -= 6;
+        addNewPageIfNeeded(15);
+        page.drawText(`Perfil Combinado: ${interp.combined.name}`, {
+          x: margin, y, size: 10, font: fontBold, color: BRAND_MED,
+        });
+        y -= 15;
+        drawParagraph(interp.combined.description);
+        for (const t of interp.combined.traits) drawParagraph(`• ${t}`);
+        drawLabeled("Principal risco", interp.combined.risk);
+        drawLabeled("Comum em", interp.combined.commonIn);
+      }
+    }
   }
 
   // ─── PDP Competencies ────────────────────────────────────────────────
@@ -422,13 +487,13 @@ export async function generateCandidateCardPdf(
     page.drawText(availLine, { x: margin, y, size: 10, font, color: BRAND_MED });
     y -= 14;
     if (data.is_school_student) {
-      page.drawText("Aluno(a) ANEC", { x: margin, y, size: 9, font: fontBold, color: BRAND_ORANGE });
+      page.drawText("Inexxa Formação Profissionalizante", { x: margin, y, size: 9, font: fontBold, color: BRAND_ORANGE });
       y -= 13;
     }
   } else if (data.is_school_student) {
     drawSectionTitle("Informações Adicionais");
     addNewPageIfNeeded(20);
-    page.drawText("Aluno(a) ANEC", { x: margin, y, size: 9, font: fontBold, color: BRAND_ORANGE });
+    page.drawText("Inexxa Formação Profissionalizante", { x: margin, y, size: 9, font: fontBold, color: BRAND_ORANGE });
     y -= 13;
   }
 

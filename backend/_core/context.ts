@@ -151,8 +151,13 @@ export async function createContext(
               id: authUser.id,
               email: authUser.email || '',
               name: authUser.user_metadata?.name || null,
-              role: authUser.user_metadata?.role || null,
-              agency_id: authUser.user_metadata?.agency_id || null,
+              // NEVER trust client-supplied metadata for authorization. When the
+              // public.users row is missing we fail safe to the least-privileged
+              // role — a privileged role must come only from public.users, which
+              // is written server-side. (Prevents role escalation via signUp
+              // options.data.role = 'admin'/'agency'.)
+              role: 'candidate',
+              agency_id: null,
               created_at: authUser.created_at,
               updated_at: null,
               last_signed_in: null,

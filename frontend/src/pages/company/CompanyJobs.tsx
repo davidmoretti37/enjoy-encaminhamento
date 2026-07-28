@@ -61,18 +61,23 @@ export default function CompanyJobs() {
   const [editFormData, setEditFormData] = useState({
     title: '',
     contract_type: '',
-    salary: '',
+    salary_min: '',
+    salary_max: '',
     description: '',
     requirements: '',
+    benefits: '',
     work_schedule: '',
   });
   const [expandedApplications, setExpandedApplications] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     title: '',
     contract_type: '',
-    salary: '',
+    openings: '1',
+    salary_min: '',
+    salary_max: '',
     description: '',
     requirements: '',
+    benefits: '',
     work_schedule: '',
     subsidiary_cnpj: '',
     subsidiary_name: '',
@@ -102,9 +107,12 @@ export default function CompanyJobs() {
       setFormData({
         title: '',
         contract_type: '',
-        salary: '',
+        openings: '1',
+        salary_min: '',
+        salary_max: '',
         description: '',
         requirements: '',
+        benefits: '',
         work_schedule: '',
         subsidiary_cnpj: '',
         subsidiary_name: '',
@@ -165,9 +173,11 @@ export default function CompanyJobs() {
     setEditFormData({
       title: job.title || '',
       contract_type: job.contract_type || '',
-      salary: job.salary_min ? String(job.salary_min) : '',
+      salary_min: job.salary_min ? String(job.salary_min) : '',
+      salary_max: job.salary_max ? String(job.salary_max) : '',
       description: job.description || '',
       requirements: job.requirements || job.specific_requirements || '',
+      benefits: Array.isArray(job.benefits) ? job.benefits.join('\n') : (job.benefits || ''),
       work_schedule: job.work_schedule || '',
     });
     setEditModalOpen(true);
@@ -180,10 +190,11 @@ export default function CompanyJobs() {
       title: editFormData.title || undefined,
       description: editFormData.description || undefined,
       contract_type: (editFormData.contract_type as 'estagio' | 'clt' | 'menor-aprendiz' | 'pj') || undefined,
-      salary_min: editFormData.salary ? parseFloat(editFormData.salary) : undefined,
-      salary_max: editFormData.salary ? parseFloat(editFormData.salary) : undefined,
+      salary_min: editFormData.salary_min ? parseFloat(editFormData.salary_min) : undefined,
+      salary_max: editFormData.salary_max ? parseFloat(editFormData.salary_max) : undefined,
       work_schedule: editFormData.work_schedule || undefined,
       requirements: editFormData.requirements || undefined,
+      benefits: editFormData.benefits || undefined,
     });
   };
 
@@ -222,10 +233,12 @@ export default function CompanyJobs() {
       title: formData.title,
       description: formData.description,
       contract_type: formData.contract_type as 'estagio' | 'clt' | 'menor-aprendiz' | 'pj',
-      salary_min: formData.salary ? parseFloat(formData.salary) : undefined,
-      salary_max: formData.salary ? parseFloat(formData.salary) : undefined,
+      openings: parseInt(formData.openings) || 1,
+      salary_min: formData.salary_min ? parseFloat(formData.salary_min) : undefined,
+      salary_max: formData.salary_max ? parseFloat(formData.salary_max) : undefined,
       work_schedule: formData.work_schedule || undefined,
       requirements: formData.requirements || undefined,
+      benefits: formData.benefits || undefined,
       subsidiary_cnpj: formData.subsidiary_cnpj || undefined,
       subsidiary_name: formData.subsidiary_name || undefined,
     });
@@ -277,13 +290,36 @@ export default function CompanyJobs() {
                     </Select>
                   </div>
                   <div className="grid gap-2">
-                    <Label htmlFor="salary">Salario (R$)</Label>
+                    <Label htmlFor="openings">Número de vagas</Label>
                     <Input
-                      id="salary"
+                      id="openings"
+                      type="number"
+                      min={1}
+                      placeholder="1"
+                      value={formData.openings}
+                      onChange={(e) => setFormData(prev => ({ ...prev, openings: e.target.value }))}
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="grid gap-2">
+                    <Label htmlFor="salary_min">Salário mínimo (R$)</Label>
+                    <Input
+                      id="salary_min"
                       type="number"
                       placeholder="1500"
-                      value={formData.salary}
-                      onChange={(e) => setFormData(prev => ({ ...prev, salary: e.target.value }))}
+                      value={formData.salary_min}
+                      onChange={(e) => setFormData(prev => ({ ...prev, salary_min: e.target.value }))}
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="salary_max">Salário máximo (R$)</Label>
+                    <Input
+                      id="salary_max"
+                      type="number"
+                      placeholder="2500"
+                      value={formData.salary_max}
+                      onChange={(e) => setFormData(prev => ({ ...prev, salary_max: e.target.value }))}
                     />
                   </div>
                 </div>
@@ -377,6 +413,17 @@ export default function CompanyJobs() {
                     onChange={(e) => setFormData(prev => ({ ...prev, requirements: e.target.value }))}
                   />
                 </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="benefits">Benefícios</Label>
+                  <Textarea
+                    id="benefits"
+                    placeholder="Um benefício por linha (ex.: Vale-transporte, Vale-refeição, Plano de saúde...)"
+                    rows={3}
+                    value={formData.benefits}
+                    onChange={(e) => setFormData(prev => ({ ...prev, benefits: e.target.value }))}
+                  />
+                  <p className="text-xs text-muted-foreground">Liste um benefício por linha.</p>
+                </div>
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={() => setIsModalOpen(false)}>
@@ -426,12 +473,21 @@ export default function CompanyJobs() {
                   </Select>
                 </div>
                 <div className="grid gap-2">
-                  <Label htmlFor="edit-salary">Salário (R$)</Label>
+                  <Label htmlFor="edit-salary_min">Salário mínimo (R$)</Label>
                   <Input
-                    id="edit-salary"
+                    id="edit-salary_min"
                     type="number"
-                    value={editFormData.salary}
-                    onChange={(e) => setEditFormData(prev => ({ ...prev, salary: e.target.value }))}
+                    value={editFormData.salary_min}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, salary_min: e.target.value }))}
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="edit-salary_max">Salário máximo (R$)</Label>
+                  <Input
+                    id="edit-salary_max"
+                    type="number"
+                    value={editFormData.salary_max}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, salary_max: e.target.value }))}
                   />
                 </div>
               </div>
@@ -459,6 +515,17 @@ export default function CompanyJobs() {
                   value={editFormData.requirements}
                   onChange={(e) => setEditFormData(prev => ({ ...prev, requirements: e.target.value }))}
                 />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="edit-benefits">Benefícios</Label>
+                <Textarea
+                  id="edit-benefits"
+                  rows={3}
+                  placeholder="Um benefício por linha (ex.: Vale-transporte, Vale-refeição, Plano de saúde...)"
+                  value={editFormData.benefits}
+                  onChange={(e) => setEditFormData(prev => ({ ...prev, benefits: e.target.value }))}
+                />
+                <p className="text-xs text-muted-foreground">Liste um benefício por linha.</p>
               </div>
             </div>
             <DialogFooter>
@@ -578,6 +645,18 @@ export default function CompanyJobs() {
                         <div className="mb-4">
                           <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Requisitos</h4>
                           <p className="text-gray-700 text-sm whitespace-pre-wrap">{job.requirements}</p>
+                        </div>
+                      )}
+
+                      {/* Benefits */}
+                      {Array.isArray(job.benefits) && job.benefits.length > 0 && (
+                        <div className="mb-4">
+                          <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Benefícios</h4>
+                          <ul className="list-disc list-inside text-gray-700 text-sm space-y-0.5">
+                            {job.benefits.map((b: string, i: number) => (
+                              <li key={i}>{b}</li>
+                            ))}
+                          </ul>
                         </div>
                       )}
 

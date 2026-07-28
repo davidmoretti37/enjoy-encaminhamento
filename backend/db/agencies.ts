@@ -79,11 +79,14 @@ export async function getAgencyById(id: string) {
   return { ...data, affiliates: affiliateData };
 }
 
-export async function updateAgencyStatus(id: string, status: "pending" | "active" | "suspended") {
-  const { error } = await db
-    .from("agencies")
-    .update({ status, updated_at: new Date().toISOString() })
-    .eq("id", id);
+export async function updateAgencyStatus(
+  id: string,
+  status: "pending" | "active" | "suspended" | "rejected",
+  rejectionReason?: string | null
+) {
+  const patch: any = { status, updated_at: new Date().toISOString() };
+  if (status === "rejected") patch.rejection_reason = rejectionReason ?? null;
+  const { error } = await db.from("agencies").update(patch).eq("id", id);
 
   if (error) {
     console.error("[Database] Failed to update agency status:", error);
@@ -262,21 +265,16 @@ export async function getCompaniesByAgencyId(agencyId: string) {
 }
 
 export async function getJobsByAgencyId(agencyId: string) {
-  const { data: agency } = await db
-    .from("agencies")
-    .select("affiliate_id")
-    .eq("id", agencyId)
-    .single();
-
-  if (!agency || !agency.affiliate_id) {
-    console.error("[Database] Agency not found or has no affiliate_id");
-    return [];
-  }
-
+  // Tenant-scope to jobs whose company belongs to THIS agency.
+  // `companies!inner` makes the embed filter actually restrict the parent
+  // `jobs` rows; a non-inner embed filter does not (PostgREST returns every
+  // row with the embed nulled). Scope by companies.agency_id (the canonical
+  // company->agency assignment key) rather than affiliate_id, so Uberlândia
+  // and Ipatinga see only their own jobs, not the whole head-agency region.
   const { data, error } = await db
     .from("jobs")
-    .select(`*, companies(id, company_name, city)`)
-    .eq("companies.affiliate_id", agency.affiliate_id)
+    .select(`*, companies!inner(id, company_name, city, agency_id)`)
+    .eq("companies.agency_id", agencyId)
     .order("created_at", { ascending: false });
 
   if (error) {
@@ -288,12 +286,16 @@ export async function getJobsByAgencyId(agencyId: string) {
 }
 
 export async function getContractsByAgencyId(agencyId: string) {
+  // `candidates!inner` so the agency_id filter actually restricts the parent
+  // `contracts` rows (a non-inner embed filter returns every contract in the
+  // table with `candidates` nulled). Matches getAgencyDashboardStats, which
+  // also scopes contracts by candidates.agency_id, so list == dashboard count.
   const { data, error } = await db
     .from("contracts")
     .select(
       `
       *,
-      candidates(id, full_name, agency_id),
+      candidates!inner(id, full_name, agency_id),
       companies(id, company_name),
       jobs(id, title)
     `

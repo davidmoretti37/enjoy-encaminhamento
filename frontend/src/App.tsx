@@ -10,33 +10,18 @@ import { AgencyProvider } from "./contexts/AgencyContext";
 import Home from "./pages/Home";
 import ResetPassword from "./pages/ResetPassword";
 // Company Portal Pages
-import CompanyPortalDashboard from "./pages/company/CompanyPortalDashboard";
-import CompanyJobs from "./pages/company/CompanyJobs";
-import CompanyScheduling from "./pages/company/CompanyScheduling";
-import CompanySelection from "./pages/company/CompanySelection";
-import CompanyEmployees from "./pages/company/CompanyEmployees";
-import CompanyEmployeeDetail from "./pages/company/CompanyEmployeeDetail";
-import CompanyPayments from "./pages/company/CompanyPayments";
 import CompanySettingsScreen from "./pages/company/CompanySettingsScreen";
 // Candidate Portal Pages
-import CandidateHome from "./pages/candidate/CandidateHome";
-import CandidateJobs from "./pages/candidate/CandidateJobs";
 import CandidateSettingsScreen from "./pages/candidate/CandidateSettingsScreen";
-import CandidateApplications from "./pages/candidate/CandidateApplications";
-import CandidateSignContract from "./pages/candidate/CandidateSignContract";
 // New merged role-aware pages
-import CandidatePage from "./pages/CandidatePage";
-import CompanyPage from "./pages/CompanyPage";
 import JobPage from "./pages/JobPage";
 import ContractPage from "./pages/ContractPage";
 import PaymentPage from "./pages/PaymentPage";
 import CalendarPage from "./pages/CalendarPage";
-import FeedbackManagement from "./pages/FeedbackManagement";
 import RegionalManagement from "./pages/RegionalManagement";
 import AffiliateDashboard from "./pages/AffiliateDashboard";
 import AdminAgencies from "./pages/AdminAgencies";
 import AgencyRegistration from "./pages/AgencyRegistration";
-import AgencyDashboard from "./pages/AgencyDashboard";
 import AgencyJobDescriptions from "./pages/agency/AgencyJobDescriptions";
 import AgencyPortal from "./pages/agency/AgencyPortal";
 import Login from "./pages/Login";
@@ -52,7 +37,6 @@ import CompanyPendingContracts from "./pages/company/CompanyPendingContracts";
 import CandidateOnboarding from "./pages/candidate/CandidateOnboarding";
 import CompanyInviteAccept from "./pages/company/CompanyInviteAccept";
 import CompanyJoin from "./pages/company/CompanyJoin";
-import VagasPage from "./pages/VagasPage";
 import CompanyVagasPage from "./pages/CompanyVagasPage";
 // Public landing pages
 import JovemAprendizPage from "./pages/JovemAprendizPage";
@@ -132,7 +116,6 @@ function Router() {
             <Route path={"/admin/dashboard"} component={AffiliateDashboard} />
             <Route path={"/admin/agencies"} component={AdminAgencies} />
             <Route path={"/admin/regional"} component={RegionalManagement} />
-            <Route path={"/admin/feedback"} component={FeedbackManagement} />
 
             {/* Agency routes - New Portal is default */}
             <Route path={"/agency/portal"} component={AgencyPortal} />
@@ -141,7 +124,6 @@ function Router() {
             <Route path={"/agency/job-descriptions/:companyId"} component={AgencyJobDescriptions} />
 
             {/* Simplified role-aware pages */}
-            <Route path={"/candidates"} component={CandidatePage} />
             <Route path={"/jobs"} component={JobPage} />
             <Route path={"/contracts"} component={ContractPage} />
             <Route path={"/payments"} component={PaymentPage} />
@@ -164,7 +146,6 @@ function Router() {
             <Route path={"/company/settings"} component={CompanySettingsScreen} />
             <Route path={"/empresa"} component={EmpresaPortal} />
             <Route path={"/empresa/vagas"} component={CompanyVagasPage} />
-            <Route path={"/empresa/vagas/:jobId"} component={VagasPage} />
 
             {/* NEW: Candidate Funnel Portal - replaces all old candidate routes */}
             <Route path={"/candidate"} component={CandidatoPortal} />

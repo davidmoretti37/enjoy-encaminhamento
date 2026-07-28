@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { SafeImage } from "@/components/ui/SafeImage";
 import { useCompanyFunnel } from "@/contexts/CompanyFunnelContext";
 import {
   FileText,
@@ -36,11 +37,20 @@ export default function StepContratacao() {
       (hp.status === "pending_signatures" || hp.status === "pending_payment")
   );
 
+  // Estágio processes that were just initiated and are waiting on the agency to
+  // configure and send the contract documents (status "awaiting_configuration").
+  // Without this the company clicks "Contratar" and sees "Nenhum contrato pendente"
+  // with no sign anything is happening — a silent dead-end.
+  const awaitingConfig = hiringProcesses.filter(
+    (hp: any) =>
+      hp.job?.id === selectedJobId && hp.status === "awaiting_configuration"
+  );
+
   if (!selectedJob) {
     return <EmptyState title="Nenhuma vaga selecionada" description="Selecione uma vaga" />;
   }
 
-  if (jobHiringProcesses.length === 0) {
+  if (jobHiringProcesses.length === 0 && awaitingConfig.length === 0) {
     return (
       <CardEntrance>
         <div className="flex flex-col items-center justify-center py-16 text-center">
@@ -62,6 +72,7 @@ export default function StepContratacao() {
   return (
     <div className="space-y-4">
       {/* Header */}
+      {jobHiringProcesses.length > 0 && (
       <CardEntrance>
         <div className="bg-white rounded-xl border border-slate-200 p-5">
           <div className="flex items-center gap-3">
@@ -85,6 +96,18 @@ export default function StepContratacao() {
           </div>
         </div>
       </CardEntrance>
+      )}
+
+      {/* Awaiting agency configuration (estágio just initiated) */}
+      {awaitingConfig.length > 0 && (
+        <div className="space-y-4">
+          {awaitingConfig.map((process: any, index: number) => (
+            <CardEntrance key={process.id} delay={index * 0.05}>
+              <AwaitingConfigCard hiringProcess={process} />
+            </CardEntrance>
+          ))}
+        </div>
+      )}
 
       {/* Hiring processes */}
       <div className="space-y-4">
@@ -509,11 +532,12 @@ function CLTPaymentCard({ hiringProcess, onRefresh }: { hiringProcess: any; onRe
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-12 h-12 rounded-full bg-[#0A2342] flex items-center justify-center">
-              {candidate?.photo_url ? (
-                <img src={candidate.photo_url} alt={candidate.full_name} className="w-full h-full rounded-full object-cover" />
-              ) : (
-                <span className="text-white font-semibold text-lg">{candidate?.full_name?.charAt(0) || "?"}</span>
-              )}
+              <SafeImage
+                src={candidate?.photo_url}
+                alt={candidate?.full_name}
+                className="w-full h-full rounded-full object-cover"
+                fallback={<span className="text-white font-semibold text-lg">{candidate?.full_name?.charAt(0) || "?"}</span>}
+              />
             </div>
             <div>
               <h3 className="text-[#0A2342] font-semibold">{candidate?.full_name || "Candidato"}</h3>
@@ -706,6 +730,60 @@ function CLTPaymentCard({ hiringProcess, onRefresh }: { hiringProcess: any; onRe
             {confirmMutation.isPending ? "Confirmando..." : !receiptBase64 ? "Envie o comprovante para confirmar" : "Confirmar Pagamento"}
           </button>
         )}
+      </div>
+    </div>
+  );
+}
+
+// ============================================
+// AWAITING AGENCY CONFIGURATION CARD (estágio just initiated)
+// ============================================
+
+function AwaitingConfigCard({ hiringProcess }: { hiringProcess: any }) {
+  const candidate = hiringProcess.candidate;
+  const typeLabel = hiringProcess.hiring_type === "estagio"
+    ? "Estágio"
+    : hiringProcess.hiring_type === "menor-aprendiz"
+      ? "Jovem Aprendiz"
+      : (hiringProcess.hiring_type || "").toUpperCase();
+
+  return (
+    <div className="bg-white rounded-xl border border-amber-200 overflow-hidden">
+      <div className="h-1 bg-amber-300" />
+      <div className="p-5 flex items-center gap-3">
+        <div className="w-12 h-12 rounded-full bg-[#0A2342] flex items-center justify-center shrink-0">
+          <SafeImage
+            src={candidate?.photo_url}
+            alt={candidate?.full_name}
+            className="w-full h-full rounded-full object-cover"
+            fallback={<span className="text-white font-semibold text-lg">{candidate?.full_name?.charAt(0) || "?"}</span>}
+          />
+        </div>
+        <div className="flex-1 min-w-0">
+          <h3 className="text-[#0A2342] font-semibold truncate">{candidate?.full_name || "Candidato"}</h3>
+          <div className="flex items-center gap-2 mt-0.5">
+            <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-600">
+              {typeLabel}
+            </span>
+            {hiringProcess.start_date && (
+              <span className="text-slate-500 text-xs flex items-center gap-1">
+                <Calendar className="w-3 h-3" />
+                Início: {format(new Date(hiringProcess.start_date), "dd/MM/yyyy")}
+              </span>
+            )}
+          </div>
+        </div>
+        <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 text-xs font-medium shrink-0">
+          <Clock className="w-3.5 h-3.5" />
+          Aguardando agência
+        </span>
+      </div>
+      <div className="px-5 pb-5">
+        <p className="text-sm text-slate-500">
+          A contratação foi iniciada. A agência está preparando os documentos do
+          contrato — assim que estiverem prontos, eles aparecerão aqui para você
+          assinar.
+        </p>
       </div>
     </div>
   );

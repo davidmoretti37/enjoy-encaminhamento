@@ -1,5 +1,6 @@
 // Scheduling and meeting database operations
 import { supabaseAdmin } from "../supabase";
+import { getAffiliateByUserId } from "./affiliates";
 
 const db = supabaseAdmin as any;
 
@@ -63,7 +64,10 @@ export async function getEmailOutreachHistory(
 export async function getCompanyFullHistory(
   adminId: string,
   companyEmail: string,
-  agencyId?: string
+  agencyId?: string,
+  // AC-7: tenant scope for the caller. `null` => super_admin (unrestricted).
+  // agency callers pass { agencyId }, head admins pass { affiliateId }.
+  scope?: { affiliateId?: string; agencyId?: string } | null
 ): Promise<{
   meeting: any;
   form: any;
@@ -79,7 +83,7 @@ export async function getCompanyFullHistory(
   hiringProcesses: any[];
   signingInvitations: any[];
   signedHiringDocs: any[];
-}> {
+} | null> {
   let meeting = null;
 
   const { data: meetingByAdmin } = await db
@@ -105,9 +109,11 @@ export async function getCompanyFullHistory(
     meeting = meetingByAgency;
   }
 
+  // AC-7: scope the form to the caller (mirrors getCompanyFormByEmail's admin_id scope)
   const { data: form } = await db
     .from("company_forms")
     .select("*")
+    .eq("admin_id", adminId)
     .eq("email", companyEmail)
     .order("created_at", { ascending: false })
     .limit(1)
@@ -125,6 +131,19 @@ export async function getCompanyFullHistory(
     .select("*")
     .eq("email", companyEmail)
     .single();
+
+  // AC-7: enforce tenant scope on the company. `scope == null` => super_admin
+  // (unrestricted). When a company exists, it must belong to the caller's agency
+  // (agency callers) or the caller's affiliate/region (head admins); otherwise the
+  // caller must not see it (cross-tenant IDOR). Returning null => router NOT_FOUND.
+  if (company && scope) {
+    const inScope =
+      (!!scope.agencyId && company.agency_id === scope.agencyId) ||
+      (!!scope.affiliateId && company.affiliate_id === scope.affiliateId);
+    if (!inScope) {
+      return null;
+    }
+  }
 
   let contracts: any[] = [];
   let jobs: any[] = [];
@@ -618,12 +637,29 @@ export async function saveAdminSettings(
   settings: { meeting_duration_minutes: number },
   agencyId?: string
 ): Promise<void> {
-  const { error } = await db.from("admin_settings").upsert({
-    admin_id: adminId,
-    agency_id: agencyId,
-    meeting_duration_minutes: settings.meeting_duration_minutes,
-    updated_at: new Date().toISOString(),
-  });
+  // The admin_settings PK is admin_id alone, so a blind upsert overwrites the
+  // single row and loses per-agency settings for a head managing several
+  // agencies. Match on (admin_id, agency_id) explicitly and update-or-insert so
+  // each (admin, agency) — including the null "all agencies" context — keeps its
+  // own row.
+  let sel = db.from("admin_settings").select("id").eq("admin_id", adminId);
+  sel = agencyId ? sel.eq("agency_id", agencyId) : sel.is("agency_id", null);
+  const { data: existing } = await sel.maybeSingle();
+
+  let error;
+  if (existing?.id) {
+    ({ error } = await db
+      .from("admin_settings")
+      .update({ meeting_duration_minutes: settings.meeting_duration_minutes, updated_at: new Date().toISOString() })
+      .eq("id", existing.id));
+  } else {
+    ({ error } = await db.from("admin_settings").insert({
+      admin_id: adminId,
+      agency_id: agencyId ?? null,
+      meeting_duration_minutes: settings.meeting_duration_minutes,
+      updated_at: new Date().toISOString(),
+    }));
+  }
 
   if (error) {
     console.error("Error saving admin settings:", error);
@@ -1057,12 +1093,20 @@ export async function signMeetingContract(input: {
       contract_signed_at: new Date().toISOString(),
     })
     .eq("contract_token", input.contractToken)
+    // SIGN-11: idempotency — only sign a contract that hasn't been signed yet, so a
+    // repeat POST can't overwrite an existing signature.
+    .is("contract_signed_at", null)
     .select("company_email, company_name")
-    .single();
+    .maybeSingle();
 
   if (error) {
     console.error("Error signing meeting contract:", error);
     throw error;
+  }
+
+  // Zero rows updated => the contract was already signed (or the token is invalid).
+  if (!data) {
+    throw new Error("Este contrato já foi assinado");
   }
 
   return { company_email: data.company_email, company_name: data.company_name };
@@ -1106,11 +1150,35 @@ export async function setAdminAgencyContext(
 }
 
 export async function getAgenciesForAdmin(adminId: string, userRole: string): Promise<any[]> {
-  if (userRole === "admin") {
+  // super_admin is the platform super-user (no affiliate row): return all active agencies.
+  if (userRole === "super_admin") {
     const { data, error } = await db
       .from("agencies")
       .select("id, agency_name, city, status")
       .eq("status", "active")
+      .order("agency_name", { ascending: true });
+
+    if (error) {
+      console.error("Error fetching agencies for admin:", error);
+      return [];
+    }
+
+    return (data || []).map((s: any) => ({ id: s.id, name: s.agency_name, city: s.city }));
+  }
+
+  // AC-2: head admin only sees agencies under their own affiliate (their region),
+  // not every active agency on the platform.
+  if (userRole === "admin") {
+    const affiliate = await getAffiliateByUserId(adminId);
+    if (!affiliate) {
+      return [];
+    }
+
+    const { data, error } = await db
+      .from("agencies")
+      .select("id, agency_name, city, status")
+      .eq("status", "active")
+      .eq("affiliate_id", affiliate.id)
       .order("agency_name", { ascending: true });
 
     if (error) {

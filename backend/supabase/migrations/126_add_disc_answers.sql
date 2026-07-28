@@ -1,0 +1,12 @@
+-- =====================================================================
+-- 126_add_disc_answers.sql
+-- =====================================================================
+-- Persist the candidate's raw DISC questionnaire picks (per-question chosen
+-- profile), so the agency/head can review WHAT each candidate answered — not
+-- just the 4 computed scores. Shape: { "<questionId>": "<profile>" } where
+-- profile ∈ {dominante, influente, estavel, conforme}. Applies going forward;
+-- past candidates have no stored picks (the raw answers were only ever a
+-- transient onboarding draft in the browser).
+-- Additive / IF NOT EXISTS.
+-- =====================================================================
+ALTER TABLE candidates ADD COLUMN IF NOT EXISTS disc_answers JSONB;

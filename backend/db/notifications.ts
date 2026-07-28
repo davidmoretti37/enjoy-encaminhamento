@@ -27,11 +27,14 @@ export async function getUnreadNotificationsCount(userId: string): Promise<numbe
   return count || 0;
 }
 
-export async function markNotificationAsRead(id: string): Promise<void> {
-  const { error } = await (supabase as any)
+export async function markNotificationAsRead(id: string, userId?: string): Promise<void> {
+  let query = (supabase as any)
     .from("notifications")
     .update({ is_read: true, read_at: new Date().toISOString() })
     .eq("id", id);
+  // Scope to the owner when provided so one user can't mark another's as read.
+  if (userId) query = query.eq("user_id", userId);
+  const { error } = await query;
 
   if (error) throw error;
 }

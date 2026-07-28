@@ -21,6 +21,7 @@ vi.mock("../../db", () => ({
   getApplicationByJobAndCandidate: vi.fn(),
   updateApplication: vi.fn(),
   updateBatch: vi.fn(),
+  getBatchById: vi.fn(),
   getCandidateByUserId: vi.fn(),
   getCandidateById: vi.fn(),
   createNotification: vi.fn(),
@@ -202,6 +203,8 @@ describe("interview router", () => {
       } as any);
       vi.mocked(db.updateApplication).mockResolvedValue(undefined);
       vi.mocked(db.updateBatch).mockResolvedValue(undefined as any);
+      // Batch is owned by the caller's company (tenant guard passes).
+      vi.mocked(db.getBatchById).mockResolvedValue({ id: MOCK_IDS.batch, company_id: MOCK_IDS.company } as any);
       vi.mocked(db.getCandidateById).mockResolvedValue(mockCandidate() as any);
       vi.mocked(db.createNotification).mockResolvedValue(undefined as any);
 
@@ -215,6 +218,30 @@ describe("interview router", () => {
         MOCK_IDS.batch,
         expect.objectContaining({ status: "meeting_scheduled" })
       );
+    });
+
+    it("rejects a batchId owned by another company (tenant guard)", async () => {
+      vi.mocked(db.getCompanyByUserId).mockResolvedValue(mockCompany() as any);
+      vi.mocked(db.getJobById).mockResolvedValue(
+        mockJob({ company_id: MOCK_IDS.company }) as any
+      );
+      vi.mocked(db.getApplicationByJobAndCandidate).mockResolvedValue(
+        mockApplication() as any
+      );
+      vi.mocked(interviewDb.createInterviewSession).mockResolvedValue({
+        id: SESSION_ID,
+      } as any);
+      vi.mocked(db.updateApplication).mockResolvedValue(undefined);
+      vi.mocked(db.getCandidateById).mockResolvedValue(mockCandidate() as any);
+      vi.mocked(db.createNotification).mockResolvedValue(undefined as any);
+      // Batch belongs to a DIFFERENT company → must be blocked.
+      vi.mocked(db.getBatchById).mockResolvedValue({ id: MOCK_IDS.batch, company_id: "other-company-id" } as any);
+
+      const caller = createCaller(companyContext());
+      await expect(
+        caller.scheduleInterview({ ...validInput, batchId: MOCK_IDS.batch })
+      ).rejects.toThrow();
+      expect(db.updateBatch).not.toHaveBeenCalled();
     });
 
     it("rejects candidate users", async () => {

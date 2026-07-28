@@ -298,18 +298,18 @@ export async function getAffiliateDashboardStats(
   affiliateId: string,
   agencyId?: string | null
 ): Promise<any> {
-  let targetCity: string | null = null;
-  let agencyInfo: { totalAgencies: number; activeAgencies: number; pendingAgencies: number } | null =
-    null;
+  // Resolve the set of agencies this stat call covers: a single agency (per-city
+  // drill-down) or every agency under the affiliate (combined "Todas" view).
+  let agencyIds: string[] = [];
+  let agencyInfo: { totalAgencies: number; activeAgencies: number; pendingAgencies: number };
 
   if (agencyId) {
     const { data: agency } = await db
       .from("agencies")
-      .select("city, status")
+      .select("id, status")
       .eq("id", agencyId)
       .single();
-
-    targetCity = agency?.city || null;
+    agencyIds = agency ? [agency.id] : [];
     agencyInfo = {
       totalAgencies: 1,
       activeAgencies: agency?.status === "active" ? 1 : 0,
@@ -320,44 +320,55 @@ export async function getAffiliateDashboardStats(
       .from("agencies")
       .select("id, status")
       .eq("affiliate_id", affiliateId);
-
     if (agenciesError) {
       console.error("[Database] Failed to get agencies for stats:", agenciesError);
     }
-
+    agencyIds = (agencies || []).map((a: any) => a.id);
     agencyInfo = {
       totalAgencies: agencies?.length || 0,
       activeAgencies: agencies?.filter((s: any) => s.status === "active").length || 0,
       pendingAgencies: agencies?.filter((s: any) => s.status === "pending").length || 0,
     };
-
-    const { data: affiliate } = await db
-      .from("affiliates")
-      .select("city")
-      .eq("id", affiliateId)
-      .single();
-
-    targetCity = affiliate?.city || null;
   }
 
-  const { data: candidates } = await db
-    .from("candidates")
-    .select("id")
-    .eq("city", targetCity || "");
+  const zero = {
+    ...agencyInfo,
+    totalCandidates: 0, activeCandidates: 0, employedCandidates: 0,
+    totalApplications: 0, activeApplications: 0, totalHired: 0,
+    totalJobs: 0, openJobs: 0, totalContracts: 0, activeContracts: 0,
+  };
+  if (agencyIds.length === 0) return zero;
 
-  const totalCandidates = candidates?.length || 0;
+  // Scope everything by agency_id — matches getAgencyDashboardStats exactly, so
+  // the combined view is the true SUM of the per-agency numbers (the old code
+  // counted candidates by city, which is why the head-owner cards read 0).
+  // Include unassigned (null-agency) candidates/applications so the national
+  // head's dashboard counts match the "Todas" candidate list (see
+  // getCandidatesByAffiliateId). Per-agency drill-down (agencyId set) keeps a
+  // strict single-agency scope below because agencyIds is then just that one id.
+  const candFilter = agencyId
+    ? undefined
+    : `agency_id.in.(${agencyIds.join(",")}),agency_id.is.null`;
 
-  let companiesQuery = db
+  const candQuery = db.from("candidates").select("id, status");
+  const { data: candidates } = candFilter
+    ? await candQuery.or(candFilter)
+    : await candQuery.in("agency_id", agencyIds);
+  const cand = candidates || [];
+
+  const appQuery = db
+    .from("applications")
+    .select("id, status, candidates!inner(agency_id)");
+  const { data: applications } = candFilter
+    ? await appQuery.or(candFilter, { referencedTable: "candidates" })
+    : await appQuery.in("candidates.agency_id", agencyIds);
+  const apps = applications || [];
+
+  const { data: companies } = await db
     .from("companies")
     .select("id")
-    .eq("affiliate_id", affiliateId);
-
-  if (agencyId && targetCity) {
-    companiesQuery = companiesQuery.eq("city", targetCity);
-  }
-
-  const { data: companies } = await companiesQuery;
-  const companyIds = companies?.map((c: any) => c.id) || [];
+    .in("agency_id", agencyIds);
+  const companyIds = (companies || []).map((c: any) => c.id);
 
   let totalJobs = 0;
   let openJobs = 0;
@@ -366,30 +377,30 @@ export async function getAffiliateDashboardStats(
       .from("jobs")
       .select("id, status")
       .in("company_id", companyIds);
-
     totalJobs = jobs?.length || 0;
     openJobs = jobs?.filter((j: any) => j.status === "open").length || 0;
   }
 
-  let totalContracts = 0;
-  let activeContracts = 0;
-  if (companyIds.length > 0) {
-    const { data: contracts } = await db
-      .from("contracts")
-      .select("id, status")
-      .in("company_id", companyIds);
-
-    totalContracts = contracts?.length || 0;
-    activeContracts = contracts?.filter((c: any) => c.status === "active").length || 0;
-  }
+  const { data: contracts } = await db
+    .from("contracts")
+    .select("id, status")
+    .in("agency_id", agencyIds);
+  const cons = contracts || [];
 
   return {
     ...agencyInfo,
-    totalCandidates,
+    totalCandidates: cand.length,
+    activeCandidates: cand.filter((c: any) => c.status === "active").length,
+    employedCandidates: cand.filter((c: any) => c.status === "employed").length,
+    totalApplications: apps.length,
+    activeApplications: apps.filter(
+      (a: any) => a.status === "in_progress" || a.status === "interviewing"
+    ).length,
+    totalHired: cons.filter((c: any) => c.status === "active" || c.status === "completed").length,
     totalJobs,
     openJobs,
-    totalContracts,
-    activeContracts,
+    totalContracts: cons.length,
+    activeContracts: cons.filter((c: any) => c.status === "active").length,
   };
 }
 
@@ -421,10 +432,15 @@ export async function getCandidatesByAffiliateId(
   const agencyIds = (agencies || []).map((a: any) => a.id);
   if (agencyIds.length === 0) return [];
 
+  // National ("Todas") view: this affiliate's agencies PLUS unassigned candidates.
+  // A candidate who signs up under "Outra Região" gets agency_id = null (no local
+  // sub-agency to hold them); a bare `.in(agencyIds)` silently dropped those from
+  // the head's list. The national head is the top of the org, so orphaned
+  // candidates must surface here or they fall into a black hole.
   const { data, error } = await db
     .from("candidates")
     .select("*")
-    .in("agency_id", agencyIds)
+    .or(`agency_id.in.(${agencyIds.join(",")}),agency_id.is.null`)
     .order("created_at", { ascending: false });
 
   if (error) {
@@ -439,45 +455,44 @@ export async function getJobsByAffiliateId(
   affiliateId: string,
   agencyId?: string | null
 ): Promise<any[]> {
+  // PER-CITY view: the head selected one sub-agency. Scope to that agency's
+  // companies via `companies!inner` on company.agency_id (an inner embed so
+  // the filter restricts the parent `jobs` rows). This replaces the old
+  // fragile free-text `company.city` match, which — being a non-inner embed
+  // filter — did not restrict jobs at all and returned the whole table.
   if (agencyId) {
-    const { data: agency } = await db
-      .from("agencies")
-      .select("city")
-      .eq("id", agencyId)
-      .single();
-
-    if (agency?.city) {
-      const { data, error } = await db
-        .from("jobs")
-        .select(
-          `
-          *,
-          company:companies (
-            id,
-            company_name,
-            affiliate_id,
-            city
-          )
+    const { data, error } = await db
+      .from("jobs")
+      .select(
         `
+        *,
+        company:companies!inner (
+          id,
+          company_name,
+          affiliate_id,
+          agency_id,
+          city
         )
-        .eq("company.affiliate_id", affiliateId)
-        .eq("company.city", agency.city)
-        .order("created_at", { ascending: false });
+      `
+      )
+      .eq("company.agency_id", agencyId)
+      .order("created_at", { ascending: false });
 
-      if (error) {
-        console.error("Error fetching affiliate jobs by agency:", error);
-        return [];
-      }
-      return data || [];
+    if (error) {
+      console.error("Error fetching affiliate jobs by agency:", error);
+      return [];
     }
+    return data || [];
   }
 
+  // COMBINED view: all jobs across every company under this head agency.
+  // `companies!inner` so the affiliate_id filter actually restricts jobs.
   const { data, error } = await db
     .from("jobs")
     .select(
       `
       *,
-      company:companies (
+      company:companies!inner (
         id,
         company_name,
         affiliate_id,

@@ -206,9 +206,12 @@ function EmpresaPortalContent() {
   const [formData, setFormData] = useState({
     title: '',
     contract_type: '',
-    salary: '',
+    openings: '1',
+    salary_min: '',
+    salary_max: '',
     description: '',
     requirements: '',
+    benefits: '',
     work_schedule: '',
   });
 
@@ -220,9 +223,12 @@ function EmpresaPortalContent() {
       setFormData({
         title: '',
         contract_type: '',
-        salary: '',
+        openings: '1',
+        salary_min: '',
+        salary_max: '',
         description: '',
         requirements: '',
+        benefits: '',
         work_schedule: '',
       });
       utils.company.getJobs.invalidate();
@@ -242,10 +248,12 @@ function EmpresaPortalContent() {
       title: formData.title,
       description: formData.description,
       contract_type: formData.contract_type as 'estagio' | 'clt' | 'menor-aprendiz' | 'pj',
-      salary_min: formData.salary ? parseFloat(formData.salary) : undefined,
-      salary_max: formData.salary ? parseFloat(formData.salary) : undefined,
+      openings: parseInt(formData.openings) || 1,
+      salary_min: formData.salary_min ? parseFloat(formData.salary_min) : undefined,
+      salary_max: formData.salary_max ? parseFloat(formData.salary_max) : undefined,
       work_schedule: formData.work_schedule || undefined,
       requirements: formData.requirements || undefined,
+      benefits: formData.benefits || undefined,
     });
   };
 
@@ -365,13 +373,36 @@ function EmpresaPortalContent() {
                 </Select>
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="salary">Salario (R$)</Label>
+                <Label htmlFor="openings">Número de vagas</Label>
                 <Input
-                  id="salary"
+                  id="openings"
+                  type="number"
+                  min={1}
+                  placeholder="1"
+                  value={formData.openings}
+                  onChange={(e) => setFormData(prev => ({ ...prev, openings: e.target.value }))}
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                <Label htmlFor="salary_min">Salário mínimo (R$)</Label>
+                <Input
+                  id="salary_min"
                   type="number"
                   placeholder="1500"
-                  value={formData.salary}
-                  onChange={(e) => setFormData(prev => ({ ...prev, salary: e.target.value }))}
+                  value={formData.salary_min}
+                  onChange={(e) => setFormData(prev => ({ ...prev, salary_min: e.target.value }))}
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="salary_max">Salário máximo (R$)</Label>
+                <Input
+                  id="salary_max"
+                  type="number"
+                  placeholder="2500"
+                  value={formData.salary_max}
+                  onChange={(e) => setFormData(prev => ({ ...prev, salary_max: e.target.value }))}
                 />
               </div>
             </div>
@@ -401,6 +432,17 @@ function EmpresaPortalContent() {
                 value={formData.requirements}
                 onChange={(e) => setFormData(prev => ({ ...prev, requirements: e.target.value }))}
               />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="benefits">Benefícios</Label>
+              <Textarea
+                id="benefits"
+                placeholder="Um benefício por linha (ex.: Vale-transporte, Vale-refeição, Plano de saúde...)"
+                rows={3}
+                value={formData.benefits}
+                onChange={(e) => setFormData(prev => ({ ...prev, benefits: e.target.value }))}
+              />
+              <p className="text-xs text-muted-foreground">Liste um benefício por linha.</p>
             </div>
           </div>
           <DialogFooter>

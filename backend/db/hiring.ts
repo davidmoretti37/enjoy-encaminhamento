@@ -42,6 +42,7 @@ export interface HiringProcess {
   monthly_salary: number | null;
   insurance_status: "pending" | "active" | "expired" | null;
   insurance_expires_at: string | null;
+  insurance_document_url: string | null;
   notes: string | null;
   created_at: string;
   updated_at: string;
@@ -215,7 +216,7 @@ export async function getHiringProcessesByCompany(
     .from("hiring_processes")
     .select(`
       *,
-      candidate:candidates(id, full_name, email, phone),
+      candidate:candidates(id, full_name, email, phone, resume_url, photo_url, city, state, cpf, date_of_birth, education_level, institution, course, disc_dominante, disc_influente, disc_estavel, disc_conforme, pdp_top_10_competencies, pdp_develop_competencies),
       job:jobs(id, title, contract_type),
       signing_invitations:signing_invitations(id, signer_role, signer_name, signer_email, signed_at, email_sent_at, viewed_at, token, autentique_sign_url)
     `)

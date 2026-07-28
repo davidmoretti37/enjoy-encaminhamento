@@ -201,12 +201,12 @@ function JobCard({ job, isApplied, isApplying, onApply, onViewApplication }: Job
                 R$ {job.salary_min.toLocaleString()}
               </span>
             )}
-            {job.work_mode && (
+            {job.work_type && (
               <span className="flex items-center gap-1.5">
                 <Clock className="w-4 h-4" />
-                {job.work_mode === "remote"
+                {job.work_type === "remoto"
                   ? "Remoto"
-                  : job.work_mode === "hybrid"
+                  : job.work_type === "hibrido"
                   ? "Híbrido"
                   : "Presencial"}
               </span>

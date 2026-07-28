@@ -104,14 +104,18 @@ export default function CalendarPage() {
   const [manualLinkDialogOpen, setManualLinkDialogOpen] = useState(false);
   const [manualLinkMeeting, setManualLinkMeeting] = useState<any>(null);
   const [manualLinkUrl, setManualLinkUrl] = useState("");
+  const [rescheduleDialogOpen, setRescheduleDialogOpen] = useState(false);
+  const [rescheduleTarget, setRescheduleTarget] = useState<any>(null);
+  const [rescheduleDate, setRescheduleDate] = useState("");
+  const [rescheduleTime, setRescheduleTime] = useState("");
   const [meetingLoaderState, setMeetingLoaderState] = useState<{
     isLoading: boolean;
     platform: 'zoom' | 'google_meet' | null;
     message: string;
   }>({ isLoading: false, platform: null, message: '' });
 
-  // Detect role
-  const isAffiliate = user?.role === 'admin';
+  // Detect role (super_admin is a head-level user, same as admin here)
+  const isAffiliate = user?.role === 'admin' || user?.role === 'super_admin';
   const isAgency = user?.role === 'agency';
 
   // Separate queries for each role (both called but only one enabled at a time)
@@ -137,15 +141,14 @@ export default function CalendarPage() {
   );
   const { data: adminSettings, refetch: refetchSettings } = (trpc.outreach.getAdminSettings as any).useQuery(
     { agencyId: currentAgency?.id },
-    {
-      enabled: !!user?.id,
-      onSuccess: (data: any) => {
-        if (data?.meeting_duration_minutes) {
-          setMeetingDuration(data.meeting_duration_minutes);
-        }
-      },
-    }
+    { enabled: !!user?.id }
   );
+  // RQ v5 removed useQuery onSuccess — load the persisted duration via an effect.
+  useEffect(() => {
+    if (adminSettings?.meeting_duration_minutes) {
+      setMeetingDuration(adminSettings.meeting_duration_minutes);
+    }
+  }, [adminSettings]);
 
   // Get slots for the blocker section in settings modal
   const { data: blockerSlots, refetch: refetchBlockerSlots } = trpc.outreach.getAllSlotsForDate.useQuery(
@@ -300,8 +303,17 @@ export default function CalendarPage() {
   });
 
   const setManualLinkMutation = (trpc.outreach as any).setManualMeetingLink.useMutation({
-    onSuccess: () => {
-      toast.success("Link salvo e enviado para a empresa por email.");
+    onSuccess: (res: any) => {
+      // Report #12: tell the operator the truth about what actually reached the company.
+      if (res?.notifiedInApp && res?.emailSent) {
+        toast.success("Link salvo. Empresa avisada no portal e por email.");
+      } else if (res?.notifiedInApp) {
+        toast.success("Link salvo e enviado à empresa pelo portal.");
+      } else if (res?.emailSent) {
+        toast.success("Link salvo e enviado à empresa por email.");
+      } else {
+        toast.warning("Link salvo, mas não foi possível avisar a empresa automaticamente — envie o link manualmente.");
+      }
       refetchMeetings();
       setManualLinkDialogOpen(false);
       setManualLinkMeeting(null);
@@ -309,6 +321,18 @@ export default function CalendarPage() {
     },
     onError: (err: any) => {
       toast.error(err.message || "Erro ao salvar link");
+    },
+  });
+
+  const rescheduleMeetingMutation = (trpc.outreach as any).rescheduleMeeting.useMutation({
+    onSuccess: () => {
+      toast.success("Reunião reagendada! Email enviado à empresa.");
+      setRescheduleDialogOpen(false);
+      setRescheduleTarget(null);
+      refetchMeetings();
+    },
+    onError: (err: any) => {
+      toast.error(err.message || "Erro ao reagendar reunião");
     },
   });
 
@@ -335,6 +359,24 @@ export default function CalendarPage() {
 
   const handleCompleteMeeting = (id: string) => {
     updateMeetingStatusMutation.mutate({ id, status: 'completed', sendEmail: false });
+  };
+
+  const handleOpenRescheduleDialog = (meeting: any) => {
+    const d = new Date(meeting.scheduled_at);
+    setRescheduleTarget(meeting);
+    setRescheduleDate(format(d, 'yyyy-MM-dd'));
+    setRescheduleTime(format(d, 'HH:mm'));
+    setRescheduleDialogOpen(true);
+  };
+
+  const handleConfirmReschedule = () => {
+    if (!rescheduleTarget || !rescheduleDate || !rescheduleTime) return;
+    const newScheduledAt = new Date(`${rescheduleDate}T${rescheduleTime}`).toISOString();
+    rescheduleMeetingMutation.mutate({
+      id: rescheduleTarget.id,
+      newScheduledAt,
+      sendEmail: true,
+    });
   };
 
   if (!user || (user.role !== 'super_admin' && user.role !== 'admin' && user.role !== 'agency')) {
@@ -595,6 +637,17 @@ export default function CalendarPage() {
               )}
             </Button>
           </>
+        )}
+        {/* Reagendar: available for pending and confirmed meetings */}
+        {(meeting.status === 'pending' || meeting.status === 'confirmed') && (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => handleOpenRescheduleDialog(meeting)}
+          >
+            <CalendarIcon className="h-4 w-4 mr-1" />
+            Reagendar
+          </Button>
         )}
       </div>
     </div>
@@ -1297,6 +1350,55 @@ export default function CalendarPage() {
                 disabled={setManualLinkMutation.isPending || !manualLinkUrl.trim()}
               >
                 {setManualLinkMutation.isPending ? "Salvando..." : "Salvar e enviar"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Reschedule Dialog */}
+        <Dialog open={rescheduleDialogOpen} onOpenChange={setRescheduleDialogOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Reagendar Reunião</DialogTitle>
+              <DialogDescription>
+                Escolha uma nova data e horário. A empresa será notificada por email.
+              </DialogDescription>
+            </DialogHeader>
+            {rescheduleTarget && (
+              <div className="space-y-4 py-2">
+                <div className="text-sm space-y-1">
+                  <p><strong>Empresa:</strong> {rescheduleTarget.company_name || 'N/A'}</p>
+                  <p><strong>Atual:</strong> {format(new Date(rescheduleTarget.scheduled_at), "dd/MM/yyyy 'às' HH:mm")}</p>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="reschedule-date">Nova data</Label>
+                    <Input
+                      id="reschedule-date"
+                      type="date"
+                      value={rescheduleDate}
+                      onChange={(e) => setRescheduleDate(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="reschedule-time">Novo horário</Label>
+                    <Input
+                      id="reschedule-time"
+                      type="time"
+                      value={rescheduleTime}
+                      onChange={(e) => setRescheduleTime(e.target.value)}
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setRescheduleDialogOpen(false)}>Cancelar</Button>
+              <Button
+                onClick={handleConfirmReschedule}
+                disabled={rescheduleMeetingMutation.isPending || !rescheduleDate || !rescheduleTime}
+              >
+                {rescheduleMeetingMutation.isPending ? "Reagendando..." : "Reagendar e avisar"}
               </Button>
             </DialogFooter>
           </DialogContent>

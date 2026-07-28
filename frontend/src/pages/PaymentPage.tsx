@@ -95,7 +95,11 @@ export default function PaymentPage() {
   // Select the right data based on role
   const payments = isAffiliate ? affiliatePaymentsQuery.data : agencyPaymentsQuery.data;
   const refetchPayments = isAffiliate ? affiliatePaymentsQuery.refetch : agencyPaymentsQuery.refetch;
-  const paymentsLoading = affiliatePaymentsQuery.isLoading || agencyPaymentsQuery.isLoading || groupedPaymentsQuery.isLoading;
+  // Only gate loading on the query we actually consume for this role. The old code
+  // OR'd in BOTH affiliate + agency query isLoading — but exactly one is enabled per
+  // role, and the disabled one kept the page skeletoned forever.
+  const activePaymentsQuery = isAffiliate ? affiliatePaymentsQuery : agencyPaymentsQuery;
+  const paymentsLoading = activePaymentsQuery.isLoading || groupedPaymentsQuery.isLoading;
   const affiliate = affiliateQuery.data;
   const pendingReviews = pendingReviewQuery.data || [];
 
@@ -186,15 +190,15 @@ export default function PaymentPage() {
     setReceiptModalOpen(true);
   };
 
-  const handleApproveReceipt = () => {
-    if (selectedReceiptPayment) {
-      reviewReceiptMutation.mutate({ paymentId: selectedReceiptPayment.id, action: 'approve' });
+  const handleApproveReceipt = (p: any = selectedReceiptPayment) => {
+    if (p) {
+      reviewReceiptMutation.mutate({ paymentId: p.id, action: 'approve' });
     }
   };
 
-  const handleRejectReceipt = () => {
-    if (selectedReceiptPayment) {
-      reviewReceiptMutation.mutate({ paymentId: selectedReceiptPayment.id, action: 'reject', notes: 'Comprovante rejeitado pelo administrador' });
+  const handleRejectReceipt = (p: any = selectedReceiptPayment) => {
+    if (p) {
+      reviewReceiptMutation.mutate({ paymentId: p.id, action: 'reject', notes: 'Comprovante rejeitado pelo administrador' });
     }
   };
 
@@ -301,6 +305,7 @@ export default function PaymentPage() {
     const types: Record<string, string> = {
       'monthly-fee': 'Mensalidade',
       'setup-fee': 'Taxa de Setup',
+      'clt-fee': 'Taxa CLT',
       'insurance-fee': 'Seguro',
       'penalty': 'Multa',
       'refund': 'Reembolso'
@@ -501,11 +506,11 @@ export default function PaymentPage() {
                           Ver
                         </Button>
                       )}
-                      <Button size="sm" variant="default" onClick={() => { setSelectedReceiptPayment(payment); handleApproveReceipt(); }} disabled={reviewReceiptMutation.isPending}>
+                      <Button size="sm" variant="default" onClick={() => { setSelectedReceiptPayment(payment); handleApproveReceipt(payment); }} disabled={reviewReceiptMutation.isPending}>
                         <ThumbsUp className="h-4 w-4 mr-1" />
                         Aprovar
                       </Button>
-                      <Button size="sm" variant="destructive" onClick={() => { setSelectedReceiptPayment(payment); handleRejectReceipt(); }} disabled={reviewReceiptMutation.isPending}>
+                      <Button size="sm" variant="destructive" onClick={() => { setSelectedReceiptPayment(payment); handleRejectReceipt(payment); }} disabled={reviewReceiptMutation.isPending}>
                         <ThumbsDown className="h-4 w-4 mr-1" />
                         Rejeitar
                       </Button>
@@ -882,6 +887,7 @@ export default function PaymentPage() {
                     <SelectItem value="monthly-fee">Mensalidade</SelectItem>
                     <SelectItem value="insurance-fee">Seguro</SelectItem>
                     <SelectItem value="setup-fee">Taxa de Setup</SelectItem>
+                    <SelectItem value="clt-fee">Taxa CLT</SelectItem>
                     <SelectItem value="penalty">Multa</SelectItem>
                     <SelectItem value="refund">Reembolso</SelectItem>
                   </SelectContent>
@@ -995,6 +1001,7 @@ export default function PaymentPage() {
                     <SelectItem value="monthly-fee">Mensalidade</SelectItem>
                     <SelectItem value="insurance-fee">Seguro</SelectItem>
                     <SelectItem value="setup-fee">Taxa de Setup</SelectItem>
+                    <SelectItem value="clt-fee">Taxa CLT</SelectItem>
                     <SelectItem value="penalty">Multa</SelectItem>
                     <SelectItem value="refund">Reembolso</SelectItem>
                   </SelectContent>

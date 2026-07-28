@@ -130,39 +130,49 @@ export default function EmailComposeModal({
       return;
     }
 
-    const to = finalEmails.join(',');
-    const baseUrl = window.location.origin;
-    const adminId = user?.id || '';
-    const agencyParam = agencyIdForLinks ? `&agency=${agencyIdForLinks}` : '';
+    // Send through the system (outreach.sendEmail). The backend builds and appends
+    // the form/booking links itself (with per-recipient email + agency context),
+    // so we send the raw body plus the include-link flags and iterate per recipient.
+    setIsSending(true);
+    let sent = 0;
+    let failed = 0;
+    setSendingProgress({ total: finalEmails.length, sent, failed, current: finalEmails[0] });
 
-    // Build full body with links appended. We embed each recipient's email + the
-    // agency context so the booking/form lands attributed to the right agency.
-    let fullBody = body;
-    if (includeFormLink || includeBookingLink) {
-      fullBody += '\n\n---\n';
-      // For multi-recipient sends, the per-recipient email param doesn't survive
-      // a shared link, so only inline the email when there's exactly one.
-      const singleEmail = finalEmails.length === 1 ? `email=${encodeURIComponent(finalEmails[0])}` : '';
-      const linkSuffix = (singleEmail || agencyParam.slice(1))
-        ? `?${[singleEmail, agencyParam.replace(/^&/, '')].filter(Boolean).join('&')}`
-        : '';
-      if (includeFormLink) {
-        fullBody += `\n📋 Preencher formulário de cadastro:\n${baseUrl}/form/${adminId}${linkSuffix}\n`;
+    for (const email of finalEmails) {
+      setSendingProgress({ total: finalEmails.length, sent, failed, current: email });
+      try {
+        await sendEmailMutation.mutateAsync({
+          recipientEmail: email,
+          subject,
+          body,
+          includeFormLink,
+          includeBookingLink,
+          ...(companyId ? { companyId } : {}),
+        });
+        sent += 1;
+      } catch {
+        failed += 1;
       }
-      if (includeBookingLink) {
-        fullBody += `\n📅 Agendar uma reunião:\n${baseUrl}/book/${adminId}${linkSuffix}\n`;
-      }
+      setSendingProgress({ total: finalEmails.length, sent, failed, current: email });
     }
 
-    const gmailSubject = encodeURIComponent(subject);
-    const gmailBody = encodeURIComponent(fullBody);
-    window.open(
-      `https://mail.google.com/mail/?view=cm&to=${encodeURIComponent(to)}&su=${gmailSubject}&body=${gmailBody}`,
-      '_blank'
-    );
-    toast.success('Abrindo Gmail para envio.');
-    onOpenChange(false);
-    resetForm();
+    setIsSending(false);
+
+    if (failed === 0) {
+      toast.success(
+        finalEmails.length === 1
+          ? "Email enviado com sucesso!"
+          : `${sent} emails enviados com sucesso!`
+      );
+      onOpenChange(false);
+      resetForm();
+    } else if (sent === 0) {
+      toast.error("Falha ao enviar os emails. Tente novamente.");
+      setSendingProgress(null);
+    } else {
+      toast.warning(`${sent} email(s) enviado(s), ${failed} falharam.`);
+      setSendingProgress(null);
+    }
   };
 
   const handleClose = () => {

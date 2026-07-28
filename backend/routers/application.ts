@@ -6,6 +6,7 @@ import { companyProcedure, candidateProcedure } from "./procedures";
 import * as db from "../db";
 import * as hiringDb from "../db/hiring";
 import { supabaseAdmin } from "../supabase";
+import { notifyCandidateRejected } from "../lib/funnelNotify";
 
 export const applicationRouter = router({
   // Apply to job
@@ -237,6 +238,24 @@ export const applicationRouter = router({
 
       const { id, ...data } = input;
       await db.updateApplication(id, data);
+
+      // Fix B: on rejection, notify the candidate and DELIVER the stored reason
+      // (previously rejectionReason was saved but never sent — candidate ghosted).
+      if (input.status === "rejected") {
+        try {
+          const application = await db.getApplicationById(id);
+          if (application) {
+            const [cand, job] = await Promise.all([
+              db.getCandidateById((application as any).candidate_id),
+              db.getJobById((application as any).job_id),
+            ]);
+            await notifyCandidateRejected(cand as any, (job as any)?.title || "a vaga", input.rejectionReason, (application as any).job_id);
+          }
+        } catch (e: any) {
+          console.error("[application.updateStatus] reject notify failed:", e?.message);
+        }
+      }
+
       return { success: true };
     }),
 });

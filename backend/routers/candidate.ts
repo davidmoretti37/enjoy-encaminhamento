@@ -10,6 +10,7 @@ import { generateCandidateSummary } from "../services/ai/summarizer";
 import { generateCandidateEmbedding, findMatchingJobs } from "../services/matching";
 import { generateCandidateCardPdf } from "../lib/candidateCardPdf";
 import { mapEducationLevel } from "../_core/educationLevel";
+import { notifyCompany } from "../lib/funnelNotify";
 
 export const candidateRouter = router({
   // Check if candidate has completed onboarding
@@ -57,6 +58,11 @@ export const candidateRouter = router({
       education_level: z.string().min(1),
       currently_studying: z.boolean().optional(),
       institution: z.string().optional(),
+      course_period: z.string().optional(),
+      is_school_student: z.boolean().optional(),
+      // Profile photo captured during cadastro (item #3 — required at signup).
+      photo_base64: z.string().optional(),
+      photo_mime: z.string().optional(),
       courses: z.array(z.string()).optional(),
       skills: z.array(z.string()).min(1),
       languages: z.array(z.string()).optional(),
@@ -82,6 +88,9 @@ export const candidateRouter = router({
       disc_estavel: z.number().min(0).max(100).optional(),
       disc_dominante: z.number().min(0).max(100).optional(),
       disc_conforme: z.number().min(0).max(100).optional(),
+      // Raw DISC picks: { "<questionId>": "<profile>" } — the candidate's chosen
+      // option per question, so the team can review the actual answers.
+      disc_answers: z.record(z.string()).optional(),
       // PDP (Personal Development Profile) results
       pdp_intrapersonal: z.record(z.string()).optional(),
       pdp_interpersonal: z.record(z.string()).optional(),
@@ -128,6 +137,9 @@ export const candidateRouter = router({
         course: courseString, // Store as comma-separated string
       };
       delete candidateData.courses; // Remove array version
+      // Photo fields are not candidate columns — handled separately below.
+      delete candidateData.photo_base64;
+      delete candidateData.photo_mime;
 
       // Add disc_completed_at if DISC results are provided
       if (input.disc_influente !== undefined || input.disc_estavel !== undefined ||
@@ -162,6 +174,34 @@ export const candidateRouter = router({
         if (candidate) {
           // Update with all the other fields
           await db.updateCandidate(candidate.id, candidateData);
+        }
+      }
+
+      // Upload profile photo captured during cadastro (item #3). Validates the
+      // real content via magic bytes before trusting the declared mime type.
+      if (candidate && input.photo_base64 && input.photo_mime) {
+        try {
+          const base64Data = input.photo_base64.replace(/^data:image\/\w+;base64,/, '');
+          const buffer = Buffer.from(base64Data, 'base64');
+          const extMap: Record<string, string> = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' };
+          let detectedMime: string | null = null;
+          if (buffer.length >= 12) {
+            if (buffer[0] === 0xFF && buffer[1] === 0xD8 && buffer[2] === 0xFF) detectedMime = 'image/jpeg';
+            else if (buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4E && buffer[3] === 0x47) detectedMime = 'image/png';
+            else if (buffer[0] === 0x52 && buffer[1] === 0x49 && buffer[2] === 0x46 && buffer[3] === 0x46 &&
+                     buffer[8] === 0x57 && buffer[9] === 0x45 && buffer[10] === 0x42 && buffer[11] === 0x50) detectedMime = 'image/webp';
+          }
+          const ext = detectedMime ? extMap[detectedMime] : null;
+          if (ext && detectedMime === input.photo_mime && buffer.length <= 5 * 1024 * 1024) {
+            const filename = `candidates/${ctx.user.id}/photo.${ext}`;
+            const { storagePut } = await import('../storage');
+            const { url } = await storagePut(filename, buffer, input.photo_mime);
+            await db.updateCandidate(candidate.id, { photo_url: url });
+          } else {
+            console.warn('Onboarding photo rejected (mime/size/content mismatch) for candidate', candidate.id);
+          }
+        } catch (err) {
+          console.error('Failed to upload candidate photo during onboarding:', err);
         }
       }
 
@@ -306,6 +346,7 @@ export const candidateRouter = router({
       currently_studying: z.boolean().optional(),
       institution: z.string().optional(),
       course: z.string().optional(),
+      course_period: z.string().optional(),
       skills: z.array(z.string()).optional(),
       languages: z.array(z.string()).optional(),
       profile_summary: z.string().optional(),
@@ -412,7 +453,11 @@ export const candidateRouter = router({
       return { success: true, photo_url: url };
     }),
 
-  // Search candidates (company and admin only)
+  // Search candidates (admin/super_admin only). This hits the raw candidate
+  // pool with no agency scoping (searchCandidates takes no agency filter), so
+  // agencies must NOT use it — they'd see every tenant's candidates. Agencies
+  // use smartSearch (agency-scoped) / their own agency candidate list instead.
+  // No frontend calls this endpoint today.
   search: protectedProcedure
     .input(z.object({
       educationLevel: z.string().optional(),
@@ -422,7 +467,8 @@ export const candidateRouter = router({
       status: z.string().optional(),
     }))
     .query(async ({ ctx, input }) => {
-      if (ctx.user.role !== 'company' && ctx.user.role !== 'admin') {
+      // AC-6: only the head (admin/super_admin) may query the raw, unscoped pool.
+      if (ctx.user.role !== 'admin' && ctx.user.role !== 'super_admin') {
         throw new TRPCError({ code: 'FORBIDDEN' });
       }
       return await db.searchCandidates(input);
@@ -436,8 +482,33 @@ export const candidateRouter = router({
   // Get candidate by ID
   getById: protectedProcedure
     .input(z.object({ id: z.string().uuid() }))
-    .query(async ({ input }) => {
-      return await db.getCandidateById(input.id);
+    .query(async ({ ctx, input }) => {
+      const candidate = await db.getCandidateById(input.id);
+      if (!candidate) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Candidate not found' });
+      }
+
+      const role = ctx.user.role;
+      // AC-4: authorize PII read by role.
+      // admin/super_admin (the head) pass; candidates only their own row; agencies
+      // only candidates in their agency. Companies must NOT read the raw candidate here.
+      if (role === 'admin' || role === 'super_admin') {
+        return candidate;
+      }
+      if (role === 'candidate') {
+        if (candidate.user_id !== ctx.user.id) {
+          throw new TRPCError({ code: 'FORBIDDEN' });
+        }
+        return candidate;
+      }
+      if (role === 'agency') {
+        const agency = await db.getAgencyForUserContext(ctx.user.id, role);
+        if (!agency || (candidate as any).agency_id !== agency.id) {
+          throw new TRPCError({ code: 'FORBIDDEN' });
+        }
+        return candidate;
+      }
+      throw new TRPCError({ code: 'FORBIDDEN' });
     }),
 
   // Admin-only routes for candidate management
@@ -551,11 +622,25 @@ export const candidateRouter = router({
         throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Erro na busca' });
       }
 
-      return (data || []).map((r: any) => ({
+      const results = (data || []).map((r: any) => ({
         candidateId: r.candidate_id,
         fullName: r.full_name,
         similarity: r.similarity,
       }));
+
+      // AC-4: an agency may only see candidates in its own agency
+      if (ctx.user.role === 'agency') {
+        const agency = await db.getAgencyForUserContext(ctx.user.id, ctx.user.role);
+        if (!agency) return [];
+        const ids = results.map((r: any) => r.candidateId);
+        const candidates = await db.getCandidatesByIds(ids);
+        const allowed = new Set(
+          candidates.filter((c: any) => c.agency_id === agency.id).map((c: any) => c.id)
+        );
+        return results.filter((r: any) => allowed.has(r.candidateId));
+      }
+
+      return results;
     }),
 
   // Get candidates by IDs (for batch/group display)
@@ -564,10 +649,17 @@ export const candidateRouter = router({
       ids: z.array(z.string().uuid()).min(1).max(100),
     }))
     .query(async ({ ctx, input }) => {
-      if (ctx.user.role !== 'admin' && ctx.user.role !== 'agency') {
+      const role = ctx.user.role;
+      if (role !== 'admin' && role !== 'super_admin' && role !== 'agency') {
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Acesso negado' });
       }
       const candidates = await db.getCandidatesByIds(input.ids);
+      // AC-4: an agency may only see candidates in its own agency
+      if (role === 'agency') {
+        const agency = await db.getAgencyForUserContext(ctx.user.id, role);
+        if (!agency) return [];
+        return candidates.filter((c: any) => c.agency_id === agency.id);
+      }
       return candidates;
     }),
 
@@ -603,6 +695,19 @@ export const candidateRouter = router({
     }))
     .mutation(async ({ ctx, input }) => {
       const { candidateId, ...updateData } = input;
+
+      // AC-5: a non-admin (agency) may only edit candidates in its own agency
+      if (ctx.user.role !== 'admin' && ctx.user.role !== 'super_admin') {
+        const target = await db.getCandidateById(candidateId);
+        if (!target) {
+          throw new TRPCError({ code: 'NOT_FOUND', message: 'Candidate not found' });
+        }
+        const agency = await db.getAgencyForUserContext(ctx.user.id, ctx.user.role ?? '');
+        if (!agency || (target as any).agency_id !== agency.id) {
+          throw new TRPCError({ code: 'FORBIDDEN' });
+        }
+      }
+
       if (updateData.date_of_birth === '') delete (updateData as any).date_of_birth;
       if (updateData.education_level !== undefined) {
         (updateData as any).education_level = mapEducationLevel(updateData.education_level);
@@ -644,6 +749,24 @@ export const candidateRouter = router({
         throw new TRPCError({ code: 'FORBIDDEN' });
       }
       await db.updateApplication(input.applicationId, { status: 'withdrawn' });
+      // Fix F: tell the company the candidate withdrew so they stop waiting on
+      // someone who's gone (previously withdrawal notified no one).
+      try {
+        const job = await db.getJobById((application as any).job_id);
+        if (job) {
+          const company = await db.getCompanyById((job as any).company_id);
+          await notifyCompany(company as any, {
+            title: "Candidato retirou a candidatura",
+            message: `${candidate.full_name || "Um candidato"} retirou a candidatura para a vaga "${(job as any).title || ""}".`,
+            relatedType: "application",
+            relatedId: (application as any).job_id,
+            emailSubject: `Candidato retirou candidatura — ${(job as any).title || "vaga"}`,
+            emailHtml: `<p><strong>${candidate.full_name || "Um candidato"}</strong> retirou a candidatura para a vaga <strong>"${(job as any).title || ""}"</strong>.</p><p>Você pode revisar outros candidatos no portal ANEC.</p>`,
+          });
+        }
+      } catch (e: any) {
+        console.error("[withdrawApplication] notify failed:", e?.message);
+      }
       return { success: true };
     }),
 
@@ -669,6 +792,14 @@ export const candidateRouter = router({
       const candidate = await db.getCandidateById(input.candidateId);
       if (!candidate) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Candidate not found" });
+      }
+
+      // AC-4: a non-admin (agency) may only generate a PDF for its own candidates
+      if (ctx.user.role !== 'admin' && ctx.user.role !== 'super_admin') {
+        const agency = await db.getAgencyForUserContext(ctx.user.id, ctx.user.role ?? '');
+        if (!agency || (candidate as any).agency_id !== agency.id) {
+          throw new TRPCError({ code: 'FORBIDDEN' });
+        }
       }
 
       // Calculate age

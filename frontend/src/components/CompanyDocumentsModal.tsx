@@ -156,7 +156,9 @@ export default function CompanyDocumentsModal({
   };
 
   const handleSaveCompany = () => {
-    const companyId = displayData?.id || companyData?.id;
+    // Prefer the real companies id — displayData may be a company_forms row whose
+    // id is NOT a companies.id (would 404 in updateCompanyProfile).
+    const companyId = companyData?.id || displayData?.id;
     if (!companyId) {
       toast.error("ID da empresa não encontrado");
       return;
@@ -533,18 +535,50 @@ export default function CompanyDocumentsModal({
                   <div className="flex items-center gap-3">
                     <Label
                       htmlFor="form-upload"
-                      className="cursor-pointer inline-flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors text-sm"
+                      className={`cursor-pointer inline-flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors text-sm ${uploadMutation.isPending ? 'opacity-50 pointer-events-none' : ''}`}
                     >
-                      <Upload className="h-4 w-4" />
-                      Upload Formulário
+                      {uploadMutation.isPending ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          Enviando...
+                        </>
+                      ) : (
+                        <>
+                          <Upload className="h-4 w-4" />
+                          Upload Formulário
+                        </>
+                      )}
                     </Label>
                     <Input
                       id="form-upload"
                       type="file"
                       accept=".pdf,.doc,.docx,.xls,.xlsx"
                       className="hidden"
+                      disabled={uploadMutation.isPending}
                       onChange={(e) => {
-                        toast.info("Funcionalidade em desenvolvimento");
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        if (!meeting?.company_email) {
+                          toast.error("Email da empresa não encontrado");
+                          return;
+                        }
+                        if (file.size > 10 * 1024 * 1024) {
+                          toast.error("Arquivo muito grande. Máximo 10MB");
+                          e.target.value = '';
+                          return;
+                        }
+                        const reader = new FileReader();
+                        reader.onload = () => {
+                          const base64 = (reader.result as string).split(',')[1];
+                          const sanitizedName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+                          uploadMutation.mutate({
+                            companyEmail: meeting.company_email,
+                            fileBase64: base64,
+                            fileName: `form-${sanitizedName}`,
+                          });
+                        };
+                        reader.readAsDataURL(file);
+                        e.target.value = '';
                       }}
                     />
                   </div>

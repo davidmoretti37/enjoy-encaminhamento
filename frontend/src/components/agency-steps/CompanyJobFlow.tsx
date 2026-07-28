@@ -293,28 +293,11 @@ function MatchedCandidatesList({ jobId, onGroupCreated }: { jobId: string; onGro
     (r: any) => !aiMatchedIds.has(r.id) && !manualIds.has(r.id)
   );
 
-  if (isLoading) {
-    return (
-      <div className="mt-4">
-        <div className="flex items-center gap-2 mb-3">
-          <Users className="h-4 w-4 text-gray-500" />
-          <h4 className="text-sm font-medium text-gray-700">Candidatos Compatíveis</h4>
-        </div>
-        <div className="space-y-3">
-          {Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className="flex items-center gap-3 p-3">
-              <Skeleton className="h-10 w-10 rounded-full" />
-              <div className="flex-1 space-y-2">
-                <Skeleton className="h-4 w-32" />
-                <Skeleton className="h-3 w-24" />
-              </div>
-              <Skeleton className="h-6 w-16 rounded-full" />
-            </div>
-          ))}
-        </div>
-      </div>
-    );
-  }
+  // NOTE: we intentionally do NOT early-return a full-panel skeleton while
+  // isLoading. The manual "Buscar candidato manualmente" box must stay usable
+  // immediately — even while the (slow) AI match runs above — so the team can
+  // place a candidate into a vaga without waiting. Only the AI-matches list shows
+  // a loading state (below); the manual search renders unconditionally.
 
   // Filter by min score and city on the client
   const matches = data?.matches || [];
@@ -428,6 +411,22 @@ function MatchedCandidatesList({ jobId, onGroupCreated }: { jobId: string; onGro
               </Card>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* AI-matches loading cue (manual search above stays usable meanwhile) */}
+      {isLoading && matches.length === 0 && (
+        <div className="space-y-3 mt-2">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="flex items-center gap-3 p-3">
+              <Skeleton className="h-10 w-10 rounded-full" />
+              <div className="flex-1 space-y-2">
+                <Skeleton className="h-4 w-32" />
+                <Skeleton className="h-3 w-24" />
+              </div>
+              <Skeleton className="h-6 w-16 rounded-full" />
+            </div>
+          ))}
         </div>
       )}
 
@@ -1844,6 +1843,12 @@ function HiringFinalizationActions({
     onSuccess: () => { toast.success('Contrato enviado'); invalidate(); },
     onError: (e) => toast.error(e.message || 'Erro ao enviar contrato'),
   });
+  // Report #20/#23 — ANEC uploads the intern's insurance apólice.
+  const insuranceInputRef = useRef<HTMLInputElement>(null);
+  const uploadInsuranceMutation = trpc.hiring.uploadInsurancePolicy.useMutation({
+    onSuccess: () => { toast.success('Apólice de seguro enviada'); invalidate(); },
+    onError: (e) => toast.error(e.message || 'Erro ao enviar apólice'),
+  });
 
   const onFileChosen = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -1860,6 +1865,23 @@ function HiringFinalizationActions({
     };
     reader.readAsDataURL(file);
     if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const onInsuranceChosen = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error('Arquivo muito grande. Máximo 10MB.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      const base64 = result.split(',')[1] || '';
+      uploadInsuranceMutation.mutate({ hiringProcessId: hp.id, fileBase64: base64, fileName: file.name });
+    };
+    reader.readAsDataURL(file);
+    if (insuranceInputRef.current) insuranceInputRef.current.value = '';
   };
 
   const onSaveFee = () => {
@@ -1936,6 +1958,50 @@ function HiringFinalizationActions({
                 <Upload className="w-3 h-3 mr-1" />
               )}
               {hp.contract_document_url ? 'Substituir' : 'Enviar contrato'}
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Insurance apólice — ANEC uploads, controls (report #20/#23). Estágio only. */}
+      {!isCancelled && hp.hiring_type === 'estagio' && (
+        <div className="flex items-center justify-between gap-2">
+          <div className="text-sm flex items-center gap-2">
+            <FileText className="w-4 h-4 text-slate-400" />
+            {hp.insurance_document_url ? (
+              <a
+                href={hp.insurance_document_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[#1B4D7A] hover:underline inline-flex items-center gap-1"
+              >
+                Ver apólice <ExternalLink className="w-3 h-3" />
+              </a>
+            ) : (
+              <span className="text-slate-500">Apólice de seguro pendente</span>
+            )}
+          </div>
+          <div>
+            <input
+              ref={insuranceInputRef}
+              type="file"
+              accept=".pdf,image/*"
+              className="hidden"
+              onChange={onInsuranceChosen}
+            />
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-xs"
+              disabled={uploadInsuranceMutation.isPending}
+              onClick={() => insuranceInputRef.current?.click()}
+            >
+              {uploadInsuranceMutation.isPending ? (
+                <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+              ) : (
+                <Upload className="w-3 h-3 mr-1" />
+              )}
+              {hp.insurance_document_url ? 'Substituir apólice' : 'Enviar apólice'}
             </Button>
           </div>
         </div>
@@ -2042,11 +2108,15 @@ function JobWithWorkflow({ job, contractTypeLabels, companyName }: { job: any; c
   // Edit/delete state
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
+  // Close-as-filled state (report items #9 + #10)
+  const [isCloseFilledOpen, setIsCloseFilledOpen] = useState(false);
+  const [hiredCandidateId, setHiredCandidateId] = useState<string>('');
   const [editForm, setEditForm] = useState({
     title: job.title || '',
     contract_type: job.contract_type || '',
     work_type: job.work_type || 'presencial',
     work_schedule: job.work_schedule || '',
+    location: job.location || '',
     salary: job.salary_min ? String(job.salary_min) : '',
     description: job.description || '',
     requirements: job.specific_requirements || job.requirements || '',
@@ -2094,6 +2164,60 @@ function JobWithWorkflow({ job, contractTypeLabels, companyName }: { job: any; c
     onError: (error) => toast.error(error.message || 'Erro ao excluir vaga'),
   });
 
+  // Report #9/#10 — applications for the hired-candidate selector (loaded only
+  // when the close-as-filled dialog is open).
+  const { data: jobApplications } = trpc.application.getByJob.useQuery(
+    { jobId: job.id },
+    { enabled: !!job.id && isCloseFilledOpen },
+  );
+
+  // Report #16 — candidates in this funnel are usually sourced via matching→batch
+  // and may have no application row, so the hired candidate is often missing from
+  // the applications-only list. Merge the job's batch/group candidates (from the
+  // already-loaded getBatchesByJobId query) into the selector, deduped by candidate id.
+  const hiredCandidateOptions = useMemo(() => {
+    const options: { id: string; name: string }[] = [];
+    const seen = new Set<string>();
+    for (const app of (jobApplications || []) as any[]) {
+      const id = app.candidate_id;
+      if (!id || seen.has(id)) continue;
+      seen.add(id);
+      options.push({ id, name: app.candidates?.full_name || 'Candidato' });
+    }
+    for (const batch of (batches || []) as any[]) {
+      for (const bc of (batch.candidates || []) as any[]) {
+        const candidate = bc.candidate;
+        const id = candidate?.id;
+        if (!id || seen.has(id)) continue;
+        seen.add(id);
+        options.push({ id, name: candidate.full_name || 'Candidato' });
+      }
+    }
+    return options;
+  }, [jobApplications, batches]);
+
+  const closeAsFilledMutation = trpc.job.closeAsFilled.useMutation({
+    onSuccess: (data: any) => {
+      const notified = data?.notified ?? 0;
+      toast.success(
+        notified > 0
+          ? `Vaga fechada! ${notified} candidato(s) avisado(s) que a vaga foi preenchida.`
+          : 'Vaga fechada como preenchida!',
+      );
+      setIsCloseFilledOpen(false);
+      setHiredCandidateId('');
+      utils.job.getByCompanyId.invalidate({ companyId: job.company_id });
+    },
+    onError: (error) => toast.error(error.message || 'Erro ao fechar a vaga'),
+  });
+
+  const handleCloseAsFilled = () => {
+    closeAsFilledMutation.mutate({
+      jobId: job.id,
+      hiredCandidateId: hiredCandidateId || undefined,
+    });
+  };
+
   const handleSaveEdit = () => {
     if (!editForm.title || !editForm.description) {
       toast.error('Preencha os campos obrigatórios');
@@ -2106,6 +2230,7 @@ function JobWithWorkflow({ job, contractTypeLabels, companyName }: { job: any; c
       contractType: editForm.contract_type as any || undefined,
       workType: editForm.work_type as any,
       workSchedule: editForm.work_schedule || undefined,
+      location: editForm.location || undefined,
       salaryMin: editForm.salary ? parseFloat(editForm.salary) : undefined,
       salaryMax: editForm.salary ? parseFloat(editForm.salary) : undefined,
       requirements: editForm.requirements || undefined,
@@ -2265,6 +2390,17 @@ function JobWithWorkflow({ job, contractTypeLabels, companyName }: { job: any; c
                           {statusConfig.label}
                         </span>
                       </Badge>
+                      {!['filled', 'closed'].includes(job.status) && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setIsCloseFilledOpen(true)}
+                          className="h-8 text-emerald-700 border-emerald-200 hover:text-emerald-800 hover:bg-emerald-50"
+                        >
+                          <CheckCircle className="h-3.5 w-3.5 mr-1.5" />
+                          Fechar (preenchida)
+                        </Button>
+                      )}
                       <Button variant="outline" size="sm" onClick={() => setIsEditOpen(true)} className="h-8 w-8 p-0">
                         <Pencil className="h-3.5 w-3.5" />
                       </Button>
@@ -2790,6 +2926,7 @@ function JobWithWorkflow({ job, contractTypeLabels, companyName }: { job: any; c
                   <SelectItem value="estagio">Estágio</SelectItem>
                   <SelectItem value="clt">CLT</SelectItem>
                   <SelectItem value="menor-aprendiz">Jovem Aprendiz</SelectItem>
+                  <SelectItem value="pj">PJ</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -2833,6 +2970,14 @@ function JobWithWorkflow({ job, contractTypeLabels, companyName }: { job: any; c
                   onChange={(e) => setEditForm(prev => ({ ...prev, openings: e.target.value }))}
                 />
               </div>
+            </div>
+            <div className="grid gap-2">
+              <Label>Local (cidade)</Label>
+              <Input
+                placeholder="Ex: Uberlândia, MG"
+                value={editForm.location}
+                onChange={(e) => setEditForm(prev => ({ ...prev, location: e.target.value }))}
+              />
             </div>
             <div className="grid gap-2">
               <Label>Descrição *</Label>
@@ -2883,6 +3028,52 @@ function JobWithWorkflow({ job, contractTypeLabels, companyName }: { job: any; c
             >
               {deleteJobMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
               Excluir
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Close as filled — report items #9 (select chosen candidate + close) and
+          #10 (auto-notify the remaining candidates). */}
+      <Dialog open={isCloseFilledOpen} onOpenChange={setIsCloseFilledOpen}>
+        <DialogContent className="sm:max-w-[460px]">
+          <DialogHeader>
+            <DialogTitle>Fechar vaga como preenchida</DialogTitle>
+            <DialogDescription>
+              Selecione o candidato escolhido para <strong>"{job.title}"</strong>. A vaga será
+              marcada como preenchida e os demais candidatos receberão um aviso cordial de que a
+              vaga foi preenchida.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 py-1">
+            <label className="text-sm font-medium text-gray-700">Candidato contratado</label>
+            <Select value={hiredCandidateId} onValueChange={setHiredCandidateId}>
+              <SelectTrigger>
+                <SelectValue placeholder="Selecione o candidato (opcional)" />
+              </SelectTrigger>
+              <SelectContent>
+                {hiredCandidateOptions.map((opt) => (
+                  <SelectItem key={opt.id} value={opt.id}>
+                    {opt.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {hiredCandidateOptions.length === 0 && (
+              <p className="text-xs text-gray-400">
+                Nenhum candidato encontrado para esta vaga.
+              </p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsCloseFilledOpen(false)}>Cancelar</Button>
+            <Button
+              className="bg-emerald-600 hover:bg-emerald-700 text-white"
+              onClick={handleCloseAsFilled}
+              disabled={closeAsFilledMutation.isPending}
+            >
+              {closeAsFilledMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              Fechar vaga
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -3039,6 +3230,7 @@ export default function CompanyJobFlow() {
                     <SelectItem value="estagio">Estágio</SelectItem>
                     <SelectItem value="clt">CLT</SelectItem>
                     <SelectItem value="menor-aprendiz">Jovem Aprendiz</SelectItem>
+                    <SelectItem value="pj">PJ</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

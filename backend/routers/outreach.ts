@@ -3,7 +3,7 @@ import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { publicProcedure, rateLimitedPublicProcedure, router } from "../_core/trpc";
 import { adminProcedure, agencyProcedure } from "./procedures";
-import { sendEmail } from "./email";
+import { sendEmail, senderUnitForAgencyId } from "./email";
 import * as _db from "../db";
 const db: any = _db;
 import { createZoomMeeting, isZoomConfigured } from "../integrations/zoom";
@@ -20,12 +20,16 @@ import { generateCompanySummary } from "../services/ai/summarizer";
 // Resolve agencyId based on user role: agency users look up via agencies.user_id,
 // admin users look up via admin_agency_context switcher
 async function resolveAgencyId(userId: any, role: any, inputAgencyId?: any): Promise<any> {
-  if (inputAgencyId) return inputAgencyId;
   if (role === "agency") {
+    // An agency is ALWAYS scoped to its own agency. Never trust a client-supplied
+    // agencyId here — doing so let one agency read another's meetings/lead PII.
     const agency = await db.getAgencyByUserId(userId);
     return agency?.id;
   }
   if (role === "admin" || role === "super_admin") {
+    // Admins (head owners) may target a specific agency via the switcher / an
+    // explicit id.
+    if (inputAgencyId) return inputAgencyId;
     return (await db.getAdminAgencyContext(userId)) || undefined;
   }
   return undefined;
@@ -83,9 +87,9 @@ export const outreachRouter = router({
         bodyPreview: input.body.substring(0, 200),
       });
 
-      // Send email via Gmail SMTP
+      // Send email via the unit's institutional mailbox (report #14).
       try {
-        await sendEmail(input.recipientEmail, input.subject, htmlBody);
+        await sendEmail(input.recipientEmail, input.subject, htmlBody, await senderUnitForAgencyId(agencyId));
         return { success: true, message: "Email enviado com sucesso!" };
       } catch (err: any) {
         console.error("[Outreach] Email send error:", err);
@@ -207,6 +211,24 @@ export const outreachRouter = router({
     .query(async ({ ctx, input }) => {
       const agencyId = await resolveAgencyId(ctx.user.id, ctx.user.role, input.agencyId);
       return await db.getAllSlotsForDate(ctx.user.id, input.date, agencyId);
+    }),
+
+  // Report item #11: authenticated bookable-slots for the INTERNAL scheduling
+  // modals (AgencyScheduleModal / CompanyInterviewScheduleModal). Same slot
+  // computation the public booking uses (db.getAvailableSlots filters blocked,
+  // booked and past-today times) but scoped to the signed-in user's configured
+  // availability — so the internal team's scheduler shows the horários they set
+  // in "Configurações da Agenda" instead of a hardcoded list.
+  getAvailableSlotsForScheduling: agencyProcedure
+    .input(
+      z.object({
+        date: z.string(),
+        agencyId: z.string().uuid().optional(),
+      })
+    )
+    .query(async ({ ctx, input }) => {
+      const agencyId = await resolveAgencyId(ctx.user.id, ctx.user.role, input.agencyId);
+      return await db.getAvailableSlots(ctx.user.id, input.date, agencyId);
     }),
 
   // Block a time slot
@@ -331,7 +353,7 @@ export const outreachRouter = router({
 
         if (subject && htmlBody) {
           try {
-            await sendEmail(meeting.company_email, subject, htmlBody);
+            await sendEmail(meeting.company_email, subject, htmlBody, await senderUnitForAgencyId(meeting.agency_id));
           } catch (err) {
             console.error("[Meeting] Failed to send email:", err);
           }
@@ -396,7 +418,8 @@ export const outreachRouter = router({
                   </a>
                 </div>
               </div>
-            `
+            `,
+            await senderUnitForAgencyId(meeting.agency_id)
           );
         } catch (err) {
           console.error("[Meeting] Failed to send reschedule email:", err);
@@ -693,11 +716,35 @@ export const outreachRouter = router({
         agencyId
       );
 
+      const date = new Date(meeting.scheduled_at);
+      const dateStr = date.toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric" });
+      const timeStr = date.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+
+      // Report #12: the pasted link must actually REACH the company. Deliver on
+      // BOTH channels and report which ones landed, so the operator isn't told
+      // "enviado" when nothing went out. In-app is best-effort (only when the
+      // company_email belongs to a registered platform user).
+      let notifiedInApp = false;
+      try {
+        const company = await db.getCompanyByEmail(meeting.company_email);
+        if (company?.user_id) {
+          await db.createNotification({
+            user_id: company.user_id,
+            title: "Link da reunião disponível",
+            message: `Sua reunião com a ANEC em ${dateStr} às ${timeStr} já tem link. Acesse: ${input.meetingLink}`,
+            type: "success",
+            related_to_type: "meeting",
+            related_to_id: input.meetingId,
+          });
+          notifiedInApp = true;
+        }
+      } catch (e: any) {
+        console.error("[setManualMeetingLink] in-app notify failed:", e?.message || e);
+      }
+
       // Notify the company by email so they have the link too
+      let emailSent = false;
       if (input.sendEmail) {
-        const date = new Date(meeting.scheduled_at);
-        const dateStr = date.toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric" });
-        const timeStr = date.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
         try {
           await sendEmail(
             meeting.company_email,
@@ -717,15 +764,17 @@ export const outreachRouter = router({
                 </div>
                 <p style="font-size: 12px; color: #666;">Ou copie e cole este link: ${escapeHtml(input.meetingLink)}</p>
               </div>
-            `
+            `,
+            await senderUnitForAgencyId(meeting.agency_id)
           );
+          emailSent = true;
         } catch (e: any) {
           // Email failure shouldn't roll back the link save
           console.error("[setManualMeetingLink] Email send failed:", e?.message || e);
         }
       }
 
-      return { success: true, meetingUrl: input.meetingLink };
+      return { success: true, meetingUrl: input.meetingLink, emailSent, notifiedInApp };
     }),
 
   // Update company pipeline status (admin only)
@@ -780,10 +829,10 @@ export const outreachRouter = router({
           const autentiqueDocIds: string[] = [];
           let firstSignUrl = "";
 
+          const { storageGetBytes } = await import('../storage');
           for (const template of templates) {
-            // Download PDF from storage
-            const pdfResponse = await fetch(template.file_url);
-            const pdfBuffer = Buffer.from(await pdfResponse.arrayBuffer());
+            // Download PDF from storage (authenticated — works on a private bucket)
+            const pdfBuffer = Buffer.from(await storageGetBytes(template.file_key || template.file_url));
 
             // Upload to Autentique
             const result = await createAutentiqueDocument(
@@ -1356,13 +1405,26 @@ export const outreachRouter = router({
     .input(z.object({ companyEmail: z.string().email() }))
     .query(async ({ ctx, input }) => {
       let agencyId: string | undefined;
+      // AC-7: build the caller's tenant scope so the db layer can reject cross-tenant reads.
+      // agency callers are scoped to their agency; head admins to their affiliate/region;
+      // super_admin (null scope) is the platform super-user and is unrestricted.
+      let scope: { affiliateId?: string; agencyId?: string } | null = null;
       if (ctx.user.role === "agency") {
         const agency = await db.getAgencyByUserId(ctx.user.id);
         agencyId = agency?.id;
+        scope = { agencyId: agency?.id };
       } else if (ctx.user.role === "admin") {
         agencyId = (await db.getAdminAgencyContext(ctx.user.id)) || undefined;
+        const affiliate = await db.getAffiliateByUserId(ctx.user.id);
+        scope = { affiliateId: affiliate?.id };
+      } else if (ctx.user.role === "super_admin") {
+        scope = null;
       }
-      return await db.getCompanyFullHistory(ctx.user.id, input.companyEmail, agencyId);
+      const history = await db.getCompanyFullHistory(ctx.user.id, input.companyEmail, agencyId, scope);
+      if (!history) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Empresa não encontrada" });
+      }
+      return history;
     }),
 
   // Get all company forms (admins and agencies)
@@ -1391,6 +1453,14 @@ export const outreachRouter = router({
       const meeting = await db.getScheduledMeetingById(input.meetingId);
       if (!meeting) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Meeting not found" });
+      }
+      // Tenant guard: an agency may only accept its OWN meetings (otherwise it
+      // could mint a contract token on another agency's lead).
+      if (ctx.user.role === "agency") {
+        const callerAgency = await db.getAgencyByUserId(ctx.user.id);
+        if (meeting.agency_id && callerAgency?.id !== meeting.agency_id) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Esta reunião não pertence à sua agência" });
+        }
       }
 
       let agency = null;
@@ -1433,9 +1503,10 @@ export const outreachRouter = router({
           const signerName = (form?.contact_person || form?.legal_name || meeting.contact_name || meeting.company_name || "Representante");
           const autentiqueDocIds: string[] = [];
 
+          const { storageGetBytes } = await import('../storage');
           for (const template of templates) {
-            const pdfResponse = await fetch(template.file_url);
-            const pdfBuffer = Buffer.from(await pdfResponse.arrayBuffer());
+            // Download PDF from storage (authenticated — works on a private bucket)
+            const pdfBuffer = Buffer.from(await storageGetBytes(template.file_key || template.file_url));
 
             const result = await createAutentiqueDocument(
               template.name,

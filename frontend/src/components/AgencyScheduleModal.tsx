@@ -1,9 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Calendar, Loader2, Clock, Video, MapPin, Users, User } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
+import { useAgencyContext } from "@/contexts/AgencyContext";
 
 import {
   Dialog,
@@ -106,6 +107,28 @@ export function AgencyScheduleModal({
   const candidateCount = candidateIds.length;
   const showPerCandidate = sessionFormat === "individual" && candidateCount > 1;
 
+  // Report #11: drive the time picker from the availability configured in
+  // "Configurações da Agenda" instead of a hardcoded list.
+  const { currentAgency } = useAgencyContext();
+  const { data: slots } = (trpc.outreach as any).getAvailableSlotsForScheduling.useQuery(
+    { date: selectedDate ? format(selectedDate, "yyyy-MM-dd") : "", agencyId: currentAgency?.id },
+    { enabled: open && !!selectedDate, staleTime: 0 },
+  );
+  const timeOptions = useMemo(
+    () => (slots || []).filter((s: any) => !s.blocked).map((s: any) => format(new Date(s.start), "HH:mm")),
+    [slots],
+  );
+  const noSlots = !!selectedDate && slots !== undefined && timeOptions.length === 0;
+
+  // Keep the chosen start time valid: when availability loads (or the date
+  // changes), snap `time` to the first configured slot if the current one isn't
+  // offered. Runs async since the query resolves after onSelect.
+  useEffect(() => {
+    if (timeOptions.length > 0 && !timeOptions.includes(time)) {
+      setTime(timeOptions[0]);
+    }
+  }, [timeOptions]);
+
   // Auto-stagger candidate times when start time or duration changes
   useEffect(() => {
     if (showPerCandidate) {
@@ -147,6 +170,10 @@ export function AgencyScheduleModal({
   const handleSubmit = () => {
     if (!selectedDate) {
       toast.error("Selecione uma data");
+      return;
+    }
+    if (timeOptions.length === 0) {
+      toast.error("Nenhum horário disponível nesta data. Configure em Configurações da Agenda.");
       return;
     }
 
@@ -304,13 +331,9 @@ export function AgencyScheduleModal({
                   mode="single"
                   selected={selectedDate}
                   onSelect={(date) => {
+                    // Slot options refresh via the availability query + effect
+                    // once the new date resolves.
                     setSelectedDate(date);
-                    if (date) {
-                      const availableTimes = getAvailableTimeOptions(date);
-                      if (!availableTimes.includes(time) && availableTimes.length > 0) {
-                        setTime(availableTimes[0]);
-                      }
-                    }
                   }}
                   disabled={(date) => {
                     const today = new Date();
@@ -323,13 +346,13 @@ export function AgencyScheduleModal({
             </Popover>
 
             {!showPerCandidate && (
-              <Select value={time} onValueChange={setTime}>
+              <Select value={time} onValueChange={setTime} disabled={timeOptions.length === 0}>
                 <SelectTrigger className="h-9">
                   <Clock className="mr-1.5 h-3.5 w-3.5 text-muted-foreground" />
-                  <SelectValue />
+                  <SelectValue placeholder={selectedDate ? "Sem horários" : "Escolha a data"} />
                 </SelectTrigger>
                 <SelectContent>
-                  {getAvailableTimeOptions(selectedDate).map((t) => (
+                  {timeOptions.map((t: string) => (
                     <SelectItem key={t} value={t}>{t}</SelectItem>
                   ))}
                 </SelectContent>
@@ -356,14 +379,14 @@ export function AgencyScheduleModal({
                 <span className="text-xs text-slate-400">Inicio: </span>
               </div>
               {/* Start time selector */}
-              <Select value={time} onValueChange={setTime}>
+              <Select value={time} onValueChange={setTime} disabled={timeOptions.length === 0}>
                 <SelectTrigger className="h-8 text-xs">
                   <Clock className="mr-1.5 h-3 w-3 text-muted-foreground" />
                   <span className="text-muted-foreground mr-1">Inicio:</span>
-                  <SelectValue />
+                  <SelectValue placeholder={selectedDate ? "Sem horários" : "Escolha a data"} />
                 </SelectTrigger>
                 <SelectContent>
-                  {getAvailableTimeOptions(selectedDate).map((t) => (
+                  {timeOptions.map((t: string) => (
                     <SelectItem key={t} value={t}>{t}</SelectItem>
                   ))}
                 </SelectContent>
@@ -385,7 +408,7 @@ export function AgencyScheduleModal({
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {ALL_TIME_OPTIONS.map((t) => (
+                        {timeOptions.map((t: string) => (
                           <SelectItem key={t} value={t}>{t}</SelectItem>
                         ))}
                       </SelectContent>
@@ -394,6 +417,13 @@ export function AgencyScheduleModal({
                 ))}
               </div>
             </div>
+          )}
+
+          {/* Report #11: guide the team when the picked date has no configured slots */}
+          {noSlots && (
+            <p className="text-xs text-amber-600">
+              Nenhum horário disponível nesta data. Configure os horários em Agenda → Configurações da Agenda.
+            </p>
           )}
 
           {/* Location fields for in-person */}
@@ -453,7 +483,7 @@ export function AgencyScheduleModal({
           <Button
             size="sm"
             onClick={handleSubmit}
-            disabled={scheduleMutation.isPending || !selectedDate}
+            disabled={scheduleMutation.isPending || !selectedDate || timeOptions.length === 0}
           >
             {scheduleMutation.isPending ? (
               <Loader2 className="h-4 w-4 animate-spin" />

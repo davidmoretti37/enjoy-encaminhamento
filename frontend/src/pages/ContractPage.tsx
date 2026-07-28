@@ -51,7 +51,9 @@ export default function ContractPage() {
   // Select the right data based on role
   const contracts = isAffiliate ? affiliateContractsQuery.data : agencyContractsQuery.data;
   const refetchContracts = isAffiliate ? affiliateContractsQuery.refetch : agencyContractsQuery.refetch;
-  const contractsLoading = affiliateContractsQuery.isLoading || agencyContractsQuery.isLoading;
+  // Gate only on the ACTIVE query — the role-disabled query's isLoading is true and
+  // would skeleton the page forever (same bug as PaymentPage).
+  const contractsLoading = (isAffiliate ? affiliateContractsQuery : agencyContractsQuery).isLoading;
 
   // Mutations (admin + agency)
   const updateStatusMutation = trpc.admin.updateContractStatus.useMutation({
@@ -120,8 +122,8 @@ export default function ContractPage() {
   const filteredContracts = contracts?.filter((contract: any) => {
     if (!searchTerm) return true;
     const searchLower = searchTerm.toLowerCase();
-    const candidateName = isAdmin ? contract.candidates?.full_name : contract.application?.candidate?.full_name;
-    const companyName = isAdmin ? contract.companies?.company_name : contract.application?.job?.company?.company_name;
+    const candidateName = contract.application?.candidate?.full_name || contract.candidates?.full_name;
+    const companyName = contract.application?.job?.company?.company_name || contract.companies?.company_name;
     return (
       contract.contract_number?.toLowerCase().includes(searchLower) ||
       candidateName?.toLowerCase().includes(searchLower) ||
@@ -248,9 +250,9 @@ export default function ContractPage() {
                 </TableHeader>
                 <TableBody>
                   {filteredContracts.map((contract: any) => {
-                    const candidateName = isAdmin ? contract.candidates?.full_name : contract.application?.candidate?.full_name;
-                    const companyName = isAdmin ? contract.companies?.company_name : contract.application?.job?.company?.company_name;
-                    const jobTitle = contract.application?.job?.title;
+                    const candidateName = contract.application?.candidate?.full_name || contract.candidates?.full_name;
+                    const companyName = contract.application?.job?.company?.company_name || contract.companies?.company_name;
+                    const jobTitle = contract.application?.job?.title || contract.jobs?.title;
                     const salary = isAdmin ? contract.monthly_salary : contract.salary_cents;
                     return (
                       <TableRow key={contract.id}>

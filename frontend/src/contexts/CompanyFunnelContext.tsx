@@ -156,10 +156,15 @@ export function CompanyFunnelProvider({ children }: { children: ReactNode }) {
     );
     if (hasActiveContract) return { currentStep: 2, allComplete: true };
 
-    // Check for pending contracts (step 2 - Contratação)
+    // Check for pending contracts (step 2 - Contratação). Includes estágio
+    // processes still "awaiting_configuration" (agency preparing the contract) so
+    // the company can reach the Contratação step and see the waiting state there.
     const hasPendingContract = hiringProcesses.some(
       (hp: any) => hp.job?.id === selectedJobId &&
-        (hp.status === "pending_signatures" || hp.status === "pending_payment")
+        (hp.status === "pending_signatures" ||
+          hp.status === "pending_payment" ||
+          hp.status === "awaiting_configuration" ||
+          hp.status === "hiring_in_progress")
     );
     if (hasPendingContract) return { currentStep: 2, allComplete: false };
 

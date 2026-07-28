@@ -12,6 +12,20 @@ const supabaseAdmin = _supabaseAdmin as any;
 import { generateCompanySummary } from "../services/ai/summarizer";
 import { storagePut } from "../storage";
 import { verifyReceiptWithAI } from "../services/ai/receiptVerifier";
+import { generateCandidateCardPdf } from "../lib/candidateCardPdf";
+import { buildReferralLetterPdf } from "../lib/referralLetterPdf";
+
+// Default notification preferences for a company (item #22). Stored prefs are
+// merged over these so new toggles get a sensible default.
+const COMPANY_NOTIFICATION_PREF_DEFAULTS = {
+  email_new_candidates: true,
+  email_interview_reminders: true,
+  email_payment_reminders: true,
+  email_contract_expiring: true,
+  whatsapp_interview_reminders: true,
+  whatsapp_payment_overdue: true,
+  whatsapp_new_candidates: false,
+};
 
 export const companyRouter = router({
   // Check if company has completed onboarding
@@ -413,6 +427,11 @@ export const companyRouter = router({
       website: z.string().optional(),
       description: z.string().optional(),
       logo: z.string().optional(),
+      mobilePhone: z.string().optional(),
+      landlinePhone: z.string().optional(),
+      socialMedia: z.string().optional(),
+      neighborhood: z.string().optional(),
+      complement: z.string().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       const company = await db.getCompanyByUserId(ctx.user.id);
@@ -436,6 +455,11 @@ export const companyRouter = router({
       if (input.website !== undefined) updateData.website = input.website;
       if (input.description !== undefined) updateData.description = input.description;
       if (input.logo !== undefined) updateData.logo = input.logo;
+      if (input.mobilePhone !== undefined) updateData.mobile_phone = input.mobilePhone;
+      if (input.landlinePhone !== undefined) updateData.landline_phone = input.landlinePhone;
+      if (input.socialMedia !== undefined) updateData.social_media = input.socialMedia;
+      if (input.neighborhood !== undefined) updateData.neighborhood = input.neighborhood;
+      if (input.complement !== undefined) updateData.complement = input.complement;
       await db.updateCompany(company.id, updateData as any);
       return { success: true };
     }),
@@ -597,6 +621,8 @@ export const companyRouter = router({
       work_schedule: z.string().optional(),
       city: z.string().optional(),
       requirements: z.string().optional(),
+      benefits: z.string().optional(),
+      openings: z.number().optional(),
       subsidiary_cnpj: z.string().optional(),
       subsidiary_name: z.string().optional(),
     }))
@@ -610,6 +636,11 @@ export const companyRouter = router({
         throw new TRPCError({ code: 'BAD_REQUEST', message: 'Company must be associated with an agency' });
       }
 
+      // Benefits arrive as a free-text field (one per line) → store as jsonb array.
+      const benefitsList = input.benefits
+        ? input.benefits.split('\n').map((b) => b.trim()).filter(Boolean)
+        : undefined;
+
       // Create job directly in jobs table
       const jobId = await db.createJobForOnboarding(company.id, {
         title: input.title,
@@ -618,6 +649,8 @@ export const companyRouter = router({
         work_type: 'presencial',
         salary_min: input.salary_min || null,
         salary_max: input.salary_max || null,
+        benefits: benefitsList,
+        openings: input.openings || 1,
         work_schedule: input.work_schedule,
         location: input.city,
         requirements: input.requirements,
@@ -663,6 +696,7 @@ export const companyRouter = router({
       salary_min: z.number().optional(),
       salary_max: z.number().optional(),
       requirements: z.string().optional(),
+      benefits: z.string().optional(),
       openings: z.number().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
@@ -687,7 +721,18 @@ export const companyRouter = router({
       if (fields.work_schedule !== undefined) updateData.work_schedule = fields.work_schedule || null;
       if (fields.salary_min !== undefined) updateData.salary_min = fields.salary_min || null;
       if (fields.salary_max !== undefined) updateData.salary_max = fields.salary_max || null;
-      if (fields.requirements !== undefined) updateData.specific_requirements = fields.requirements || null;
+      // Write BOTH columns to match the create path (createJobForOnboarding sets
+      // both); the job card reads `requirements`, so writing only
+      // specific_requirements made edits invisible.
+      if (fields.requirements !== undefined) {
+        updateData.requirements = fields.requirements || null;
+        updateData.specific_requirements = fields.requirements || null;
+      }
+      if (fields.benefits !== undefined) {
+        updateData.benefits = fields.benefits
+          ? fields.benefits.split('\n').map((b) => b.trim()).filter(Boolean)
+          : [];
+      }
       if (fields.openings !== undefined) updateData.openings = fields.openings;
 
       await supabaseAdmin.from('jobs').update(updateData).eq('id', jobId);
@@ -702,6 +747,11 @@ export const companyRouter = router({
       if (!company) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Company not found' });
       }
+      // Tenant guard: only pause a job this company owns.
+      const job = await db.getJobById(input.jobId);
+      if (!job || job.company_id !== company.id) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Esta vaga não pertence à sua empresa' });
+      }
       await db.updateJobStatus(input.jobId, 'paused');
       return { success: true };
     }),
@@ -712,6 +762,11 @@ export const companyRouter = router({
       const company = await db.getCompanyByUserId(ctx.user.id);
       if (!company) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Company not found' });
+      }
+      // Tenant guard: only resume a job this company owns.
+      const job = await db.getJobById(input.jobId);
+      if (!job || job.company_id !== company.id) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Esta vaga não pertence à sua empresa' });
       }
       await db.updateJobStatus(input.jobId, 'searching');
       return { success: true };
@@ -768,41 +823,37 @@ export const companyRouter = router({
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Company not found' });
       }
 
-      // Get candidate profile (companies can only see candidates presented to them)
-      const candidate = await db.getCandidateById(input.candidateId);
+      // AC-6: scoped fetch — only returns the candidate if they are in an unlocked
+      // batch for this company. Prevents companies reading arbitrary candidate PII.
+      const candidate = await db.getCandidateProfileForCompany(input.candidateId, company.id);
       if (!candidate) {
-        throw new TRPCError({ code: 'NOT_FOUND', message: 'Candidate not found' });
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Candidato não disponível' });
       }
 
-      // Calculate age
-      let age: number | null = null;
-      if (candidate.date_of_birth) {
-        const today = new Date();
-        const birth = new Date(candidate.date_of_birth);
-        age = today.getFullYear() - birth.getFullYear();
-        const monthDiff = today.getMonth() - birth.getMonth();
-        if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
-          age--;
-        }
-      }
-
-      // Build education string
+      // Build education string (preserve this endpoint's existing output contract)
       const educationParts = [];
-      if (candidate.education_level) educationParts.push(candidate.education_level);
+      if (candidate.education) educationParts.push(candidate.education);
       if (candidate.institution) educationParts.push(candidate.institution);
       if (candidate.course) educationParts.push(candidate.course);
 
+      const experienceText = candidate.profile_summary
+        || candidate.summary
+        || (Array.isArray(candidate.experience)
+          ? candidate.experience.map((e: any) =>
+              typeof e === 'string' ? e : `${e.role} em ${e.company}`
+            ).join(', ')
+          : null)
+        || null;
+
       return {
         id: candidate.id,
-        name: candidate.full_name,
-        age,
+        name: candidate.name,
+        age: candidate.age,
         city: candidate.city,
         state: candidate.state,
         education: educationParts.join(' - ') || null,
         skills: (candidate.skills as string[]) || [],
-        experience: candidate.profile_summary || (candidate.experience as any)?.map?.((e: any) =>
-          typeof e === 'string' ? e : `${e.role} em ${e.company}`
-        ).join(', ') || null,
+        experience: experienceText,
         photo_url: candidate.photo_url,
       };
     }),
@@ -921,11 +972,41 @@ export const companyRouter = router({
       if (!company) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Company not found' });
       }
-      // Insert feedback record
+      // Tenant guard + resolve the required feedback keys via hiring_processes,
+      // which reliably carries company_id / candidate_id / agency_id / contract_id
+      // (contracts.company_id is not populated by the funnel). The frontend sends
+      // either the contract_id or the hiring_process id, so match on both.
+      const { data: hp } = await supabaseAdmin
+        .from('hiring_processes')
+        .select('id, company_id, candidate_id, contract_id')
+        .or(`contract_id.eq.${input.contractId},id.eq.${input.contractId}`)
+        .eq('company_id', company.id)
+        .maybeSingle();
+      if (!hp) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Este contrato não pertence à sua empresa' });
+      }
+      if (!hp.contract_id) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'O contrato deste funcionário ainda não foi gerado.' });
+      }
+
+      // feedback needs agency_id NOT NULL — hiring_processes has no agency_id, so
+      // take it from the company (fall back to the candidate's agency).
+      let agencyId = (company as any).agency_id;
+      if (!agencyId) {
+        const { data: cand } = await supabaseAdmin
+          .from('candidates').select('agency_id').eq('id', hp.candidate_id).maybeSingle();
+        agencyId = cand?.agency_id;
+      }
+      if (!agencyId) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Não foi possível determinar a agência para o relatório.' });
+      }
+
+      // feedback columns: contract_id/agency_id/candidate_id are all NOT NULL and
+      // there is NO company_id column.
       const { error } = await supabaseAdmin.from('feedback').insert({
-        contract_id: input.contractId,
-        company_id: company.id,
-        candidate_id: null, // will be filled from contract
+        contract_id: hp.contract_id,
+        candidate_id: hp.candidate_id,
+        agency_id: agencyId,
         review_month: input.periodMonth,
         review_year: input.periodYear,
         performance_rating: input.rating === 'excellent' ? 5 : input.rating === 'good' ? 4 : input.rating === 'regular' ? 3 : 2,
@@ -941,6 +1022,90 @@ export const companyRouter = router({
       }
 
       return { success: true };
+    }),
+
+  // Report items #23 — VIEW-ONLY documents for the company's active employees.
+  // Both verify the company owns the hiring_processes row and generate a PDF on
+  // read (no writes / no uploads — the company only views; ANEC controls docs).
+  generateEmployeeProfilePdf: companyProcedure
+    .input(z.object({ hiringProcessId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const company = await db.getCompanyByUserId(ctx.user.id);
+      if (!company) throw new TRPCError({ code: 'NOT_FOUND', message: 'Empresa não encontrada' });
+      const { data: hp } = await supabaseAdmin
+        .from('hiring_processes').select('id, company_id, candidate_id').eq('id', input.hiringProcessId).single();
+      if (!hp || hp.company_id !== company.id) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Este funcionário não pertence à sua empresa' });
+      }
+      const candidate = await db.getCandidateById(hp.candidate_id);
+      if (!candidate) throw new TRPCError({ code: 'NOT_FOUND', message: 'Candidato não encontrado' });
+
+      let age = null;
+      const birthDate = (candidate as any).date_of_birth;
+      if (birthDate) {
+        const bd = new Date(birthDate);
+        const today = new Date();
+        age = today.getFullYear() - bd.getFullYear();
+        const md = today.getMonth() - bd.getMonth();
+        if (md < 0 || (md === 0 && today.getDate() < bd.getDate())) age--;
+      }
+
+      const pdfBytes = await generateCandidateCardPdf({
+        name: candidate.full_name,
+        city: candidate.city,
+        state: candidate.state,
+        age,
+        education: candidate.education_level,
+        institution: candidate.institution,
+        course: candidate.course,
+        currently_studying: candidate.currently_studying,
+        skills: candidate.skills as string[] | null,
+        languages: candidate.languages as any,
+        experience: candidate.experience as any,
+        summary: candidate.summary || candidate.profile_summary,
+        disc_dominante: candidate.disc_dominante,
+        disc_influente: candidate.disc_influente,
+        disc_estavel: candidate.disc_estavel,
+        disc_conforme: candidate.disc_conforme,
+        pdp_top_10_competencies: (candidate as any).pdp_top_10_competencies,
+        pdp_develop_competencies: (candidate as any).pdp_develop_competencies,
+        available_for_clt: candidate.available_for_clt,
+        available_for_internship: candidate.available_for_internship,
+        available_for_apprentice: candidate.available_for_apprentice,
+        is_school_student: (candidate as any).is_school_student,
+        interview: null,
+        matchScore: null,
+        jobTitle: null,
+      });
+      const safeName = candidate.full_name?.replace(/[^a-zA-Z0-9]/g, "_") || "funcionario";
+      return { base64: Buffer.from(pdfBytes).toString("base64"), filename: `${safeName}_perfil.pdf` };
+    }),
+
+  generateReferralLetter: companyProcedure
+    .input(z.object({ hiringProcessId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const company = await db.getCompanyByUserId(ctx.user.id);
+      if (!company) throw new TRPCError({ code: 'NOT_FOUND', message: 'Empresa não encontrada' });
+      const { data: hp } = await supabaseAdmin
+        .from('hiring_processes')
+        .select('id, company_id, candidate_id, hiring_type, start_date, candidate:candidates(full_name, cpf), job:jobs(title)')
+        .eq('id', input.hiringProcessId).single();
+      if (!hp || hp.company_id !== company.id) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Este funcionário não pertence à sua empresa' });
+      }
+      const pdfBytes = await buildReferralLetterPdf({
+        companyName: (company as any).company_name,
+        companyCnpj: (company as any).cnpj,
+        candidateName: (hp as any).candidate?.full_name,
+        candidateCpf: (hp as any).candidate?.cpf,
+        jobTitle: (hp as any).job?.title,
+        hiringType: hp.hiring_type,
+        startDate: hp.start_date,
+        city: (company as any).city,
+        state: (company as any).state,
+      });
+      const safeName = (hp as any).candidate?.full_name?.replace(/[^a-zA-Z0-9]/g, "_") || "funcionario";
+      return { base64: Buffer.from(pdfBytes).toString("base64"), filename: `carta_encaminhamento_${safeName}.pdf` };
     }),
 
   // Payments
@@ -1057,28 +1222,10 @@ export const companyRouter = router({
 
   getNotificationPrefs: companyProcedure.query(async ({ ctx }) => {
     const company = await db.getCompanyByUserId(ctx.user.id);
-    if (!company) {
-      return {
-        email_new_candidates: true,
-        email_interview_reminders: true,
-        email_payment_reminders: true,
-        email_contract_expiring: true,
-        whatsapp_interview_reminders: true,
-        whatsapp_payment_overdue: true,
-        whatsapp_new_candidates: false,
-      };
-    }
-    // Notification prefs are not yet persisted — defaults are returned.
-    // Pairs with updateNotificationPrefs which throws NOT_IMPLEMENTED.
-    return {
-      email_new_candidates: true,
-      email_interview_reminders: true,
-      email_payment_reminders: true,
-      email_contract_expiring: true,
-      whatsapp_interview_reminders: true,
-      whatsapp_payment_overdue: true,
-      whatsapp_new_candidates: false,
-    };
+    // Stored prefs (jsonb) are merged over defaults so newly-added toggles get a
+    // sensible default and existing choices are preserved.
+    const stored = (company as any)?.notification_prefs || {};
+    return { ...COMPANY_NOTIFICATION_PREF_DEFAULTS, ...stored };
   }),
 
   updateNotificationPrefs: companyProcedure
@@ -1091,8 +1238,23 @@ export const companyRouter = router({
       whatsapp_payment_overdue: z.boolean().optional(),
       whatsapp_new_candidates: z.boolean().optional(),
     }))
-    .mutation(async () => {
-      throw new TRPCError({ code: "NOT_IMPLEMENTED", message: "company.updateNotificationPrefs not implemented — prefs are not persisted" });
+    .mutation(async ({ ctx, input }) => {
+      const company = await db.getCompanyByUserId(ctx.user.id);
+      if (!company) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Empresa não encontrada' });
+      }
+      // Merge over any previously-stored prefs so a partial update (one toggle)
+      // never wipes the others.
+      const current = (company as any).notification_prefs || {};
+      const merged = { ...COMPANY_NOTIFICATION_PREF_DEFAULTS, ...current, ...input };
+      const { error } = await supabaseAdmin
+        .from('companies')
+        .update({ notification_prefs: merged })
+        .eq('id', company.id);
+      if (error) {
+        throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Erro ao salvar preferências' });
+      }
+      return merged;
     }),
 
   // AI-powered smart search: search companies via their jobs' embeddings

@@ -23,6 +23,8 @@ import {
   Search,
   Ban,
   Mail,
+  Pencil,
+  Trash2,
 } from "lucide-react";
 import DashboardLayout from "@/components/DashboardLayout";
 import { useState } from "react";
@@ -37,6 +39,10 @@ export default function AdminAgencies() {
   const [isInviteDialogOpen, setIsInviteDialogOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteNotes, setInviteNotes] = useState("");
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [editForm, setEditForm] = useState<any>({});
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [agencyToDelete, setAgencyToDelete] = useState<any>(null);
 
   const { data: affiliate, isLoading: affiliateLoading } = trpc.affiliate.getByUserId.useQuery();
   const { data: agencies, isLoading, refetch } = trpc.affiliate.getAgencies.useQuery();
@@ -72,6 +78,31 @@ export default function AdminAgencies() {
     },
     onError: (error) => {
       toast.error(error.message || 'Erro ao atualizar status');
+    }
+  });
+
+  const updateAgencyMutation = (trpc.agency as any).update.useMutation({
+    onSuccess: () => {
+      toast.success('Agência atualizada com sucesso!');
+      refetch();
+      setIsEditDialogOpen(false);
+      setEditForm({});
+      setSelectedAgency(null);
+    },
+    onError: (error: any) => {
+      toast.error(error.message || 'Erro ao atualizar agência');
+    }
+  });
+
+  const deleteAgencyMutation = (trpc.agency as any).deleteAgency.useMutation({
+    onSuccess: () => {
+      toast.success('Agência excluída com sucesso!');
+      refetch();
+      setIsDeleteDialogOpen(false);
+      setAgencyToDelete(null);
+    },
+    onError: (error: any) => {
+      toast.error(error.message || 'Erro ao excluir agência');
     }
   });
 
@@ -113,11 +144,47 @@ export default function AdminAgencies() {
       return;
     }
 
-    // TODO: Add rejection reason to the mutation when backend supports it
     await updateStatusMutation.mutateAsync({
       id: selectedAgency.id,
-      status: 'suspended'
+      status: 'rejected',
+      rejectionReason: rejectionReason.trim(),
     });
+  };
+
+  const openEditDialog = (agency: any) => {
+    setSelectedAgency(agency);
+    setEditForm({
+      agency_name: agency.agency_name || "",
+      trade_name: agency.trade_name || "",
+      legal_name: agency.legal_name || "",
+      cnpj: agency.cnpj || "",
+      address: agency.address || "",
+      city: agency.city || "",
+      state: agency.state || "",
+      postal_code: agency.postal_code || "",
+      phone: agency.phone || "",
+      website: agency.website || "",
+      notes: agency.notes || "",
+    });
+    setIsEditDialogOpen(true);
+  };
+
+  const handleEditSave = async () => {
+    if (!selectedAgency) return;
+    await updateAgencyMutation.mutateAsync({
+      id: selectedAgency.id,
+      ...editForm,
+    });
+  };
+
+  const openDeleteDialog = (agency: any) => {
+    setAgencyToDelete(agency);
+    setIsDeleteDialogOpen(true);
+  };
+
+  const handleDelete = async () => {
+    if (!agencyToDelete) return;
+    await deleteAgencyMutation.mutateAsync({ id: agencyToDelete.id });
   };
 
   const handleCreateInvitation = async () => {
@@ -140,6 +207,8 @@ export default function AdminAgencies() {
         return <Badge className="bg-orange-500 text-white">Pendente</Badge>;
       case 'suspended':
         return <Badge className="bg-red-500 text-white">Suspensa</Badge>;
+      case 'rejected':
+        return <Badge className="bg-slate-600 text-white">Rejeitada</Badge>;
       default:
         return <Badge className="bg-slate-500 text-white">{status}</Badge>;
     }
@@ -225,6 +294,14 @@ export default function AdminAgencies() {
                   {getStatusBadge(agency.status)}
                 </div>
 
+                {/* Rejection reason (report #25) */}
+                {agency.status === 'rejected' && agency.rejection_reason && (
+                  <div className="mb-3 rounded-md bg-red-50 border border-red-100 p-2">
+                    <p className="text-[11px] font-medium text-red-700">Motivo da rejeição</p>
+                    <p className="text-xs text-red-600 mt-0.5 break-words">{agency.rejection_reason}</p>
+                  </div>
+                )}
+
                 {/* Actions */}
                 <div className="mt-auto space-y-2">
                   {agency.status === 'pending' && (
@@ -273,6 +350,29 @@ export default function AdminAgencies() {
                       Reativar
                     </Button>
                   )}
+
+                  {/* Edit / Delete (reports #26, #37) */}
+                  <div className="flex gap-2 pt-1">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="flex-1 border-slate-300 text-slate-700 hover:bg-slate-50"
+                      onClick={() => openEditDialog(agency)}
+                    >
+                      <Pencil className="h-4 w-4 mr-1" />
+                      Editar
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="flex-1 border-red-300 text-red-600 hover:bg-red-50"
+                      onClick={() => openDeleteDialog(agency)}
+                      disabled={deleteAgencyMutation.isPending}
+                    >
+                      <Trash2 className="h-4 w-4 mr-1" />
+                      Excluir
+                    </Button>
+                  </div>
                 </div>
               </div>
             ))}
@@ -330,6 +430,160 @@ export default function AdminAgencies() {
                   {updateStatusMutation.isPending ? <Skeleton className="h-4 w-20" /> : 'Confirmar Rejeição'}
                 </Button>
               </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Edit Agency Dialog (report #26) */}
+        <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+          <DialogContent className="max-h-[85vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Editar Agência</DialogTitle>
+              <DialogDescription>
+                Atualize os dados de {selectedAgency?.agency_name}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 pt-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="edit-agency_name">Nome da Agência</Label>
+                  <Input
+                    id="edit-agency_name"
+                    value={editForm.agency_name || ""}
+                    onChange={(e) => setEditForm((f: any) => ({ ...f, agency_name: e.target.value }))}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-trade_name">Nome Fantasia</Label>
+                  <Input
+                    id="edit-trade_name"
+                    value={editForm.trade_name || ""}
+                    onChange={(e) => setEditForm((f: any) => ({ ...f, trade_name: e.target.value }))}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-legal_name">Razão Social</Label>
+                  <Input
+                    id="edit-legal_name"
+                    value={editForm.legal_name || ""}
+                    onChange={(e) => setEditForm((f: any) => ({ ...f, legal_name: e.target.value }))}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-cnpj">CNPJ</Label>
+                  <Input
+                    id="edit-cnpj"
+                    value={editForm.cnpj || ""}
+                    onChange={(e) => setEditForm((f: any) => ({ ...f, cnpj: e.target.value }))}
+                  />
+                </div>
+                <div className="space-y-2 md:col-span-2">
+                  <Label htmlFor="edit-address">Endereço</Label>
+                  <Input
+                    id="edit-address"
+                    value={editForm.address || ""}
+                    onChange={(e) => setEditForm((f: any) => ({ ...f, address: e.target.value }))}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-city">Cidade</Label>
+                  <Input
+                    id="edit-city"
+                    value={editForm.city || ""}
+                    onChange={(e) => setEditForm((f: any) => ({ ...f, city: e.target.value }))}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-state">Estado</Label>
+                  <Input
+                    id="edit-state"
+                    value={editForm.state || ""}
+                    onChange={(e) => setEditForm((f: any) => ({ ...f, state: e.target.value }))}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-postal_code">CEP</Label>
+                  <Input
+                    id="edit-postal_code"
+                    value={editForm.postal_code || ""}
+                    onChange={(e) => setEditForm((f: any) => ({ ...f, postal_code: e.target.value }))}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-phone">Telefone</Label>
+                  <Input
+                    id="edit-phone"
+                    value={editForm.phone || ""}
+                    onChange={(e) => setEditForm((f: any) => ({ ...f, phone: e.target.value }))}
+                  />
+                </div>
+                <div className="space-y-2 md:col-span-2">
+                  <Label htmlFor="edit-website">Website</Label>
+                  <Input
+                    id="edit-website"
+                    value={editForm.website || ""}
+                    onChange={(e) => setEditForm((f: any) => ({ ...f, website: e.target.value }))}
+                  />
+                </div>
+                <div className="space-y-2 md:col-span-2">
+                  <Label htmlFor="edit-notes">Observações</Label>
+                  <Textarea
+                    id="edit-notes"
+                    value={editForm.notes || ""}
+                    onChange={(e) => setEditForm((f: any) => ({ ...f, notes: e.target.value }))}
+                    rows={3}
+                  />
+                </div>
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setIsEditDialogOpen(false);
+                    setEditForm({});
+                    setSelectedAgency(null);
+                  }}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  className="bg-gradient-to-br from-[#1B4D7A] to-[#FF6B35] hover:shadow-lg shadow-[#0A2342]/25"
+                  onClick={handleEditSave}
+                  disabled={updateAgencyMutation.isPending}
+                >
+                  {updateAgencyMutation.isPending ? <Skeleton className="h-4 w-20" /> : 'Salvar Alterações'}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Delete Confirmation Dialog (report #37) */}
+        <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Excluir Agência</DialogTitle>
+              <DialogDescription>
+                Tem certeza que deseja excluir {agencyToDelete?.agency_name}? Esta ação removerá a agência das listagens ativas.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="flex justify-end gap-2 pt-4">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setIsDeleteDialogOpen(false);
+                  setAgencyToDelete(null);
+                }}
+              >
+                Cancelar
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={handleDelete}
+                disabled={deleteAgencyMutation.isPending}
+              >
+                {deleteAgencyMutation.isPending ? <Skeleton className="h-4 w-20" /> : 'Confirmar Exclusão'}
+              </Button>
             </div>
           </DialogContent>
         </Dialog>

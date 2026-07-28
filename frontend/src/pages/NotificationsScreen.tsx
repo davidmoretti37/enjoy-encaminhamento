@@ -38,6 +38,43 @@ const typeIconColors = {
   error: "text-red-500",
 };
 
+// Report item #19: make it clear what each notification is about. We derive a
+// human-readable category from related_to_type, falling back to keywords in the
+// title/message so the categories the ANEC team listed (cadastro, taxas, TCE,
+// seguro de vida, entrevista…) are always labeled.
+function getNotificationCategory(n: any): { label: string; className: string } {
+  const rel = (n.related_to_type || "").toLowerCase();
+  const text = `${n.title || ""} ${n.message || ""}`.toLowerCase();
+
+  const has = (...terms: string[]) => terms.some((t) => text.includes(t));
+
+  if (rel === "insurance" || has("seguro de vida", "apólice", "apolice")) {
+    return { label: "Seguro de Vida", className: "bg-rose-50 text-rose-700 border-rose-200" };
+  }
+  if (rel === "tce" || has("tce", "termo de compromisso")) {
+    return { label: "TCE", className: "bg-amber-50 text-amber-700 border-amber-200" };
+  }
+  if (rel === "payment" || has("pagamento", "taxa", "mensalidade", "vencimento", "cobrança", "cobranca")) {
+    return { label: "Financeiro", className: "bg-emerald-50 text-emerald-700 border-emerald-200" };
+  }
+  if (rel === "report" || has("relatório mensal", "relatorio mensal")) {
+    return { label: "Relatório Mensal", className: "bg-cyan-50 text-cyan-700 border-cyan-200" };
+  }
+  if (rel === "batch" || rel === "interview" || has("entrevista")) {
+    return { label: "Entrevista", className: "bg-indigo-50 text-indigo-700 border-indigo-200" };
+  }
+  if (rel === "application" || has("candidatura", "vaga")) {
+    return { label: "Candidatura", className: "bg-blue-50 text-blue-700 border-blue-200" };
+  }
+  if (rel === "candidate" || has("cadastro")) {
+    return { label: "Cadastro", className: "bg-violet-50 text-violet-700 border-violet-200" };
+  }
+  if (rel === "contract" || has("contrato")) {
+    return { label: "Contrato", className: "bg-slate-100 text-slate-600 border-slate-200" };
+  }
+  return { label: "Geral", className: "bg-slate-100 text-slate-600 border-slate-200" };
+}
+
 export default function NotificationsScreen() {
   const { user, loading: authLoading } = useAuth();
   const [, setLocation] = useLocation();
@@ -68,7 +105,7 @@ export default function NotificationsScreen() {
     if (notification.related_to_type === "batch") {
       if (user?.role === "candidate") return "/candidate";
       if (user?.role === "company") return "/company/portal";
-      return "/candidates";
+      return "/agency/portal?tab=management&filter=candidates";
     }
     return null;
   };
@@ -141,7 +178,15 @@ export default function NotificationsScreen() {
 
                     {/* Content */}
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
+                      <div className="flex items-center gap-2 mb-1 flex-wrap">
+                        {(() => {
+                          const cat = getNotificationCategory(notification);
+                          return (
+                            <span className={`px-2 py-0.5 rounded-full border text-[11px] font-medium ${cat.className}`}>
+                              {cat.label}
+                            </span>
+                          );
+                        })()}
                         <h4 className="text-[#0A2342] font-medium">
                           {notification.title}
                         </h4>

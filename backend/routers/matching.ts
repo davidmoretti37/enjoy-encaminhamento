@@ -15,6 +15,36 @@ import {
 import type { MatchingConfig } from "../services/matching/index";
 import { getAllWeightProfiles, suggestWeightProfile } from "../services/matching/weights";
 
+/**
+ * Assert the caller's agency owns the given job (job.agency_id, or its
+ * company.agency_id). admin/super_admin bypass. agencyProcedure only checks
+ * role, so matching endpoints that expose candidate PII / run pipelines must
+ * verify job ownership, not merely that the caller has an agency.
+ */
+async function assertAgencyOwnsJob(ctx: any, jobId: string): Promise<void> {
+  if (ctx.user.role === 'admin' || ctx.user.role === 'super_admin') return;
+  const agency = await db.getAgencyForUserContext(ctx.user.id, ctx.user.role ?? '');
+  if (!agency) {
+    throw new TRPCError({ code: 'FORBIDDEN', message: 'Sem agência associada ao usuário' });
+  }
+  const job = await db.getJobById(jobId);
+  if (!job) {
+    throw new TRPCError({ code: 'NOT_FOUND', message: 'Vaga não encontrada' });
+  }
+  let ownerAgencyId = (job as any).agency_id;
+  if (!ownerAgencyId && (job as any).company_id) {
+    const { data: company } = await (supabaseAdmin as any)
+      .from('companies')
+      .select('agency_id')
+      .eq('id', (job as any).company_id)
+      .single();
+    ownerAgencyId = company?.agency_id;
+  }
+  if (ownerAgencyId !== agency.id) {
+    throw new TRPCError({ code: 'FORBIDDEN', message: 'Esta vaga não pertence à sua agência' });
+  }
+}
+
 export const matchingRouter = router({
   /**
    * Run the full advanced matching pipeline for a job
@@ -36,11 +66,13 @@ export const matchingRouter = router({
       }).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
-      // Verify agency has access to this job
       const agency = await db.getAgencyForUserContext(ctx.user.id, ctx.user.role ?? '');
       if (!agency) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Agency not found' });
       }
+      // Verify the caller's agency actually OWNS this job (not just that they
+      // have an agency).
+      await assertAgencyOwnsJob(ctx, input.jobId);
 
       // Run the matching pipeline
       const config: MatchingConfig = input.options || {};
@@ -77,6 +109,7 @@ export const matchingRouter = router({
       if (!agency) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Agency not found' });
       }
+      await assertAgencyOwnsJob(ctx, input.jobId);
 
       const results = await getMatchResults(input.jobId, {
         limit: input.limit,
@@ -101,6 +134,7 @@ export const matchingRouter = router({
       if (!agency) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Agency not found' });
       }
+      await assertAgencyOwnsJob(ctx, input.jobId);
 
       // Get the match record
       const { data, error } = await (supabaseAdmin as any)
@@ -207,6 +241,7 @@ export const matchingRouter = router({
       if (!agency) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Agency not found' });
       }
+      await assertAgencyOwnsJob(ctx, input.jobId);
 
       const { jobId, ...config } = input;
 

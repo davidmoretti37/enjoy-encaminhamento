@@ -171,7 +171,7 @@ export const adminRouter = router({
       billing_period: z.string().optional(),
       notes: z.string().optional(),
       job_id: z.string().uuid().nullable().optional(),
-      payment_type: z.enum(['monthly-fee', 'insurance-fee', 'annual-insurance', 'setup-fee', 'penalty', 'refund']).optional(),
+      payment_type: z.enum(['monthly-fee', 'insurance-fee', 'annual-insurance', 'setup-fee', 'clt-fee', 'penalty', 'refund']).optional(),
       status: z.enum(['pending', 'paid', 'overdue', 'failed', 'refunded']).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
@@ -206,7 +206,7 @@ export const adminRouter = router({
       amount: z.number().min(0),
       due_date: z.string(),
       billing_period: z.string().optional(),
-      payment_type: z.enum(['monthly-fee', 'insurance-fee', 'annual-insurance', 'setup-fee', 'penalty', 'refund']),
+      payment_type: z.enum(['monthly-fee', 'insurance-fee', 'annual-insurance', 'setup-fee', 'clt-fee', 'penalty', 'refund']),
       status: z.enum(['pending', 'paid', 'overdue']).default('pending'),
       notes: z.string().optional(),
     }))
@@ -290,6 +290,13 @@ export const adminRouter = router({
       contentType: z.string(),
     }))
     .mutation(async ({ ctx, input }) => {
+      // Tenant guard: an agency may only attach a receipt to its own payment
+      // (every sibling payment mutation already does this).
+      const agencyId = await getAgencyScope(ctx);
+      if (agencyId) {
+        await verifyPaymentBelongsToAgency(input.paymentId, agencyId);
+      }
+
       const { storagePut } = await import('../storage');
 
       const fileBuffer = Buffer.from(input.fileData, 'base64');

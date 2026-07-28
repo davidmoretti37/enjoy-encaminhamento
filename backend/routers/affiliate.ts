@@ -9,6 +9,20 @@ import * as db from "../db";
 import { ENV } from "../_core/env";
 import { parseExcelWithAI, suggestColumnMappings as suggestColumnMappingsAI, identifyBasicColumns, suggestCompanyColumnMappings, getCompanyFieldsList } from "../services/ai/columnMapper";
 
+// AC-3: a client-supplied agencyId must belong to the caller's affiliate (head agency).
+// No agencyId (undefined = stored context, null = combined "all my agencies" mode) is
+// always allowed; only a concrete agencyId is verified against the affiliate's agencies.
+async function assertAgencyOwnedByAffiliate(
+  affiliateId: string,
+  agencyId: string | null | undefined
+): Promise<void> {
+  if (!agencyId) return;
+  const agencies = await db.getAgenciesByAffiliateId(affiliateId);
+  if (!agencies.some((a: any) => a.id === agencyId)) {
+    throw new TRPCError({ code: 'FORBIDDEN', message: 'Agency does not belong to this admin' });
+  }
+}
+
 export const affiliateRouter = router({
   // Get all affiliates (super admin only)
   getAll: adminProcedure.query(async () => {
@@ -109,13 +123,15 @@ export const affiliateRouter = router({
   }),
 
   // Get companies from admin's region (optionally filtered by agency)
-  getCompanies: protectedProcedure
+  getCompanies: adminProcedure
     .input(z.object({ agencyId: z.string().uuid().nullable().optional() }).optional())
     .query(async ({ ctx, input }) => {
       const affiliate = await db.getAffiliateByUserId(ctx.user.id);
       if (!affiliate) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Affiliate not found' });
       }
+      // AC-3: reject a client-supplied agencyId that isn't one of this admin's agencies
+      await assertAgencyOwnedByAffiliate(affiliate.id, input?.agencyId);
       // null = explicitly "all agencies" mode, undefined = use stored context
       const agencyId = input?.agencyId === null
         ? undefined
@@ -204,13 +220,15 @@ export const affiliateRouter = router({
     }),
 
   // Get admin's dashboard stats (optionally filtered by agency)
-  getDashboardStats: protectedProcedure
+  getDashboardStats: adminProcedure
     .input(z.object({ agencyId: z.string().uuid().nullable().optional() }).optional())
     .query(async ({ ctx, input }) => {
       const affiliate = await db.getAffiliateByUserId(ctx.user.id);
       if (!affiliate) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Affiliate not found' });
       }
+      // AC-3: reject a client-supplied agencyId that isn't one of this admin's agencies
+      await assertAgencyOwnedByAffiliate(affiliate.id, input?.agencyId);
       // null = explicitly "all agencies" mode, undefined = use stored context
       const agencyId = input?.agencyId === null
         ? undefined
@@ -219,13 +237,15 @@ export const affiliateRouter = router({
     }),
 
   // Get candidates from admin's region (optionally filtered by agency)
-  getCandidates: protectedProcedure
+  getCandidates: adminProcedure
     .input(z.object({ agencyId: z.string().uuid().nullable().optional() }).optional())
     .query(async ({ ctx, input }) => {
       const affiliate = await db.getAffiliateByUserId(ctx.user.id);
       if (!affiliate) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Affiliate not found' });
       }
+      // AC-3: reject a client-supplied agencyId that isn't one of this admin's agencies
+      await assertAgencyOwnedByAffiliate(affiliate.id, input?.agencyId);
       // null = explicitly "all agencies" mode, undefined = use stored context
       const agencyId = input?.agencyId === null
         ? undefined
@@ -234,13 +254,15 @@ export const affiliateRouter = router({
     }),
 
   // Get jobs from admin's region (optionally filtered by agency)
-  getJobs: protectedProcedure
+  getJobs: adminProcedure
     .input(z.object({ agencyId: z.string().uuid().nullable().optional() }).optional())
     .query(async ({ ctx, input }) => {
       const affiliate = await db.getAffiliateByUserId(ctx.user.id);
       if (!affiliate) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Affiliate not found' });
       }
+      // AC-3: reject a client-supplied agencyId that isn't one of this admin's agencies
+      await assertAgencyOwnedByAffiliate(affiliate.id, input?.agencyId);
       // null = explicitly "all agencies" mode, undefined = use stored context
       const agencyId = input?.agencyId === null
         ? undefined
@@ -249,13 +271,15 @@ export const affiliateRouter = router({
     }),
 
   // Get applications from admin's region (optionally filtered by agency)
-  getApplications: protectedProcedure
+  getApplications: adminProcedure
     .input(z.object({ agencyId: z.string().uuid().nullable().optional() }).optional())
     .query(async ({ ctx, input }) => {
       const affiliate = await db.getAffiliateByUserId(ctx.user.id);
       if (!affiliate) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Affiliate not found' });
       }
+      // AC-3: reject a client-supplied agencyId that isn't one of this admin's agencies
+      await assertAgencyOwnedByAffiliate(affiliate.id, input?.agencyId);
       // null = explicitly "all agencies" mode, undefined = use stored context
       const agencyId = input?.agencyId === null
         ? undefined
@@ -264,13 +288,15 @@ export const affiliateRouter = router({
     }),
 
   // Get contracts from admin's region (optionally filtered by agency)
-  getContracts: protectedProcedure
+  getContracts: adminProcedure
     .input(z.object({ agencyId: z.string().uuid().nullable().optional() }).optional())
     .query(async ({ ctx, input }) => {
       const affiliate = await db.getAffiliateByUserId(ctx.user.id);
       if (!affiliate) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Affiliate not found' });
       }
+      // AC-3: reject a client-supplied agencyId that isn't one of this admin's agencies
+      await assertAgencyOwnedByAffiliate(affiliate.id, input?.agencyId);
       // null = explicitly "all agencies" mode, undefined = use stored context
       const agencyId = input?.agencyId === null
         ? undefined
@@ -279,13 +305,15 @@ export const affiliateRouter = router({
     }),
 
   // Get payments from admin's region (optionally filtered by agency)
-  getPayments: protectedProcedure
+  getPayments: adminProcedure
     .input(z.object({ agencyId: z.string().uuid().nullable().optional() }).optional())
     .query(async ({ ctx, input }) => {
       const affiliate = await db.getAffiliateByUserId(ctx.user.id);
       if (!affiliate) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Affiliate not found' });
       }
+      // AC-3: reject a client-supplied agencyId that isn't one of this admin's agencies
+      await assertAgencyOwnedByAffiliate(affiliate.id, input?.agencyId);
       // null = explicitly "all agencies" mode, undefined = use stored context
       const agencyId = input?.agencyId === null
         ? undefined
@@ -294,13 +322,15 @@ export const affiliateRouter = router({
     }),
 
   // Get payments grouped by company (with jobs for vaga tabs)
-  getPaymentsGroupedByCompany: protectedProcedure
+  getPaymentsGroupedByCompany: adminProcedure
     .input(z.object({ agencyId: z.string().uuid().nullable().optional() }).optional())
     .query(async ({ ctx, input }) => {
       const affiliate = await db.getAffiliateByUserId(ctx.user.id);
       if (!affiliate) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Affiliate not found' });
       }
+      // AC-3: reject a client-supplied agencyId that isn't one of this admin's agencies
+      await assertAgencyOwnedByAffiliate(affiliate.id, input?.agencyId);
       const agencyId = input?.agencyId === null
         ? undefined
         : (input?.agencyId ?? await db.getAdminAgencyContext(ctx.user.id));

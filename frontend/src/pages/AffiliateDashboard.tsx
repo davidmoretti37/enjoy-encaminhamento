@@ -232,21 +232,6 @@ export default function AffiliateDashboard() {
 
             <Card
               className="cursor-pointer hover:shadow-lg transition-shadow border-slate-200"
-              onClick={() => setLocation('/candidates')}
-            >
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-lg">
-                  <Users className="h-5 w-5 text-slate-600" />
-                  Ver Candidatos
-                </CardTitle>
-                <CardDescription>
-                  Candidatos da região
-                </CardDescription>
-              </CardHeader>
-            </Card>
-
-            <Card
-              className="cursor-pointer hover:shadow-lg transition-shadow border-slate-200"
               onClick={() => setLocation('/contracts')}
             >
               <CardHeader>

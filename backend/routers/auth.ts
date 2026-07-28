@@ -5,6 +5,8 @@ import { COOKIE_NAME } from "../shared/const";
 import { getSessionCookieOptions } from "../_core/cookies";
 import { publicProcedure, protectedProcedure, router } from "../_core/trpc";
 import { supabase, supabaseAdmin } from "../supabase";
+import { createClient } from "@supabase/supabase-js";
+import { ENV } from "../_core/env";
 import * as db from "../db";
 
 export const authRouter = router({
@@ -115,10 +117,31 @@ export const authRouter = router({
 
   changePassword: protectedProcedure
     .input(z.object({
-      currentPassword: z.string().optional(),
+      currentPassword: z.string().min(1, 'Informe sua senha atual'),
       newPassword: z.string().min(8, 'Senha deve ter pelo menos 8 caracteres'),
     }))
     .mutation(async ({ ctx, input }) => {
+      // Verify the current password before allowing the change (a logged-in
+      // session must still prove it knows the current password).
+      let email = (ctx.user as any).email as string | undefined;
+      if (!email) {
+        const { data: authUser } = await supabaseAdmin.auth.admin.getUserById(ctx.user.id);
+        email = authUser?.user?.email || undefined;
+      }
+      if (!email) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Usuário não encontrado' });
+      }
+      const verifier = createClient(ENV.supabaseUrl, ENV.supabaseAnonKey, {
+        auth: { autoRefreshToken: false, persistSession: false },
+      });
+      const { error: signInErr } = await verifier.auth.signInWithPassword({
+        email,
+        password: input.currentPassword,
+      });
+      if (signInErr) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Senha atual incorreta' });
+      }
+
       // Update password using admin API (user is already authenticated)
       const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
         ctx.user.id,

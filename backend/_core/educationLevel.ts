@@ -23,7 +23,10 @@ const VALID_ENUM_VALUES = new Set([
 ]);
 
 export function mapEducationLevel(input: string | null | undefined): string | null | undefined {
-  if (input === null || input === undefined || input === "") return input;
+  if (input === null || input === undefined) return input;
+  // "" is not a valid enum label — treat blank as "no education level" (null),
+  // never pass "" through to the education_level enum column.
+  if (input === "") return null;
   if (EDUCATION_LEVEL_MAP[input]) return EDUCATION_LEVEL_MAP[input];
   if (VALID_ENUM_VALUES.has(input)) return input;
   return null;

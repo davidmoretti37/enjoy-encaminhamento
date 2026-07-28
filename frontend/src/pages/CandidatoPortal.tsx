@@ -8,6 +8,7 @@ import {
   CANDIDATE_STEPS,
 } from "@/contexts/CandidateFunnelContext";
 import { Skeleton } from "@/components/ui/skeleton";
+import { SafeImage } from "@/components/ui/SafeImage";
 import { FunnelContentSkeleton } from "@/components/ui/skeletons";
 import { AnimatePresence, motion } from "framer-motion";
 import {
@@ -82,7 +83,18 @@ function CandidateSidebarMenu({ open, onClose, onNavigate, onLogout, candidateNa
             <div className="flex items-center justify-between px-6 py-5 border-b border-slate-200">
               <div className="flex items-center gap-3">
                 {candidatePhotoUrl ? (
-                  <img src={candidatePhotoUrl} alt="" className="w-10 h-10 rounded-lg object-cover shadow-lg" />
+                  <SafeImage
+                    src={candidatePhotoUrl}
+                    alt=""
+                    className="w-10 h-10 rounded-lg object-cover shadow-lg"
+                    fallback={
+                      <div className="w-10 h-10 rounded-lg bg-[#0A2342] flex items-center justify-center shadow-lg">
+                        <span className="text-white font-bold text-lg">
+                          {candidateName?.charAt(0)?.toUpperCase() || "C"}
+                        </span>
+                      </div>
+                    }
+                  />
                 ) : (
                   <div className="w-10 h-10 rounded-lg bg-[#0A2342] flex items-center justify-center shadow-lg">
                     <span className="text-white font-bold text-lg">

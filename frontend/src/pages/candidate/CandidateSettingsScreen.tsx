@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { FunnelLayout, CardEntrance } from "@/components/funnel";
 import ContentTransition from "@/components/ui/ContentTransition";
+import { SafeImage } from "@/components/ui/SafeImage";
 import { FormSkeleton } from "@/components/ui/skeletons";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
@@ -101,6 +102,7 @@ export default function CandidateSettingsScreen() {
     currently_studying: false,
     institution: '',
     course: '',
+    course_period: '',
     skills: [] as string[],
     languages: [] as string[],
     summary: '',
@@ -188,6 +190,7 @@ export default function CandidateSettingsScreen() {
         currently_studying: profile.currently_studying || false,
         institution: profile.institution || '',
         course: profile.course || '',
+        course_period: (profile as any).course_period || '',
         skills: (profile.skills as string[]) || [],
         languages: (profile.languages as string[]) || [],
         summary: profile.summary || '',
@@ -356,11 +359,12 @@ export default function CandidateSettingsScreen() {
                           <div className="h-8 w-8 border-2 border-white border-t-transparent rounded-full animate-spin" />
                         </div>
                       )}
-                      {profile?.photo_url ? (
-                        <img src={profile.photo_url} alt="Foto" className="w-full h-full object-cover" />
-                      ) : (
-                        <Camera className="w-10 h-10 text-white" />
-                      )}
+                      <SafeImage
+                        src={profile?.photo_url}
+                        alt="Foto"
+                        className="w-full h-full object-cover"
+                        fallback={<Camera className="w-10 h-10 text-white" />}
+                      />
                     </div>
                     <input
                       type="file"
@@ -510,6 +514,15 @@ export default function CandidateSettingsScreen() {
                       placeholder="Nome do curso"
                     />
                   </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="course_period_personal">Período / Ano do curso</Label>
+                    <Input
+                      id="course_period_personal"
+                      value={formData.course_period}
+                      onChange={(e) => handleInputChange('course_period', e.target.value)}
+                      placeholder="Ex: 3º período, 2º ano, 2024/1"
+                    />
+                  </div>
                   <div className="flex items-center gap-2 mt-2">
                     <input
                       type="checkbox"
@@ -528,7 +541,7 @@ export default function CandidateSettingsScreen() {
                       onChange={(e) => handleInputChange('is_school_student', e.target.checked)}
                       className="rounded"
                     />
-                    <Label htmlFor="is_school_student_personal">Aluno(a) da escola ANEC</Label>
+                    <Label htmlFor="is_school_student_personal">Aluno(a) da Inexxa Formação Profissionalizante</Label>
                   </div>
                 </div>
               </div>

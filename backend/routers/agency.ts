@@ -14,6 +14,28 @@ import { generateCompanySummary } from "../services/ai/summarizer";
 import { ENV } from "../_core/env";
 import { parseExcelWithAI, suggestColumnMappings as suggestColumnMappingsAI, identifyBasicColumns, suggestCompanyColumnMappings, getCompanyFieldsList } from "../services/ai/columnMapper";
 
+/**
+ * Assert the caller's agency owns the given company. admin/super_admin bypass.
+ * agencyProcedure only checks role, so any endpoint taking a client companyId
+ * must call this before reading/mutating that company or its dependents.
+ */
+export async function assertAgencyOwnsCompany(ctx: any, companyId: string): Promise<any> {
+  const { data: company } = await supabaseAdmin
+    .from('companies')
+    .select('id, agency_id')
+    .eq('id', companyId)
+    .single();
+  if (!company) {
+    throw new TRPCError({ code: 'NOT_FOUND', message: 'Empresa não encontrada' });
+  }
+  if (ctx.user.role === 'admin' || ctx.user.role === 'super_admin') return company;
+  const agency = await db.getAgencyForUserContext(ctx.user.id, ctx.user.role);
+  if (!agency || company.agency_id !== agency.id) {
+    throw new TRPCError({ code: 'FORBIDDEN', message: 'Esta empresa não pertence à sua agência' });
+  }
+  return company;
+}
+
 export const agencyRouter = router({
   // Get all active agencies (public - for registration dropdown)
   getAllPublic: publicProcedure.query(async () => {
@@ -36,10 +58,45 @@ export const agencyRouter = router({
   updateStatus: adminProcedure
     .input(z.object({
       id: z.string().uuid(),
-      status: z.enum(['pending', 'active', 'suspended'])
+      status: z.enum(['pending', 'active', 'suspended', 'rejected']),
+      rejectionReason: z.string().optional(),
     }))
-    .mutation(async ({ input }) => {
-      await db.updateAgencyStatus(input.id, input.status);
+    .mutation(async ({ ctx, input }) => {
+      // Region guard (defense-in-depth): a regional admin may only change
+      // agencies in their own affiliate. Deliberately permissive — super_admin,
+      // an admin with no affiliate (the head), or an agency with no affiliate all
+      // pass, so the head is never locked out. Only a DEFINITE cross-region
+      // (admin's affiliate X, agency's affiliate Y ≠ X) is blocked.
+      if (ctx.user.role !== 'super_admin') {
+        const affiliate = await db.getAffiliateByUserId(ctx.user.id);
+        if (affiliate?.id) {
+          const agency = await db.getAgencyById(input.id);
+          if (agency && (agency as any).affiliate_id && (agency as any).affiliate_id !== affiliate.id) {
+            throw new TRPCError({ code: 'FORBIDDEN', message: 'Esta agência não pertence à sua região' });
+          }
+        }
+      }
+      await db.updateAgencyStatus(input.id, input.status, input.rejectionReason);
+      return { success: true };
+    }),
+
+  // Report #37: remove an agency created in error (soft delete → suspended +
+  // marker so it drops out of active lists). Region-guarded like updateStatus.
+  deleteAgency: adminProcedure
+    .input(z.object({ id: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      if (ctx.user.role !== 'super_admin') {
+        const affiliate = await db.getAffiliateByUserId(ctx.user.id);
+        if (affiliate?.id) {
+          const agency = await db.getAgencyById(input.id);
+          if (agency && (agency as any).affiliate_id && (agency as any).affiliate_id !== affiliate.id) {
+            throw new TRPCError({ code: 'FORBIDDEN', message: 'Esta agência não pertence à sua região' });
+          }
+        }
+      }
+      // Soft-delete: mark rejected + reason so it's clearly removed and filtered
+      // from active views (avoids hard-delete FK cascades on companies/jobs).
+      await db.updateAgencyStatus(input.id, 'rejected', 'Removida pelo administrador');
       return { success: true };
     }),
 
@@ -123,6 +180,35 @@ export const agencyRouter = router({
       return { isValid: true, email: invitation.email };
     }),
 
+  // Upload the registration contract server-side (was a browser anon-key upload
+  // straight to the bucket, which bypassed server limits and depended on a
+  // public bucket). Gated on a valid pending invitation; re-enforces type/size.
+  uploadInvitationContract: publicProcedure
+    .input(z.object({
+      token: z.string().uuid(),
+      fileName: z.string().min(1),
+      fileData: z.string().min(1), // base64, no data: prefix
+      contentType: z.string(),
+    }))
+    .mutation(async ({ input }) => {
+      const invitation = await db.getAgencyInvitationByToken(input.token);
+      if (!invitation || invitation.status !== 'pending' || new Date(invitation.expires_at) < new Date()) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Convite inválido ou expirado' });
+      }
+      if (input.contentType !== 'application/pdf') {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Apenas arquivos PDF são permitidos' });
+      }
+      const buffer = Buffer.from(input.fileData, 'base64');
+      if (buffer.length === 0 || buffer.length > 10 * 1024 * 1024) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'O arquivo deve ter no máximo 10MB' });
+      }
+      const { storagePut } = await import('../storage');
+      const sanitized = input.fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const key = `agency-contracts/${input.token}-${Date.now()}-${sanitized}`;
+      const { url } = await storagePut(key, buffer, 'application/pdf');
+      return { url };
+    }),
+
   // Accept agency invitation (public - creates account)
   acceptInvitation: publicProcedure
     .input(z.object({
@@ -140,11 +226,22 @@ export const agencyRouter = router({
       contractUrl: z.string().optional(),
     }))
     .mutation(async ({ input }) => {
+      // The client gets a signed URL back from uploadInvitationContract (the
+      // global signing middleware signs every response). Normalize whatever it
+      // sends back to the canonical public form before persisting, so the DB
+      // stores a stable, re-signable value rather than a URL with a baked-in
+      // expiring token.
+      let contractUrl = input.contractUrl;
+      if (contractUrl) {
+        const { bucketKeyFromValue, storageGet } = await import("../storage");
+        const key = bucketKeyFromValue(contractUrl);
+        if (key) contractUrl = storageGet(key).url;
+      }
       const result = await db.acceptAgencyInvitation(
         input.token,
         input.password,
         input.agencyData,
-        input.contractUrl
+        contractUrl
       );
       return { success: true, agencyId: result.agency.id };
     }),
@@ -235,19 +332,41 @@ export const agencyRouter = router({
   searchCandidatesByName: agencyProcedure
     .input(z.object({ query: z.string().min(2) }))
     .query(async ({ ctx, input }) => {
-      const agency = await db.getAgencyForUserContext(ctx.user.id, ctx.user.role);
-      if (!agency) {
-        throw new TRPCError({ code: 'NOT_FOUND', message: 'Agency not found' });
-      }
-
-      const { data, error } = await supabaseAdmin
+      let query = supabaseAdmin
         .from("candidates")
         .select("id, full_name, email, city, state, education_level, skills, photo_url")
-        .eq("agency_id", agency.id)
         .ilike("full_name", `%${input.query}%`)
         .order("full_name")
         .limit(20);
 
+      if (ctx.user.role === 'admin' || ctx.user.role === 'super_admin') {
+        // Head: search EVERY candidate in their region — all agencies under their
+        // affiliate PLUS unassigned ("Outra Região") candidates. Works whether or
+        // not a specific agency is selected. Previously this required a selected
+        // agency via getAgencyForUserContext and threw "Agency not found" in the
+        // default "Todas as Agências" view — blocking the head from manually
+        // placing a candidate into a vaga.
+        const affiliate = await db.getAffiliateByUserId(ctx.user.id);
+        if (affiliate) {
+          const { data: agencies } = await supabaseAdmin
+            .from("agencies")
+            .select("id")
+            .eq("affiliate_id", affiliate.id);
+          const ids = (agencies || []).map((a: any) => a.id);
+          query = ids.length > 0
+            ? query.or(`agency_id.in.(${ids.join(",")}),agency_id.is.null`)
+            : query.is("agency_id", null);
+        }
+        // super_admin with no affiliate row → search all candidates (no filter)
+      } else {
+        const agency = await db.getAgencyByUserId(ctx.user.id);
+        if (!agency) {
+          throw new TRPCError({ code: 'NOT_FOUND', message: 'Agency not found' });
+        }
+        query = query.eq("agency_id", agency.id);
+      }
+
+      const { data, error } = await query;
       if (error) return [];
       return data || [];
     }),
@@ -260,6 +379,35 @@ export const agencyRouter = router({
     }
     return await db.getApplicationsByAgencyId(agency.id);
   }),
+
+  // Report item #8: from the Candidaturas/Candidatos view, look up by candidate
+  // the jobs they applied to. Agency-scoped — the candidate must belong to this
+  // agency (admin/head may look up any candidate in their scope).
+  getCandidateApplications: agencyProcedure
+    .input(z.object({ candidateId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      const isHead = ctx.user.role === 'admin' || ctx.user.role === 'super_admin';
+      const { data: candidate } = await supabaseAdmin
+        .from('candidates')
+        .select('id, agency_id')
+        .eq('id', input.candidateId)
+        .single();
+      if (!candidate) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Candidato não encontrado' });
+      }
+      // Head (admin/super_admin) sees any candidate; a scoped agency user may only
+      // look up candidates that belong to their own agency.
+      if (!isHead) {
+        const agency = await db.getAgencyForUserContext(ctx.user.id, ctx.user.role);
+        if (!agency) {
+          throw new TRPCError({ code: 'NOT_FOUND', message: 'Agency not found. Please select an agency first.' });
+        }
+        if (candidate.agency_id !== agency.id) {
+          throw new TRPCError({ code: 'FORBIDDEN', message: 'Candidato não pertence à sua agência' });
+        }
+      }
+      return await db.getApplicationsByCandidateId(input.candidateId);
+    }),
 
   // Get companies from agency's city
   getCompanies: agencyProcedure.query(async ({ ctx }) => {
@@ -754,6 +902,8 @@ export const agencyRouter = router({
         status: 'open',
         published_at: new Date().toISOString(),
         agency_id: agency.id,
+        gender_preference: input.genderPreference ?? null,
+        urgency: input.urgency ?? null,
       });
 
       // Upload signed contract PDFs if provided
@@ -1029,10 +1179,19 @@ Regras:
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Agency not found' });
       }
 
+      // Normalize the (possibly signed) upload URL back to the canonical public
+      // form so the DB stores a stable, re-signable value — never a baked-in token.
+      let contractPdfUrl = input.contractPdfUrl;
+      if (contractPdfUrl) {
+        const { bucketKeyFromValue, storageGet } = await import("../storage");
+        const key = bucketKeyFromValue(contractPdfUrl);
+        if (key) contractPdfUrl = storageGet(key).url;
+      }
+
       const settingId = await db.upsertAgencyEmployeeTypeSetting(agency.id, {
         employeeType: input.employeeType,
         contractTemplateType: input.contractTemplateType,
-        contractPdfUrl: input.contractPdfUrl,
+        contractPdfUrl,
         contractPdfKey: input.contractPdfKey,
         contractHtml: input.contractHtml,
         paymentFrequency: input.paymentFrequency,
@@ -1170,14 +1329,18 @@ Regras:
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Agência não encontrada' });
       }
 
-      // 1. Verify company exists
+      // 1. Verify company exists AND belongs to the caller's agency
       const { data: company, error: compErr } = await supabaseAdmin
         .from('companies')
-        .select('id, company_name')
+        .select('id, company_name, agency_id')
         .eq('id', input.companyId)
         .single();
       if (compErr || !company) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Empresa não encontrada' });
+      }
+      if (ctx.user.role !== 'admin' && ctx.user.role !== 'super_admin'
+          && company.agency_id !== agency.id) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Esta empresa não pertence à sua agência' });
       }
 
       // 2. Find or create candidate by CPF
@@ -1405,6 +1568,10 @@ Regras:
     .mutation(async ({ ctx, input }) => {
       const { companyId, ...fields } = input;
 
+      // Tenant guard: only the owning agency (or admin) may edit this company's
+      // profile (name/CNPJ/email/address).
+      await assertAgencyOwnsCompany(ctx, companyId);
+
       // Map camelCase to snake_case
       const updateData: Record<string, any> = {};
       if (fields.companyName !== undefined) updateData.company_name = fields.companyName;
@@ -1457,6 +1624,18 @@ Regras:
       contentType: z.string(),
     }))
     .mutation(async ({ ctx, input }) => {
+      // Tenant guard: verify the caller's agency owns this hiring process before
+      // overwriting its contract / marking company_signed.
+      const { data: process } = await supabaseAdmin
+        .from('hiring_processes')
+        .select('id, company_id')
+        .eq('id', input.hiringProcessId)
+        .single();
+      if (!process) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Processo de contratação não encontrado' });
+      }
+      await assertAgencyOwnsCompany(ctx, process.company_id);
+
       const { storagePut } = await import('../storage');
       const sanitizedName = input.fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
       const fileBuffer = Buffer.from(input.fileData, 'base64');

@@ -1,5 +1,6 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import ContentTransition from "@/components/ui/ContentTransition";
+import { SafeImage } from "@/components/ui/SafeImage";
 import { PageHeaderSkeleton, SearchBarSkeleton, TableSkeleton } from "@/components/ui/skeletons";
 import { useAgencyContext } from "@/contexts/AgencyContext";
 import { Button } from "@/components/ui/button";
@@ -66,7 +67,9 @@ export default function JobPage() {
   // Select the right data based on role
   const jobs = isAffiliate ? affiliateJobsQuery.data : agencyJobsQuery.data;
   const refetchJobs = isAffiliate ? affiliateJobsQuery.refetch : agencyJobsQuery.refetch;
-  const jobsLoading = affiliateJobsQuery.isLoading || agencyJobsQuery.isLoading;
+  // Gate only on the ACTIVE query — the role-disabled query's isLoading is true and
+  // would skeleton the page forever (same bug as PaymentPage).
+  const jobsLoading = (isAffiliate ? affiliateJobsQuery : agencyJobsQuery).isLoading;
 
   // Mutations (admin only)
   const updateStatusMutation = trpc.job.updateStatus.useMutation({
@@ -173,13 +176,15 @@ export default function JobPage() {
   };
 
   const getJobTypeBadge = (jobType: string) => {
+    // Values are hiring/contract types (jobs.contract_type)
     const types: Record<string, string> = {
-      'full_time': 'Tempo Integral',
-      'part_time': 'Meio Período',
-      'contract': 'Contrato',
-      'temporary': 'Temporário',
-      'internship': 'Estágio'
+      'estagio': 'Estágio',
+      'clt': 'CLT',
+      'pj': 'PJ',
+      'menor-aprendiz': 'Menor Aprendiz',
+      'jovem-aprendiz': 'Jovem Aprendiz',
     };
+    if (!jobType) return <Badge variant="outline">N/A</Badge>;
     return <Badge variant="outline">{types[jobType] || jobType}</Badge>;
   };
 
@@ -187,12 +192,12 @@ export default function JobPage() {
   const filteredJobs = jobs?.filter((job: any) => {
     if (!searchTerm) return true;
     const searchLower = searchTerm.toLowerCase();
-    const companyName = isAdmin ? job.companies?.company_name : job.company?.company_name;
+    const companyName = job.company?.company_name || job.companies?.company_name;
     return (
       job.title?.toLowerCase().includes(searchLower) ||
       companyName?.toLowerCase().includes(searchLower) ||
       job.agency?.agency_name?.toLowerCase().includes(searchLower) ||
-      job.city?.toLowerCase().includes(searchLower)
+      job.location?.toLowerCase().includes(searchLower)
     );
   });
 
@@ -353,17 +358,17 @@ export default function JobPage() {
                             </TableHeader>
                             <TableBody>
                               {agencyJobs.map((job: any) => {
-                                const companyName = isAdmin ? job.companies?.company_name : job.company?.company_name;
+                                const companyName = job.company?.company_name || job.companies?.company_name;
                                 return (
                                   <TableRow key={job.id}>
                                     <TableCell className="font-medium">{job.title}</TableCell>
                                     <TableCell>{companyName || 'N/A'}</TableCell>
-                                    <TableCell>{getJobTypeBadge(job.job_type)}</TableCell>
+                                    <TableCell>{getJobTypeBadge(job.contract_type)}</TableCell>
                                     <TableCell>
                                       {isAdmin && job.remote ? (
                                         <Badge variant="outline" className="bg-blue-50">Remoto</Badge>
                                       ) : (
-                                        job.city || 'N/A'
+                                        job.location || job.company?.city || job.companies?.city || 'N/A'
                                       )}
                                     </TableCell>
                                     <TableCell>{getStatusBadge(job.status)}</TableCell>
@@ -458,17 +463,17 @@ export default function JobPage() {
                   </TableHeader>
                   <TableBody>
                     {filteredJobs.map((job: any) => {
-                      const companyName = isAdmin ? job.companies?.company_name : job.company?.company_name;
+                      const companyName = job.company?.company_name || job.companies?.company_name;
                       return (
                         <TableRow key={job.id}>
                           <TableCell className="font-medium">{job.title}</TableCell>
                           <TableCell>{companyName || 'N/A'}</TableCell>
-                          <TableCell>{getJobTypeBadge(job.job_type)}</TableCell>
+                          <TableCell>{getJobTypeBadge(job.contract_type)}</TableCell>
                           <TableCell>
                             {isAdmin && job.remote ? (
                               <Badge variant="outline" className="bg-blue-50">Remoto</Badge>
                             ) : (
-                              job.city || 'N/A'
+                              job.location || job.company?.city || job.companies?.city || 'N/A'
                             )}
                           </TableCell>
                           <TableCell>{getStatusBadge(job.status)}</TableCell>
@@ -579,11 +584,12 @@ export default function JobPage() {
                       <div className="flex items-start justify-between mb-3">
                         <div className="flex items-center gap-3">
                           <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center">
-                            {match.candidates?.photo_url ? (
-                              <img src={match.candidates.photo_url} alt="" className="w-10 h-10 rounded-full object-cover" />
-                            ) : (
-                              <Users className="h-5 w-5 text-gray-500" />
-                            )}
+                            <SafeImage
+                              src={match.candidates?.photo_url}
+                              alt=""
+                              className="w-10 h-10 rounded-full object-cover"
+                              fallback={<Users className="h-5 w-5 text-gray-500" />}
+                            />
                           </div>
                           <div>
                             <h4 className="font-semibold">{match.candidates?.full_name || 'Candidato'}</h4>

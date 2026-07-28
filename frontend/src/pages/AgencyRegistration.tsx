@@ -21,7 +21,6 @@ import {
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
-import { supabase } from "@/lib/supabase";
 
 type Step = 'validating' | 'agency-info' | 'password' | 'contract' | 'submitting' | 'success' | 'error';
 
@@ -95,6 +94,9 @@ export default function AgencyRegistration() {
     }
   });
 
+  // Server-side contract upload (replaces the browser anon-key upload).
+  const uploadContractMutation = trpc.agency.uploadInvitationContract.useMutation();
+
   // Handle file selection
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -117,24 +119,23 @@ export default function AgencyRegistration() {
 
     setUploading(true);
     try {
-      const fileExt = contractFile.name.split('.').pop();
-      const fileName = `${token}-${Date.now()}.${fileExt}`;
-      const filePath = `agency-contracts/${fileName}`;
+      // Read the file as base64 (strip the data: prefix) and upload server-side,
+      // where the file type/size are re-enforced and the invitation is verified.
+      const fileData = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(((reader.result as string) || "").split(",")[1] || "");
+        reader.onerror = () => reject(new Error("read failed"));
+        reader.readAsDataURL(contractFile);
+      });
 
-      const { error: uploadError } = await supabase.storage
-        .from('contracts')
-        .upload(filePath, contractFile);
+      const { url } = await uploadContractMutation.mutateAsync({
+        token: token!,
+        fileName: contractFile.name,
+        fileData,
+        contentType: contractFile.type || "application/pdf",
+      });
 
-      if (uploadError) {
-        throw uploadError;
-      }
-
-      // Get public URL
-      const { data: { publicUrl } } = supabase.storage
-        .from('contracts')
-        .getPublicUrl(filePath);
-
-      return publicUrl;
+      return url;
     } catch (error: any) {
       console.error('Upload error:', error);
       toast.error("Erro ao fazer upload do contrato");

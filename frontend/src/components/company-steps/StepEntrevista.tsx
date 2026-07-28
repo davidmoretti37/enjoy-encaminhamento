@@ -24,6 +24,7 @@ import {
   CandidateCardMini,
   CandidateCardModal,
 } from "@/components/candidate-card/CandidateCard";
+import { InterviewScheduleModal } from "@/components/InterviewScheduleModal";
 
 export default function StepEntrevista() {
   const { selectedJob, selectedJobId, batches, interviews, refreshData } =
@@ -105,10 +106,13 @@ function ReceivedState({
   refreshData: () => void;
 }) {
   const utils = trpc.useUtils();
+  // Prefill the in-person interview address from the company's saved location.
+  const { data: companyProfile } = trpc.company.getProfile.useQuery();
   const [selectedCandidateId, setSelectedCandidateId] = useState<string | null>(null);
   const [hiringCandidateId, setHiringCandidateId] = useState<string | null>(null);
   const [selectedForHiring, setSelectedForHiring] = useState<Set<string>>(new Set());
   const [completedInterviews, setCompletedInterviews] = useState<Set<string>>(new Set());
+  const [scheduleModalOpen, setScheduleModalOpen] = useState(false);
 
   const toggleSelection = (candidateId: string) => {
     setSelectedForHiring((prev) => {
@@ -139,23 +143,24 @@ function ReceivedState({
       i.job?.id === selectedJobId && i.status !== "cancelled"
   );
 
-  // Only show candidates that have a scheduled company interview
+  // Track which candidates already have a scheduled company interview
   const interviewCandidateIds = new Set(
     jobInterviews.flatMap((iv: any) =>
       (iv.participants || []).map((p: any) => p.candidate?.id || p.candidate_id)
     ).filter(Boolean)
   );
 
+  // Show ALL forwarded candidates — those without a scheduled interview yet can be
+  // scheduled or hired directly. (Previously they were hidden, which stranded the
+  // company on the "Estamos buscando..." screen even after the agency sent the batch.)
   const allCandidates = jobBatches.flatMap((batch: any) =>
-    (batch.candidates || [])
-      .filter((c: any) => {
-        const id = c.candidate?.id || c.candidate_id || c.id;
-        return interviewCandidateIds.has(id);
-      })
-      .map((c: any) => ({
-        ...c,
-        batchId: batch.id,
-      }))
+    (batch.candidates || []).map((c: any) => ({
+      ...c,
+      batchId: batch.id,
+      hasInterview: interviewCandidateIds.has(
+        c.candidate?.id || c.candidate_id || c.id
+      ),
+    }))
   );
 
   // Find the batchId for the selected candidate
@@ -474,6 +479,13 @@ function ReceivedState({
                 Limpar
               </button>
               <button
+                onClick={() => setScheduleModalOpen(true)}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg border border-[#0A2342] text-[#0A2342] text-sm font-medium hover:bg-slate-50 transition-colors"
+              >
+                <Calendar className="w-4 h-4" />
+                Agendar Entrevista
+              </button>
+              <button
                 onClick={() => {
                   const candidates = candidateProfiles.filter((c) => selectedForHiring.has(c.profile.id));
                   if (candidates.length === 0) {
@@ -630,6 +642,27 @@ function ReceivedState({
               selectedCandidate?.profile?.id || selectedCandidateId || undefined
             )
           }
+        />
+      )}
+
+      {/* Interview scheduling modal — company self-schedules for selected candidates */}
+      {scheduleModalOpen && jobBatches.length > 0 && (
+        <InterviewScheduleModal
+          open={scheduleModalOpen}
+          onClose={() => setScheduleModalOpen(false)}
+          batchId={jobBatches[0].id}
+          jobId={selectedJobId}
+          candidateIds={Array.from(selectedForHiring)}
+          companyAddress={{
+            address: (companyProfile as any)?.address ?? null,
+            city: (companyProfile as any)?.city ?? null,
+            state: (companyProfile as any)?.state ?? null,
+          }}
+          onSuccess={() => {
+            setScheduleModalOpen(false);
+            setSelectedForHiring(new Set());
+            refreshData();
+          }}
         />
       )}
     </div>

@@ -10,6 +10,42 @@ const batchDb: any = _batchDb;
 import { supabaseAdmin as _supabaseAdmin } from "../supabase";
 const supabaseAdmin = _supabaseAdmin as any;
 import { generateCandidateCardPdf } from "../lib/candidateCardPdf";
+import { notifyCandidateRejected, notifyCompany, notifyCandidate } from "../lib/funnelNotify";
+
+/**
+ * Assert the caller's agency owns the batch. admin/super_admin bypass. Returns
+ * the loaded batch. agencyProcedure only checks role, so every agency endpoint
+ * that takes a client batchId must call this before reading/mutating.
+ */
+export async function assertAgencyOwnsBatch(ctx: any, batchId: string): Promise<any> {
+  const batch = await batchDb.getBatchById(batchId);
+  if (!batch) {
+    throw new TRPCError({ code: "NOT_FOUND", message: "Batch not found" });
+  }
+  if (ctx.user.role === "admin" || ctx.user.role === "super_admin") return batch;
+  const agency = await db.getAgencyForUserContext(ctx.user.id, ctx.user.role);
+  if (!agency || batch.agency_id !== agency.id) {
+    throw new TRPCError({ code: "FORBIDDEN", message: "Este lote não pertence à sua agência" });
+  }
+  return batch;
+}
+
+/**
+ * Assert the caller's agency owns the interview session (via its batch).
+ */
+async function assertAgencyOwnsSession(ctx: any, sessionId: string): Promise<any> {
+  const { getInterviewSessionById } = await import("../db/interviews");
+  const session = await getInterviewSessionById(sessionId);
+  if (!session) {
+    throw new TRPCError({ code: "NOT_FOUND", message: "Session not found" });
+  }
+  if (ctx.user.role === "admin" || ctx.user.role === "super_admin") return session;
+  if (!session.batch_id) {
+    throw new TRPCError({ code: "FORBIDDEN", message: "Sessão sem lote associado" });
+  }
+  await assertAgencyOwnsBatch(ctx, session.batch_id);
+  return session;
+}
 
 export const batchRouter = router({
   // Get meeting info for a candidate's batch (candidate access)
@@ -65,6 +101,23 @@ export const batchRouter = router({
       batchId: z.string().uuid(),
     }))
     .query(async ({ ctx, input }) => {
+      // AC-6: only the owning company may read this candidate's PII, and only for a
+      // candidate in one of its own unlocked batches (mirror generateCandidateCardPdf).
+      const batch = await batchDb.getBatchById(input.batchId);
+      if (!batch) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Batch not found' });
+      }
+      const company = await db.getCompanyByUserId(ctx.user.id);
+      if (!company || batch.company_id !== company.id) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Access denied' });
+      }
+      if (!batch.candidate_ids?.includes(input.candidateId)) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Candidate not in batch' });
+      }
+      if (!batch.unlocked) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Batch not unlocked' });
+      }
+
       const candidate = await db.getCandidateById(input.candidateId);
       if (!candidate) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Candidate not found' });
@@ -92,13 +145,7 @@ export const batchRouter = router({
 
       const session = (participation as any)?.session;
 
-      // Get match score from job_matches
-      const { data: batch } = await supabaseAdmin
-        .from('candidate_batches')
-        .select('job_id')
-        .eq('id', input.batchId)
-        .single();
-
+      // Get match score from job_matches (batch already loaded and authorized above)
       let matchScore = null;
       if (batch?.job_id) {
         const { data: match } = await supabaseAdmin
@@ -260,14 +307,18 @@ export const batchRouter = router({
       // Send batch (updates status)
       await batchDb.sendBatchToCompany(input.batchId);
 
-      // Create notification for company
-      await db.createNotification({
-        user_id: batch.company.user_id,
+      // Fix D: notify the company IN-APP + EMAIL — this is the highest-value
+      // pull-back moment and companies won't sit in the portal waiting.
+      const company = await db.getCompanyById(batch.company_id) || batch.company;
+      await notifyCompany(company, {
         title: "Novos candidatos disponíveis",
-        message: `${batch.batch_size} candidatos foram selecionados para a vaga "${batch.job.title}". Acesse o portal para revisar.`,
-        type: "info",
-        related_to_type: "batch",
-        related_to_id: input.batchId,
+        message: `${batch.batch_size} candidato(s) foram selecionados para a vaga "${batch.job.title}". Acesse o portal para revisar.`,
+        relatedType: "batch",
+        relatedId: input.batchId,
+        emailSubject: `Novos candidatos para "${batch.job.title}" — ANEC`,
+        emailHtml: `<p>Boas notícias!</p>
+          <p><strong>${batch.batch_size} candidato(s)</strong> foram pré-selecionados para a sua vaga <strong>"${batch.job.title}"</strong>.</p>
+          <p>Acesse o portal ANEC para revisar os perfis, ver o match de cada um e agendar as entrevistas.</p>`,
       });
 
       return { success: true, batchId: input.batchId };
@@ -470,6 +521,16 @@ export const batchRouter = router({
           .update({ status: 'rejected' })
           .eq('job_id', batch.job_id)
           .eq('candidate_id', input.candidateId);
+        // Fix B: never ghost the candidate — tell them they weren't selected.
+        try {
+          const [cand, job] = await Promise.all([
+            db.getCandidateById(input.candidateId),
+            db.getJobById(batch.job_id),
+          ]);
+          await notifyCandidateRejected(cand, job?.title || "a vaga", null, batch.job_id);
+        } catch (e: any) {
+          console.error("[batch.updateCandidateStatus] reject notify failed:", e?.message);
+        }
       }
 
       return { success: true };
@@ -760,6 +821,7 @@ export const batchRouter = router({
   getBatchSessions: agencyProcedure
     .input(z.object({ batchId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
+      await assertAgencyOwnsBatch(ctx, input.batchId);
       const { getInterviewSessionsByBatch } = await import("../db/interviews");
       return await getInterviewSessionsByBatch(input.batchId);
     }),
@@ -767,6 +829,7 @@ export const batchRouter = router({
   getCompanyInterviewSessions: agencyProcedure
     .input(z.object({ batchId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
+      await assertAgencyOwnsBatch(ctx, input.batchId);
       const { getCompanyInterviewSessionsByBatch } = await import("../db/interviews");
       return await getCompanyInterviewSessionsByBatch(input.batchId);
     }),
@@ -780,6 +843,7 @@ export const batchRouter = router({
       })),
     }))
     .mutation(async ({ ctx, input }) => {
+      await assertAgencyOwnsSession(ctx, input.sessionId);
       const { markSessionAttendance } = await import("../db/interviews");
       await markSessionAttendance(input.sessionId, input.attendance);
       return { success: true };
@@ -791,10 +855,7 @@ export const batchRouter = router({
       meetingLink: z.string(),
     }))
     .mutation(async ({ ctx, input }) => {
-      const batch = await batchDb.getBatchById(input.batchId);
-      if (!batch) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Batch not found" });
-      }
+      await assertAgencyOwnsBatch(ctx, input.batchId);
 
       await batchDb.updateBatch(input.batchId, {
         meeting_link: input.meetingLink,
@@ -808,6 +869,7 @@ export const batchRouter = router({
       meetingLink: z.string(),
     }))
     .mutation(async ({ ctx, input }) => {
+      await assertAgencyOwnsSession(ctx, input.sessionId);
       const { data, error } = await supabaseAdmin
         .from("interview_sessions")
         .update({ meeting_link: input.meetingLink })
@@ -827,10 +889,7 @@ export const batchRouter = router({
       candidateIds: z.array(z.string().uuid()),
     }))
     .mutation(async ({ ctx, input }) => {
-      const batch = await batchDb.getBatchById(input.batchId);
-      if (!batch) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Batch not found" });
-      }
+      const batch = await assertAgencyOwnsBatch(ctx, input.batchId);
 
       const existingIds = batch.candidate_ids || [];
       const newIds = [...new Set([...existingIds, ...input.candidateIds])];
@@ -859,11 +918,10 @@ export const batchRouter = router({
         scheduledAt: z.string(),
       })).optional(),
     }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
       const { createPreSelectionSession } = await import("../db/interviews");
 
-      const batch = await batchDb.getBatchById(input.batchId);
-      if (!batch) throw new TRPCError({ code: 'NOT_FOUND', message: 'Batch not found' });
+      const batch = await assertAgencyOwnsBatch(ctx, input.batchId);
 
       if (input.sessionFormat === 'individual' && input.candidateSchedules?.length) {
         for (const cs of input.candidateSchedules) {
@@ -909,6 +967,53 @@ export const batchRouter = router({
         } as any);
       }
 
+      // Fix E: this path used to schedule interviews SILENTLY (no notification,
+      // no email) while the UI toast falsely claimed the company was notified.
+      // Notify every scheduled candidate + the company, in-app + email.
+      try {
+        const [job, company] = await Promise.all([
+          db.getJobById(batch.job_id),
+          db.getCompanyById(batch.company_id),
+        ]);
+        const jobTitle = (job as any)?.title || "a vaga";
+        const scheduleMap = new Map<string, string>();
+        if (input.sessionFormat === "individual" && input.candidateSchedules?.length) {
+          for (const cs of input.candidateSchedules) scheduleMap.set(cs.candidateId, cs.scheduledAt);
+        }
+        const typeStr = input.interviewType === "online" ? "online" : "presencial";
+        const locStr =
+          input.interviewType === "in_person" && (input.locationAddress || input.locationCity)
+            ? ` Local: ${[input.locationAddress, input.locationCity, input.locationState].filter(Boolean).join(", ")}.`
+            : "";
+        const fmt = (iso: string) => {
+          const d = new Date(iso);
+          return isNaN(d.getTime()) ? "" : d.toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
+        };
+        for (const candId of input.candidateIds) {
+          const at = fmt(scheduleMap.get(candId) || input.scheduledAt);
+          const cand = await db.getCandidateById(candId);
+          await notifyCandidate(cand as any, {
+            title: "Entrevista agendada",
+            message: `Sua entrevista para "${jobTitle}" foi agendada (${typeStr})${at ? " para " + at : ""}.${locStr} Confira os detalhes no seu portal.`,
+            type: "info",
+            relatedType: "batch",
+            relatedId: input.batchId,
+            emailSubject: `Entrevista agendada — ${jobTitle}`,
+            emailHtml: `<p>Olá ${(cand as any)?.full_name || "Candidato"},</p>
+              <p>Sua entrevista para a vaga <strong>"${jobTitle}"</strong> foi agendada (${typeStr})${at ? " para <strong>" + at + "</strong>" : ""}.${locStr}</p>
+              <p>Acesse o portal ANEC para ver todos os detalhes${input.interviewType === "online" ? " e o link da chamada" : ""}.</p>`,
+          });
+        }
+        await notifyCompany(company as any, {
+          title: "Entrevista agendada",
+          message: `Uma entrevista foi agendada para candidato(s) da vaga "${jobTitle}"${fmt(input.scheduledAt) ? " em " + fmt(input.scheduledAt) : ""}.`,
+          relatedType: "batch",
+          relatedId: input.batchId,
+        });
+      } catch (e: any) {
+        console.error("[scheduleCompanyInterview] notify failed:", e?.message);
+      }
+
       return { success: true };
     }),
 
@@ -918,8 +1023,7 @@ export const batchRouter = router({
       candidateId: z.string().uuid(),
     }))
     .mutation(async ({ ctx, input }) => {
-      const batch = await batchDb.getBatchById(input.batchId);
-      if (!batch) throw new TRPCError({ code: 'NOT_FOUND', message: 'Batch not found' });
+      const batch = await assertAgencyOwnsBatch(ctx, input.batchId);
 
       const newIds = (batch.candidate_ids || []).filter((id: string) => id !== input.candidateId);
       await batchDb.updateBatch(input.batchId, {
@@ -947,11 +1051,10 @@ export const batchRouter = router({
         scheduledAt: z.string(),
       })).optional(),
     }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
       const { createPreSelectionSession } = await import("../db/interviews");
 
-      const batch = await batchDb.getBatchById(input.batchId);
-      if (!batch) throw new TRPCError({ code: 'NOT_FOUND', message: 'Batch not found' });
+      const batch = await assertAgencyOwnsBatch(ctx, input.batchId);
 
       if (input.sessionFormat === 'individual' && input.candidateSchedules?.length) {
         // Create individual sessions for each candidate

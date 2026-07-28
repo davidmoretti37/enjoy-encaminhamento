@@ -121,8 +121,14 @@ export const interviewRouter = router({
         });
       }
 
-      // Update batch status if provided
+      // Update batch status if provided — but only if the batch belongs to this
+      // company. Without this, a company could pass another tenant's batchId and
+      // overwrite its status / meeting link / selected candidates.
       if (input.batchId) {
+        const batch = await db.getBatchById(input.batchId);
+        if (!batch || batch.company_id !== company.id) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Not authorized" });
+        }
         await db.updateBatch(input.batchId, {
           status: "meeting_scheduled",
           meeting_scheduled_at: input.scheduledAt,

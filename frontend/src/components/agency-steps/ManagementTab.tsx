@@ -5,8 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Building2, Users, FileText, DollarSign, FileCheck, User, Plus, CheckCircle2, Clock, AlertCircle, ArrowRight } from "lucide-react";
 import { useState } from "react";
-import { useLocation } from "wouter";
 import CompanyDocumentsModal from "@/components/CompanyDocumentsModal";
+import CandidateDocumentsModal from "@/components/CandidateDocumentsModal";
 import AddCompanyModal from "@/components/AddCompanyModal";
 import { CandidateCardModal } from "@/components/candidate-card/CandidateCard";
 import { Input } from "@/components/ui/input";
@@ -283,6 +283,8 @@ export default function ManagementTab() {
           }}
           onDownloadPdf={() => pdfMutation.mutate({ candidateId: selectedCandidate.id })}
           isPdfLoading={pdfMutation.isPending}
+          showApplications
+          showQuestionnaire
         />
       )}
 
@@ -410,8 +412,6 @@ export default function ManagementTab() {
 }
 
 function CompanyRow({ company, onDocumentsClick, onPaymentsClick }: { company: any; onDocumentsClick: (entity: any) => void; onPaymentsClick: (entity: any) => void }) {
-  const [, setLocation] = useLocation();
-
   return (
     <div className="p-3 bg-white rounded-lg border-2 border-slate-200 hover:border-orange-300 hover:shadow-md transition-all">
       <div className="flex items-center justify-between">
@@ -420,12 +420,9 @@ function CompanyRow({ company, onDocumentsClick, onPaymentsClick }: { company: a
             <Building2 className="h-4 w-4 text-white" />
           </div>
           <div>
-            <button
-              className="text-sm font-medium text-gray-900 hover:text-blue-700 hover:underline text-left"
-              onClick={() => setLocation(`/agency/companies/${company.id}/jobs`)}
-            >
+            <p className="text-sm font-medium text-gray-900">
               {company.company_name || "Empresa sem nome"}
-            </button>
+            </p>
             {company.contact_name && (
               <p className="text-xs text-gray-500">{company.contact_name}</p>
             )}
@@ -497,6 +494,25 @@ function CompanyList({ companies, onDocumentsClick, onPaymentsClick, searchTerm,
             </div>
           );
         })}
+        {(() => {
+          const knownIds = new Set(availableAgencies.map((a) => a.id));
+          const orphans = companies.filter((c: any) => !c.agency_id || !knownIds.has(c.agency_id));
+          if (orphans.length === 0) return null;
+          return (
+            <div key="__no_agency__">
+              <div className="flex items-center gap-2 py-3 px-3 border-b border-gray-200 bg-gray-50/80 rounded-t-lg">
+                <Building2 className="h-4 w-4 text-gray-500" />
+                <span className="font-semibold text-gray-700">Sem agência</span>
+                <span className="text-xs text-gray-400">({orphans.length})</span>
+              </div>
+              <div className="space-y-2 mt-2">
+                {orphans.map((company: any) => (
+                  <CompanyRow key={company.id} company={company} onDocumentsClick={onDocumentsClick} onPaymentsClick={onPaymentsClick} />
+                ))}
+              </div>
+            </div>
+          );
+        })()}
       </div>
     );
   }
@@ -511,6 +527,7 @@ function CompanyList({ companies, onDocumentsClick, onPaymentsClick, searchTerm,
 }
 
 function CandidateRow({ candidate, onProfileClick }: { candidate: any; onProfileClick: (candidate: any) => void }) {
+  const [docsOpen, setDocsOpen] = useState(false);
   const age = (() => {
     const dob = candidate.date_of_birth;
     if (!dob) return null;
@@ -562,8 +579,8 @@ function CandidateRow({ candidate, onProfileClick }: { candidate: any; onProfile
             variant="outline"
             size="sm"
             className="text-gray-600 border-gray-300 hover:bg-gray-50 hover:border-orange-300"
-            disabled
-            title="Em desenvolvimento"
+            onClick={() => setDocsOpen(true)}
+            title="Ver documentos do candidato"
           >
             <FileText className="h-4 w-4 mr-1.5" />
             Documentos
@@ -579,6 +596,12 @@ function CandidateRow({ candidate, onProfileClick }: { candidate: any; onProfile
           </Button>
         </div>
       </div>
+      <CandidateDocumentsModal
+        candidateId={candidate.id}
+        candidateName={candidate.full_name}
+        open={docsOpen}
+        onClose={() => setDocsOpen(false)}
+      />
     </div>
   );
 }
@@ -624,6 +647,25 @@ function CandidateList({ candidates, onDocumentsClick, onProfileClick, searchTer
             </div>
           );
         })}
+        {(() => {
+          const knownIds = new Set(availableAgencies.map((a) => a.id));
+          const orphans = candidates.filter((c: any) => !c.agency_id || !knownIds.has(c.agency_id));
+          if (orphans.length === 0) return null;
+          return (
+            <div key="__no_agency__">
+              <div className="flex items-center gap-2 py-3 px-3 border-b border-gray-200 bg-gray-50/80 rounded-t-lg">
+                <Building2 className="h-4 w-4 text-gray-500" />
+                <span className="font-semibold text-gray-700">Sem agência</span>
+                <span className="text-xs text-gray-400">({orphans.length})</span>
+              </div>
+              <div className="space-y-2 mt-2">
+                {orphans.map((candidate: any) => (
+                  <CandidateRow key={candidate.id} candidate={candidate} onProfileClick={onProfileClick} />
+                ))}
+              </div>
+            </div>
+          );
+        })()}
       </div>
     );
   }

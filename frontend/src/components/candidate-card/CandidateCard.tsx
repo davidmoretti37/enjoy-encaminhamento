@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { SafeImage } from "@/components/ui/SafeImage";
 import {
   MapPin,
   GraduationCap,
@@ -23,6 +24,8 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
+import { pdpIntrapersonalQuestions, pdpInterpersonalQuestions } from "@/data/pdpQuestions";
+import { discQuestions } from "@/data/discQuestions";
 
 interface CandidateProfile {
   id: string;
@@ -56,6 +59,11 @@ interface CandidateProfile {
   pdp_develop_competencies?: string[];
   pdp_skills?: Record<string, string[]>;
   pdp_action_plans?: Record<string, string[]>;
+  // Raw PDP questionnaire answers keyed by question id ("1".."17"). Internal use.
+  pdp_intrapersonal?: Record<string, string>;
+  pdp_interpersonal?: Record<string, string>;
+  // Raw DISC picks keyed by question id → chosen profile. Internal use.
+  disc_answers?: Record<string, string>;
   photo_url?: string;
   resume_url?: string;
   is_school_student?: boolean;
@@ -82,6 +90,12 @@ interface CandidateCardProps {
   onDownloadPdf?: () => void;
   onHire?: () => void;
   isPdfLoading?: boolean;
+  // Report item #8: show the jobs this candidate applied to. Only enabled from
+  // the agency/admin management view (the query is agency-scoped).
+  showApplications?: boolean;
+  // Show the candidate's raw PDP questionnaire answers. INTERNAL ONLY — passed
+  // from the agency/head management view, never from company-facing screens.
+  showQuestionnaire?: boolean;
 }
 
 const DISC_CONFIG = [
@@ -400,11 +414,7 @@ export function CandidateCardMini({
               </div>
             )}
             <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[#0A2342] to-[#1B4D7A] flex items-center justify-center text-white font-semibold text-xs shrink-0">
-              {profile.photo_url ? (
-                <img src={profile.photo_url} className="w-full h-full rounded-full object-cover" alt="" />
-              ) : (
-                initials
-              )}
+              <SafeImage src={profile.photo_url} className="w-full h-full rounded-full object-cover" fallback={initials} />
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center justify-between">
@@ -480,6 +490,159 @@ export function CandidateCardMini({
   );
 }
 
+// Report item #8 — lists the jobs a candidate applied to, so the internal team
+// can reach a candidate's vagas by name. Agency-scoped query; only rendered when
+// the parent passes showApplications (management view).
+const APPLICATION_STATUS_LABELS: Record<string, { label: string; className: string }> = {
+  applied: { label: "Candidatura enviada", className: "bg-blue-50 text-blue-700 border-blue-200" },
+  screening: { label: "Em triagem", className: "bg-amber-50 text-amber-700 border-amber-200" },
+  "interview-scheduled": { label: "Entrevista agendada", className: "bg-indigo-50 text-indigo-700 border-indigo-200" },
+  interviewed: { label: "Entrevistado(a)", className: "bg-purple-50 text-purple-700 border-purple-200" },
+  selected: { label: "Selecionado(a)", className: "bg-emerald-50 text-emerald-700 border-emerald-200" },
+  rejected: { label: "Não selecionado(a)", className: "bg-slate-100 text-slate-600 border-slate-200" },
+  withdrawn: { label: "Desistiu", className: "bg-slate-100 text-slate-500 border-slate-200" },
+};
+
+function CandidateApplicationsSection({ candidateId }: { candidateId: string }) {
+  const { data: applications, isLoading } = trpc.agency.getCandidateApplications.useQuery(
+    { candidateId },
+    { enabled: !!candidateId },
+  );
+
+  return (
+    <div>
+      <SectionTitle subtitle="Vagas às quais este candidato se candidatou">
+        Candidaturas
+      </SectionTitle>
+      {isLoading ? (
+        <p className="text-sm text-slate-400">Carregando candidaturas...</p>
+      ) : !applications || applications.length === 0 ? (
+        <p className="text-sm text-slate-500">Nenhuma candidatura registrada.</p>
+      ) : (
+        <div className="space-y-2">
+          {applications.map((app: any) => {
+            const status = APPLICATION_STATUS_LABELS[app.status] || {
+              label: app.status,
+              className: "bg-slate-100 text-slate-600 border-slate-200",
+            };
+            const company = app.jobs?.companies?.company_name;
+            return (
+              <div
+                key={app.id}
+                className="flex items-center justify-between gap-3 p-3 rounded-lg border border-slate-200 bg-white"
+              >
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-slate-800 truncate">
+                    {app.jobs?.title || "Vaga"}
+                  </p>
+                  {company && (
+                    <p className="text-xs text-slate-500 truncate">{company}</p>
+                  )}
+                </div>
+                <span className={`shrink-0 text-[11px] px-2.5 py-1 rounded-full border font-medium ${status.className}`}>
+                  {status.label}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Internal-only: the candidate's actual written PDP questionnaire answers, so the
+// agency/head can read what each candidate filled in (self-knowledge + work-style
+// questions) — not just the computed competencies. Company-facing screens never
+// pass showQuestionnaire, so companies never see these raw answers.
+function CandidatePDPAnswersSection({ profile }: { profile: CandidateProfile }) {
+  const intra = profile.pdp_intrapersonal || {};
+  const inter = profile.pdp_interpersonal || {};
+
+  const buildRows = (
+    questions: { id: number; question: string }[],
+    answers: Record<string, string>,
+  ) =>
+    questions
+      .map((q) => ({ q: q.question, a: (answers[String(q.id)] || "").trim() }))
+      .filter((r) => r.a.length > 0);
+
+  const intraRows = buildRows(pdpIntrapersonalQuestions as any, intra);
+  const interRows = buildRows(pdpInterpersonalQuestions as any, inter);
+
+  if (intraRows.length === 0 && interRows.length === 0) return null;
+
+  const Block = ({ title, rows }: { title: string; rows: { q: string; a: string }[] }) =>
+    rows.length === 0 ? null : (
+      <div className="mb-4">
+        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">{title}</p>
+        <div className="space-y-2.5">
+          {rows.map((r, i) => (
+            <div key={i} className="p-3 rounded-lg border border-slate-200 bg-white">
+              <p className="text-xs text-slate-500 mb-1">{r.q}</p>
+              <p className="text-sm text-slate-800 whitespace-pre-wrap">{r.a}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+
+  return (
+    <div>
+      <SectionTitle subtitle="Respostas escritas pelo próprio candidato no questionário PDP — uso interno">
+        Respostas do Questionário (PDP)
+      </SectionTitle>
+      <Block title="Autoconhecimento (Intrapessoal)" rows={intraRows} />
+      <Block title="Relações e Trabalho (Interpessoal)" rows={interRows} />
+    </div>
+  );
+}
+
+// Internal-only: the candidate's raw DISC picks — for each question, the option
+// they chose — reconstructed by joining the stored profile pick with the DISC
+// question bank. Company-facing screens never pass showQuestionnaire.
+const DISC_PROFILE_LABELS: Record<string, string> = {
+  dominante: "Dominante",
+  influente: "Influente",
+  estavel: "Estável",
+  conforme: "Conforme",
+};
+
+function CandidateDISCAnswersSection({ profile }: { profile: CandidateProfile }) {
+  const answers = profile.disc_answers || {};
+  const rows = discQuestions
+    .map((q) => {
+      const picked = answers[String(q.id)];
+      if (!picked) return null;
+      const opt = q.options.find((o) => o.profile === picked);
+      return { q: q.question, a: opt?.text || "", profile: picked };
+    })
+    .filter((r): r is { q: string; a: string; profile: string } => r !== null && r.a.length > 0);
+
+  if (rows.length === 0) return null;
+
+  return (
+    <div>
+      <SectionTitle subtitle="Opção escolhida pelo candidato em cada pergunta do DISC — uso interno">
+        Respostas do Questionário (DISC)
+      </SectionTitle>
+      <div className="space-y-2.5">
+        {rows.map((r, i) => (
+          <div key={i} className="p-3 rounded-lg border border-slate-200 bg-white">
+            <p className="text-xs text-slate-500 mb-1">{r.q}</p>
+            <div className="flex items-center gap-2">
+              <p className="text-sm text-slate-800">{r.a}</p>
+              <span className="shrink-0 text-[11px] px-2 py-0.5 rounded-full border border-slate-200 bg-slate-50 text-slate-500">
+                {DISC_PROFILE_LABELS[r.profile] || r.profile}
+              </span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // Full candidate card — descriptive company-facing report
 export function CandidateCard({
   profile,
@@ -489,6 +652,8 @@ export function CandidateCard({
   onDownloadPdf,
   onHire,
   isPdfLoading,
+  showApplications,
+  showQuestionnaire,
 }: CandidateCardProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState({
@@ -557,11 +722,7 @@ export function CandidateCard({
       <div className="bg-gradient-to-r from-[#0A2342] to-[#1B4D7A] rounded-t-xl px-8 py-6 text-white">
         <div className="flex items-center gap-5">
           <div className="w-20 h-20 rounded-full bg-white/20 flex items-center justify-center text-white font-bold text-2xl border-2 border-white/30 shrink-0 overflow-hidden">
-            {profile.photo_url ? (
-              <img src={profile.photo_url} className="w-full h-full object-cover" alt="" />
-            ) : (
-              initials
-            )}
+            <SafeImage src={profile.photo_url} className="w-full h-full object-cover" fallback={initials} />
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-start justify-between gap-4">
@@ -623,7 +784,7 @@ export function CandidateCard({
           )}
           {profile.is_school_student && (
             <span className="flex items-center gap-1.5 text-sm text-amber-200 bg-amber-500/30 px-3 py-1 rounded-full font-medium">
-              Aluno(a) ANEC
+              Inexxa Formação Profissionalizante
             </span>
           )}
         </div>
@@ -697,7 +858,7 @@ export function CandidateCard({
           <div>
             <label className="flex items-center gap-1.5 text-sm cursor-pointer">
               <input type="checkbox" checked={editForm.is_school_student} onChange={e => setEditForm({...editForm, is_school_student: e.target.checked})} className="rounded" />
-              <span className="font-medium">Aluno(a) da escola ANEC</span>
+              <span className="font-medium">Aluno(a) da Inexxa Formação Profissionalizante</span>
             </label>
           </div>
 
@@ -1049,6 +1210,15 @@ export function CandidateCard({
               </div>
             </div>
           )}
+
+          {/* Report #8 — jobs this candidate applied to (agency/admin view only) */}
+          {showApplications && (profile as any).id && (
+            <CandidateApplicationsSection candidateId={(profile as any).id} />
+          )}
+
+          {/* Raw DISC + PDP questionnaire answers — internal (agency/head) view only */}
+          {showQuestionnaire && <CandidateDISCAnswersSection profile={profile} />}
+          {showQuestionnaire && <CandidatePDPAnswersSection profile={profile} />}
         </div>
 
         {/* Actions */}

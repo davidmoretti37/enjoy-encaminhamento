@@ -1,8 +1,9 @@
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { useCandidateFunnel } from "@/contexts/CandidateFunnelContext";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { CardEntrance } from "@/components/funnel";
+import SignaturePad from "@/components/SignaturePad";
 import {
   FileText,
   PenTool,
@@ -34,7 +35,7 @@ export default function StepContrato() {
   const [signerCpf, setSignerCpf] = useState("");
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
-  const sigRef = useRef<any>(null);
+  const [signatureData, setSignatureData] = useState("");
 
   // Get hiring process for this application
   const { data: hiringProcesses = [] } = trpc.hiring.getCandidateHiringProcesses.useQuery(
@@ -63,7 +64,7 @@ export default function StepContrato() {
       setSignerCpf("");
       setAcceptedTerms(false);
       setErrorMessage("");
-      sigRef.current?.clear?.();
+      setSignatureData("");
       utils.contract.getCandidateContractDocuments.invalidate({ hiringProcessId: hiringProcess?.id });
       refreshData();
     },
@@ -157,6 +158,10 @@ export default function StepContrato() {
       setErrorMessage("Por favor, aceite os termos");
       return;
     }
+    if (!signatureData.startsWith("data:image")) {
+      setErrorMessage("Por favor, desenhe sua assinatura no campo abaixo");
+      return;
+    }
 
     setErrorMessage("");
     signDocMutation.mutate({
@@ -164,7 +169,7 @@ export default function StepContrato() {
       hiringProcessId: hiringProcess.id,
       signerName: signerName.trim(),
       signerCpf: signerCpf.replace(/\D/g, ""),
-      signature: "candidate-signature", // placeholder since document signing doesn't use canvas here
+      signature: signatureData, // real base64 PNG captured from the signature pad
     });
   };
 
@@ -227,6 +232,7 @@ export default function StepContrato() {
                         setExpandedDoc(isExpanded ? null : template.id);
                         setErrorMessage("");
                         setAcceptedTerms(false);
+                        setSignatureData("");
                       }
                     }}
                     className="w-full flex items-center gap-3 p-4 text-left hover:bg-slate-50/50 transition-colors"
@@ -343,6 +349,14 @@ export default function StepContrato() {
                         <label htmlFor={`terms-${template.id}`} className="text-xs text-slate-600 cursor-pointer">
                           Li e concordo com os termos deste documento
                         </label>
+                      </div>
+
+                      {/* Signature pad */}
+                      <div>
+                        <label className="text-xs font-medium text-slate-600 block mb-1.5">
+                          Sua assinatura
+                        </label>
+                        <SignaturePad onSave={setSignatureData} />
                       </div>
 
                       {/* Error */}

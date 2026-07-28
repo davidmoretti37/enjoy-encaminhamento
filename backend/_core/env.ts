@@ -74,6 +74,28 @@ export const ENV = {
     isConfigured(): boolean {
       return !!(process.env.SMTP_USER && process.env.SMTP_PASS);
     },
+    // Report #14: per-unit institutional mailboxes (Outlook/Microsoft 365).
+    // When set, agenda emails for that unit are sent from/as its address;
+    // otherwise they fall back to the global SMTP_* mailbox above. Host/port
+    // default to the global ones (set global SMTP_HOST=smtp.office365.com).
+    get units() {
+      return {
+        uberlandia: {
+          host: optionalEnv("SMTP_HOST_UBERLANDIA"),
+          port: optionalEnvInt("SMTP_PORT_UBERLANDIA", 0),
+          user: optionalEnv("SMTP_USER_UBERLANDIA"),
+          pass: optionalEnv("SMTP_PASS_UBERLANDIA"),
+          from: optionalEnv("EMAIL_FROM_UBERLANDIA"),
+        },
+        ipatinga: {
+          host: optionalEnv("SMTP_HOST_IPATINGA"),
+          port: optionalEnvInt("SMTP_PORT_IPATINGA", 0),
+          user: optionalEnv("SMTP_USER_IPATINGA"),
+          pass: optionalEnv("SMTP_PASS_IPATINGA"),
+          from: optionalEnv("EMAIL_FROM_IPATINGA"),
+        },
+      };
+    },
   },
 
   // Zoom Integration (optional)

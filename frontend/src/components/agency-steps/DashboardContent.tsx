@@ -217,19 +217,24 @@ export default function DashboardContent() {
               </div>
             ) : applications && applications.length > 0 ? (
               <div className="space-y-2">
-                {applications.slice(0, 5).map((application: any) => (
+                {applications.slice(0, 5).map((application: any) => {
+                  // agency query returns candidates/jobs (plural, join alias);
+                  // affiliate query returns candidate/job (singular) — accept both.
+                  const cand = application.candidates ?? application.candidate;
+                  const jobRef = application.jobs ?? application.job;
+                  return (
                   <div
                     key={application.id}
                     className="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 transition-colors"
                   >
                     <div className="flex items-center gap-3">
                       <div className="h-10 w-10 rounded-full bg-gray-900 flex items-center justify-center text-white font-medium text-sm">
-                        {application.candidates?.full_name?.charAt(0)?.toUpperCase() || '?'}
+                        {cand?.full_name?.charAt(0)?.toUpperCase() || '?'}
                       </div>
                       <div>
-                        <h4 className="font-medium text-sm text-gray-900">{application.candidates?.full_name}</h4>
+                        <h4 className="font-medium text-sm text-gray-900">{cand?.full_name}</h4>
                         <p className="text-xs text-gray-500">
-                          {application.jobs?.title}
+                          {jobRef?.title}
                         </p>
                       </div>
                     </div>
@@ -246,7 +251,8 @@ export default function DashboardContent() {
                        'Pendente'}
                     </Badge>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             ) : (
               <div className="flex flex-col items-center justify-center py-12">

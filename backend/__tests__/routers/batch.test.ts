@@ -169,6 +169,17 @@ describe("batch router", () => {
       const candidate = mockCandidate({ date_of_birth: "2000-06-15" });
       vi.mocked(db.getCandidateById).mockResolvedValue(candidate);
 
+      // AC-6 guard: the batch must belong to the caller's company, contain the
+      // candidate, and be unlocked before any PII is returned.
+      vi.mocked(db.getCompanyByUserId).mockResolvedValue({ id: MOCK_IDS.company } as any);
+      vi.mocked(batchDb.getBatchById).mockResolvedValue({
+        id: MOCK_IDS.batch,
+        company_id: MOCK_IDS.company,
+        candidate_ids: [MOCK_IDS.candidate],
+        unlocked: true,
+        job_id: MOCK_IDS.job,
+      } as any);
+
       // Mock interview participation query
       const participationChain = {
         select: vi.fn().mockReturnThis(),
@@ -217,6 +228,23 @@ describe("batch router", () => {
       await expect(
         caller.getCandidateCard({ candidateId: MOCK_IDS.candidate, batchId: MOCK_IDS.batch })
       ).rejects.toThrow(TRPCError);
+    });
+
+    it("AC-6: rejects a company reading a batch it does not own", async () => {
+      // Batch belongs to a different company than the caller → no PII.
+      vi.mocked(db.getCompanyByUserId).mockResolvedValue({ id: MOCK_IDS.company } as any);
+      vi.mocked(batchDb.getBatchById).mockResolvedValue({
+        id: MOCK_IDS.batch,
+        company_id: "c0000000-0000-4000-8000-000000000999", // someone else's company
+        candidate_ids: [MOCK_IDS.candidate],
+        unlocked: true,
+        job_id: MOCK_IDS.job,
+      } as any);
+      const caller = createCaller(companyContext());
+      await expect(
+        caller.getCandidateCard({ candidateId: MOCK_IDS.candidate, batchId: MOCK_IDS.batch })
+      ).rejects.toThrow(TRPCError);
+      expect(db.getCandidateById).not.toHaveBeenCalled();
     });
   });
 
@@ -900,8 +928,10 @@ describe("batch router", () => {
   // ============================================
   describe("addCandidatesToBatch", () => {
     it("adds candidates to existing batch", async () => {
+      vi.mocked(db.getAgencyForUserContext).mockResolvedValue(mockAgency());
       vi.mocked(batchDb.getBatchById).mockResolvedValue({
         id: MOCK_IDS.batch,
+        agency_id: MOCK_IDS.agency,
         candidate_ids: ["existing-id"],
       });
       vi.mocked(batchDb.updateBatch).mockResolvedValue(undefined);
@@ -936,8 +966,10 @@ describe("batch router", () => {
   // ============================================
   describe("removeCandidateFromBatch", () => {
     it("removes candidate from batch", async () => {
+      vi.mocked(db.getAgencyForUserContext).mockResolvedValue(mockAgency());
       vi.mocked(batchDb.getBatchById).mockResolvedValue({
         id: MOCK_IDS.batch,
+        agency_id: MOCK_IDS.agency,
         candidate_ids: [MOCK_IDS.candidate, "other-id"],
       });
       vi.mocked(batchDb.updateBatch).mockResolvedValue(undefined);
@@ -964,7 +996,8 @@ describe("batch router", () => {
   // ============================================
   describe("updateMeetingLink", () => {
     it("updates meeting link successfully", async () => {
-      vi.mocked(batchDb.getBatchById).mockResolvedValue({ id: MOCK_IDS.batch });
+      vi.mocked(db.getAgencyForUserContext).mockResolvedValue(mockAgency());
+      vi.mocked(batchDb.getBatchById).mockResolvedValue({ id: MOCK_IDS.batch, agency_id: MOCK_IDS.agency });
       vi.mocked(batchDb.updateBatch).mockResolvedValue(undefined);
 
       const caller = createCaller(agencyContext());

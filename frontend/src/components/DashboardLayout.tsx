@@ -195,7 +195,6 @@ export default function DashboardLayout({
   const notificationBadge = notificationCountQuery.data || 0;
 
   const { homeHref, profileHref, items } = getMenuItems(user?.role ?? undefined);
-  console.log('[DashboardLayout] User role:', user?.role, 'Menu items:', items.map(i => ({ label: i.label, path: i.path })));
 
   const navItems = items.map(item => ({
     label: item.label,

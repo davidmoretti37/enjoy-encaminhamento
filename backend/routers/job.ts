@@ -13,6 +13,35 @@ const supabaseAdmin = _supabaseAdmin as any;
 import { generateJobSummary } from "../services/ai/summarizer";
 import { generateJobEmbedding, findMatchingCandidates } from "../services/matching";
 
+/**
+ * Assert the caller's agency owns the given job (via job.agency_id, falling back
+ * to the job's company.agency_id). admin/super_admin bypass. Returns the job.
+ */
+async function assertAgencyOwnsJob(ctx: any, jobId: string): Promise<any> {
+  const job = await db.getJobById(jobId);
+  if (!job) {
+    throw new TRPCError({ code: 'NOT_FOUND', message: 'Vaga não encontrada' });
+  }
+  if (ctx.user.role === 'admin' || ctx.user.role === 'super_admin') return job;
+  const agency = await db.getAgencyForUserContext(ctx.user.id, ctx.user.role);
+  if (!agency) {
+    throw new TRPCError({ code: 'FORBIDDEN', message: 'Sem agência associada ao usuário' });
+  }
+  let ownerAgencyId = (job as any).agency_id;
+  if (!ownerAgencyId && (job as any).company_id) {
+    const { data: company } = await supabaseAdmin
+      .from('companies')
+      .select('agency_id')
+      .eq('id', (job as any).company_id)
+      .single();
+    ownerAgencyId = company?.agency_id;
+  }
+  if (ownerAgencyId !== agency.id) {
+    throw new TRPCError({ code: 'FORBIDDEN', message: 'Esta vaga não pertence à sua agência' });
+  }
+  return job;
+}
+
 export const jobRouter = router({
   // Create job posting
   create: companyProcedure
@@ -109,7 +138,11 @@ export const jobRouter = router({
       if (fields.workSchedule !== undefined) updateData.work_schedule = fields.workSchedule || null;
       if (fields.salaryMin !== undefined) updateData.salary_min = fields.salaryMin || null;
       if (fields.salaryMax !== undefined) updateData.salary_max = fields.salaryMax || null;
-      if (fields.requirements !== undefined) updateData.specific_requirements = fields.requirements || null;
+      // Write both columns (the job card reads `requirements`).
+      if (fields.requirements !== undefined) {
+        updateData.requirements = fields.requirements || null;
+        updateData.specific_requirements = fields.requirements || null;
+      }
       if (fields.openings !== undefined) updateData.openings = fields.openings;
       if (fields.status !== undefined) updateData.status = fields.status;
       if (fields.location !== undefined) updateData.location = fields.location?.trim() || null;
@@ -183,7 +216,7 @@ export const jobRouter = router({
     }))
     .mutation(async ({ ctx, input }) => {
       // Allow admin and agency roles
-      if (ctx.user.role !== 'admin' && ctx.user.role !== 'agency') {
+      if (ctx.user.role !== 'admin' && ctx.user.role !== 'super_admin' && ctx.user.role !== 'agency') {
         throw new TRPCError({
           code: 'FORBIDDEN',
           message: 'Acesso negado',
@@ -195,6 +228,15 @@ export const jobRouter = router({
       if (ctx.user.role === 'agency') {
         const agency = await db.getAgencyForUserContext(ctx.user.id, ctx.user.role);
         agencyId = agency?.id;
+        // Tenant guard: an agency may only create jobs under its own companies.
+        const { data: targetCompany } = await supabaseAdmin
+          .from('companies')
+          .select('agency_id')
+          .eq('id', input.companyId)
+          .single();
+        if (!agencyId || !targetCompany || targetCompany.agency_id !== agencyId) {
+          throw new TRPCError({ code: 'FORBIDDEN', message: 'Esta empresa não pertence à sua agência' });
+        }
       } else if (ctx.user.role === 'admin') {
         // For admin, use the company's existing agency_id
         const { data: companyData } = await supabaseAdmin
@@ -274,12 +316,14 @@ export const jobRouter = router({
     .input(z.object({ jobId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
       // Allow admin and agency roles
-      if (ctx.user.role !== 'admin' && ctx.user.role !== 'agency') {
+      if (ctx.user.role !== 'admin' && ctx.user.role !== 'super_admin' && ctx.user.role !== 'agency') {
         throw new TRPCError({
           code: 'FORBIDDEN',
           message: 'Acesso negado',
         });
       }
+      // Tenant guard: only run matching for a job the caller's agency owns.
+      await assertAgencyOwnsJob(ctx, input.jobId);
 
       try {
         // Import and run matching pipeline
@@ -349,12 +393,15 @@ export const jobRouter = router({
   getMatchingProgress: protectedProcedure
     .input(z.object({ jobId: z.string().uuid(), since: z.number().optional() }))
     .query(async ({ ctx, input }) => {
-      if (ctx.user.role !== 'admin' && ctx.user.role !== 'agency') {
+      if (ctx.user.role !== 'admin' && ctx.user.role !== 'super_admin' && ctx.user.role !== 'agency') {
         throw new TRPCError({
           code: 'FORBIDDEN',
           message: 'Acesso negado',
         });
       }
+      // Tenant guard: only the job's owning agency (or admin) may read its
+      // matching progress / match counts — same guard as getMatchesForJob.
+      await assertAgencyOwnsJob(ctx, input.jobId);
 
       // Check in-memory progress first (active pipeline)
       const { getProgress } = await import('../services/matching/progress');
@@ -404,12 +451,14 @@ export const jobRouter = router({
       limit: z.number().min(1).max(100).default(50),
     }))
     .query(async ({ ctx, input }) => {
-      if (ctx.user.role !== 'admin' && ctx.user.role !== 'agency') {
+      if (ctx.user.role !== 'admin' && ctx.user.role !== 'super_admin' && ctx.user.role !== 'agency') {
         throw new TRPCError({
           code: 'FORBIDDEN',
           message: 'Acesso negado',
         });
       }
+      // Tenant guard: match results expose candidate PII (name/email/phone/DISC).
+      await assertAgencyOwnsJob(ctx, input.jobId);
 
       let data;
       try {
@@ -582,7 +631,9 @@ export const jobRouter = router({
       }
 
       const company = await db.getCompanyByUserId(ctx.user.id);
-      if (job.companyId !== company?.id && ctx.user.role !== 'admin') {
+      // Field is company_id (snake_case). The previous `job.companyId` was always
+      // undefined, so the guard failed OPEN for any company-role account.
+      if (job.company_id !== company?.id && ctx.user.role !== 'admin') {
         throw new TRPCError({ code: 'FORBIDDEN' });
       }
 
@@ -703,6 +754,8 @@ export const jobRouter = router({
       work_type: job.work_type,
       location: job.location,
       salary: job.salary,
+      salary_min: job.salary_min,
+      salary_max: job.salary_max,
       benefits: job.benefits,
       min_education_level: job.min_education_level,
       required_skills: job.required_skills,
@@ -752,6 +805,69 @@ export const jobRouter = router({
       return { success: true };
     }),
 
+  // Report items #9 + #10: from the internal Vagas view, mark the chosen
+  // candidate as selected, close the job as "filled", and send the remaining
+  // candidates a cordial "position was filled" message (in-app + email) so no
+  // one is ghosted. Agency-scoped (assertAgencyOwnsJob); admin/head bypass.
+  closeAsFilled: agencyProcedure
+    .input(z.object({
+      jobId: z.string().uuid(),
+      hiredCandidateId: z.string().uuid().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const job = await assertAgencyOwnsJob(ctx, input.jobId);
+      const nowIso = new Date().toISOString();
+      const jobTitle = (job as any).title || 'a vaga';
+
+      // Mark the chosen candidate's application as selected (create if missing).
+      if (input.hiredCandidateId) {
+        await supabaseAdmin
+          .from('applications')
+          .upsert(
+            { job_id: input.jobId, candidate_id: input.hiredCandidateId, status: 'selected', decided_at: nowIso },
+            { onConflict: 'job_id,candidate_id' },
+          );
+      }
+
+      // Cordial notification to every OTHER candidate who was in the running.
+      // ANEC supplies the canonical wording later; this is a sensible default.
+      const apps = await db.getApplicationsByJobId(input.jobId);
+      const others = (apps || []).filter((a: any) =>
+        a.candidate_id !== input.hiredCandidateId &&
+        !['rejected', 'withdrawn'].includes(a.status),
+      );
+
+      const { notifyCandidate } = await import('../lib/funnelNotify');
+      let notified = 0;
+      for (const a of others) {
+        try {
+          await supabaseAdmin
+            .from('applications')
+            .update({ status: 'rejected', decided_at: nowIso })
+            .eq('id', a.id);
+          await notifyCandidate(a.candidates, {
+            title: 'Atualização sobre a vaga',
+            message: `A vaga "${jobTitle}" foi preenchida. Agradecemos muito o seu interesse! Seu perfil continuará sendo encaminhado para outras oportunidades compatíveis.`,
+            type: 'info',
+            relatedType: 'application',
+            relatedId: input.jobId,
+            emailSubject: `Atualização sobre a vaga — ${jobTitle}`,
+            emailHtml: `<p>Olá ${a.candidates?.full_name || 'candidato(a)'},</p>
+              <p>A vaga <strong>"${jobTitle}"</strong> foi preenchida. Agradecemos muito o seu interesse e a sua participação no processo.</p>
+              <p>Continuaremos encaminhando o seu perfil para outras oportunidades compatíveis — fique de olho no seu portal!</p>`,
+          });
+          notified += 1;
+        } catch (err: any) {
+          console.error('[closeAsFilled] failed to reject/notify candidate', a.candidate_id, err?.message);
+        }
+      }
+
+      // Close the job as filled.
+      await db.updateJobStatus(input.jobId, 'filled', ctx.user.id);
+
+      return { success: true, notified };
+    }),
+
   // Get jobs for an agency (all jobs from companies linked to this agency)
   getByAgency: agencyProcedure.query(async ({ ctx }) => {
     const agency = await db.getAgencyForUserContext(ctx.user.id, ctx.user.role);
@@ -790,14 +906,14 @@ export const jobRouter = router({
     }))
     .query(async ({ ctx, input }) => {
       // Allow admin and agency roles to access this endpoint
-      if (ctx.user.role !== 'admin' && ctx.user.role !== 'agency') {
+      if (ctx.user.role !== 'admin' && ctx.user.role !== 'super_admin' && ctx.user.role !== 'agency') {
         throw new TRPCError({
           code: 'FORBIDDEN',
           message: 'Acesso negado',
         });
       }
 
-      // For agency users, verify they have a valid agency
+      // For agency users, verify they own the requested company (tenant guard).
       if (ctx.user.role === 'agency') {
         const agency = await db.getAgencyForUserContext(ctx.user.id, ctx.user.role);
         if (!agency) {
@@ -805,6 +921,14 @@ export const jobRouter = router({
             code: 'NOT_FOUND',
             message: 'Agência não encontrada',
           });
+        }
+        const { data: company } = await supabaseAdmin
+          .from('companies')
+          .select('agency_id')
+          .eq('id', input.companyId)
+          .single();
+        if (!company || company.agency_id !== agency.id) {
+          throw new TRPCError({ code: 'FORBIDDEN', message: 'Esta empresa não pertence à sua agência' });
         }
       }
 

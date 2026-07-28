@@ -39,7 +39,11 @@ export const supabase = createClient<Database>(
       storage: localStorage,
     },
     global: {
-      fetch: proxyFetch,
+      // The /api/supabase-proxy route only exists in local dev. In production
+      // it 404s, so gate the proxy to dev only — otherwise any normalization of
+      // VITE_SUPABASE_URL (e.g. trimming a stray trailing newline) would flip
+      // the prefix match on and break ALL auth/REST traffic in prod.
+      fetch: import.meta.env.DEV ? proxyFetch : globalThis.fetch,
     },
   }
 );

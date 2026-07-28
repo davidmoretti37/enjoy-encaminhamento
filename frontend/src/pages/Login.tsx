@@ -168,7 +168,9 @@ export default function Login() {
       await signUp(signupEmail, signupPassword, {
         name: signupName,
         role: signupRole,
-        agency_id: signupAgencyId,
+        // "Outra Região" = not served by a local sub-agency → no agency_id
+        // (handled centrally by ANEC/national).
+        agency_id: signupAgencyId === 'other' ? null : signupAgencyId,
       });
       toast.success('Conta criada com sucesso!');
 
@@ -342,10 +344,10 @@ export default function Login() {
                       value={signupPassword}
                       onChange={(e) => setSignupPassword(e.target.value)}
                       required
-                      minLength={6}
+                      minLength={8}
                     />
                     <p className="text-xs text-muted-foreground">
-                      Mínimo de 6 caracteres
+                      Mínimo de 8 caracteres
                     </p>
                   </div>
 
@@ -385,6 +387,7 @@ export default function Login() {
                           {agency.city} - {agency.state}
                         </option>
                       ))}
+                      <option value="other">Outra Região</option>
                     </select>
                     <p className="text-xs text-muted-foreground">
                       {signupRole === 'company'

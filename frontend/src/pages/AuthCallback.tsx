@@ -27,7 +27,11 @@ export default function AuthCallback() {
             headers: { Authorization: `Bearer ${session.access_token}` },
           });
           const json = await res.json();
-          const role = json?.result?.data?.role;
+          // superjson wraps the payload one level deeper (.data.json), matching
+          // the company/candidate onboarding reads below. Without .json the role
+          // is always undefined and every OAuth login falls through to candidate
+          // onboarding.
+          const role = json?.result?.data?.json?.role;
 
           if (role === "admin") {
             setLocation("/admin/dashboard");

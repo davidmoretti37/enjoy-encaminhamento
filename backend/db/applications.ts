@@ -18,7 +18,7 @@ export async function getApplicationsByJobId(jobId: string): Promise<any[]> {
     .from("applications")
     .select(`
       *,
-      candidates(id, full_name, email, phone, city, state, education_level, skills, photo_url, disc_dominante, disc_influente, disc_estavel, disc_conforme)
+      candidates(id, user_id, full_name, email, phone, city, state, education_level, skills, photo_url, disc_dominante, disc_influente, disc_estavel, disc_conforme)
     `)
     .eq("job_id", jobId)
     .order("applied_at", { ascending: false });

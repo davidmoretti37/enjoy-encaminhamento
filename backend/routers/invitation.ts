@@ -111,6 +111,15 @@ export const invitationRouter = router({
       if (new Date(invitation.expires_at) < new Date()) {
         throw new TRPCError({ code: 'BAD_REQUEST', message: 'Invitation expired' });
       }
+      // Identity guard: the invitation must have been issued to THIS user. Without
+      // it, any logged-in user with a valid token could self-promote to 'agency'.
+      if (
+        invitation.email &&
+        ctx.user.email &&
+        invitation.email.toLowerCase() !== ctx.user.email.toLowerCase()
+      ) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Este convite foi enviado para outro e-mail' });
+      }
 
       // Create agency record linked to the authenticated user
       const { data: agency, error: agencyError } = await (supabaseAdmin as any)

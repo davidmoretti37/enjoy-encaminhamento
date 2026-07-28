@@ -40,7 +40,8 @@ function saveToStorage(agencyId: string | null) {
 
 export function AgencyProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
-  const isAdmin = user?.role === "admin";
+  // AC-9: super_admin is also a head-level user; without this it loses the combined view.
+  const isAdmin = user?.role === "admin" || user?.role === "super_admin";
 
   // Client-side state — source of truth for UI
   const [selectedAgencyId, setSelectedAgencyId] = useState<string | null>(() => loadFromStorage());

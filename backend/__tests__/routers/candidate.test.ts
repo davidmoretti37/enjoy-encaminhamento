@@ -268,11 +268,11 @@ describe("candidate router", () => {
   });
 
   describe("search", () => {
-    it("allows company users to search", async () => {
-      vi.mocked(db.searchCandidates).mockResolvedValue([]);
+    it("rejects company users from searching the raw pool", async () => {
+      // AC-6: companies must not query the unscoped candidate pool — they use
+      // the batch flow. Only admin/super_admin may call search.
       const caller = createCaller(companyContext());
-      const result = await caller.search({ city: "Ipatinga" });
-      expect(result).toEqual([]);
+      await expect(caller.search({ city: "Ipatinga" })).rejects.toThrow("FORBIDDEN");
     });
 
     it("allows admin users to search", async () => {

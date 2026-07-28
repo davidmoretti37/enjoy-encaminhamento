@@ -306,16 +306,11 @@ export const contractRouter = router({
                     if (allCompanySigned) hpUpdates.company_signed = true;
                     if (allCandidateSigned) hpUpdates.candidate_signed = true;
 
-                    // If both signed, check if payment is done → activate
-                    if (allCompanySigned && allCandidateSigned) {
-                      const { data: paidPayment } = await supabaseAdminAny
-                        .from("payments")
-                        .select("id")
-                        .eq("status", "paid")
-                        .limit(1);
-                      // For PJ/CLT, activate if both signed (payment check is optional)
-                      hpUpdates.status = "active";
-                    }
+                    // Do NOT hardcode status here — writing the signature flags fires
+                    // the DB trigger check_hiring_signatures_complete, which advances the
+                    // status correctly per hiring_type: estágio → active (all signed),
+                    // CLT/PJ → pending_payment (setup-fee gate; confirmCLTPayment activates
+                    // on payment). Hardcoding 'active' was the setup-fee revenue leak.
 
                     if (Object.keys(hpUpdates).length > 0) {
                       await supabaseAdminAny
@@ -436,11 +431,11 @@ export const contractRouter = router({
       const signerName = company?.contact_name || company?.name || ctx.user.name || "Representante";
       let count = 0;
 
+      const { storageGetBytes } = await import("../storage");
       for (const template of templates) {
         try {
-          const fileResponse = await fetch(template.file_url);
-          if (!fileResponse.ok) continue;
-          const fileBuffer = Buffer.from(await fileResponse.arrayBuffer());
+          // Authenticated storage read so it keeps working on a private bucket.
+          const fileBuffer = Buffer.from(await storageGetBytes(template.file_key || template.file_url));
 
           // Determine if template is DOCX (needs filling + conversion) or PDF (send as-is)
           const isDocx = template.file_url?.toLowerCase().includes('.docx') ||
@@ -606,8 +601,11 @@ export const contractRouter = router({
         const company = await db.getCompanyByUserId(ctx.user.id);
         if (!company) return [];
 
-        // Get documents from signed_documents table
-        const allSignedDocs = await db.getSignedDocuments({ companyId: company.id, ...input });
+        // Get documents from signed_documents table. companyId MUST be pinned to
+        // the caller's own company — spreading ...input last previously let a
+        // client-supplied companyId override it and read another company's
+        // signed docs (CPF + signature image).
+        const allSignedDocs = await db.getSignedDocuments({ ...input, companyId: company.id });
 
         // Filter: only show docs where the company user signed, or docs linked to this company's hiring processes
         // This prevents agency-level documents from leaking into the company view
@@ -925,11 +923,10 @@ export const contractRouter = router({
           candidate_signer_cpf: input.signerCpf,
         } as any);
 
-        // Check if all signatures are now complete → activate for CLT/PJ
-        const sigStatus = await hiringDb.checkAllSignaturesComplete(input.hiringProcessId);
-        if (sigStatus.complete && (hp.hiring_type === "clt" || hp.hiring_type === "pj")) {
-          await hiringDb.updateHiringProcess(input.hiringProcessId, { status: "active" });
-        }
+        // CLT/PJ: do NOT force 'active' on signing — the DB trigger sets
+        // pending_payment (setup-fee gate); confirmCLTPayment activates on payment.
+        // (Forcing 'active' here was the setup-fee revenue leak.)
+        await hiringDb.checkAllSignaturesComplete(input.hiringProcessId);
       }
 
       return {

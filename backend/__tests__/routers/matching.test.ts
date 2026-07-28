@@ -21,6 +21,7 @@ vi.mock("../../supabase", () => ({
 vi.mock("../../db", () => ({
   getAgencyForUserContext: vi.fn(),
   getAgencyByUserId: vi.fn(),
+  getJobById: vi.fn(),
 }));
 
 vi.mock("../../services/matching/index", () => ({
@@ -79,6 +80,13 @@ describe("matching router", () => {
     vi.mocked(supabaseAdmin.from).mockReturnValue(
       mockSupabaseChain({ data: null, error: null }) as any
     );
+    // Default: the job under test is owned by the caller's mock agency, so the
+    // assertAgencyOwnsJob tenant guard passes. Ownership-failure paths are
+    // covered by the getAgencyForUserContext=null tests.
+    vi.mocked(db.getJobById).mockResolvedValue({
+      id: MOCK_IDS.job,
+      agency_id: mockAgency().id,
+    } as any);
   });
 
   // ============================================

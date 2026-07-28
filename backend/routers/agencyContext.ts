@@ -30,6 +30,18 @@ export const agencyContextRouter = router({
             message: 'Agência não encontrada',
           });
         }
+
+        // AC-2: only allow switching into an agency that belongs to this admin's
+        // affiliate (their region). super_admin is the platform super-user and passes.
+        if (ctx.user.role !== 'super_admin') {
+          const affiliate = await db.getAffiliateByUserId(ctx.user.id);
+          if (!affiliate || agency.affiliate_id !== affiliate.id) {
+            throw new TRPCError({
+              code: 'FORBIDDEN',
+              message: 'You can only switch into agencies in your region',
+            });
+          }
+        }
       }
 
       await db.setAdminAgencyContext(ctx.user.id, input.agencyId);
