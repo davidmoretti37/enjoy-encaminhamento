@@ -7,7 +7,16 @@ import CompanyJobFlow from "./CompanyJobFlow";
 import { useMemo } from "react";
 
 // Show actual jobs (title + description) instead of grouping by company.
-// Company names are intentionally NOT displayed in the cards.
+//
+// Company names ARE displayed on the cards. This is the internal agency portal,
+// where the team needs to see which client a vaga belongs to in order to work
+// it. That is separate from the candidate-facing rule, which still hides the
+// client's name until a candidate is hired (backend/routers/job.ts:748,
+// backend/routers/application.ts:69-73) — those stay as they are.
+//
+// JobCard has always rendered the name when given one; it was passed
+// `company.name`, but the field is `company_name`, so it silently resolved to
+// undefined and the block never rendered.
 export default function JobDescriptionTab() {
   const { companies, selectedCompanyId, setSelectedCompanyId, isCompaniesLoading } = useAgencyFunnel();
   const { isAllAgenciesMode, availableAgencies } = useAgencyContext();
@@ -140,7 +149,12 @@ function CompanyJobsBlock({
   return (
     <>
       {visibleJobs.map((job: any) => (
-        <JobCard key={job.id} job={job} companyName={company.name} onClick={() => onJobClick(company.id)} />
+        <JobCard
+          key={job.id}
+          job={job}
+          companyName={company.company_name || company.trade_name || company.legal_name}
+          onClick={() => onJobClick(company.id)}
+        />
       ))}
     </>
   );
