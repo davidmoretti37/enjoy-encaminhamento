@@ -59,7 +59,6 @@ import {
   Pencil,
   Trash2,
 } from 'lucide-react';
-import { motion } from 'framer-motion';
 import { Progress } from '@/components/ui/progress';
 import { Slider } from '@/components/ui/slider';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -2297,12 +2296,7 @@ function JobWithWorkflow({ job, contractTypeLabels, companyName }: { job: any; c
         {/* Group management — only renders when a group exists */}
         {showGroupManagement && (
           <div id={`group-management-${job.id}`} className="scroll-mt-20 py-6">
-            <motion.div
-              initial={{ opacity: 0, y: 30 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true, margin: "-100px" }}
-              transition={{ duration: 0.5, ease: "easeOut" }}
-            >
+            <div>
               <CandidateGroupManagement
                 jobId={job.id}
                 companyInterviewCandidateIds={companyInterviewCandidateIds}
@@ -2314,7 +2308,7 @@ function JobWithWorkflow({ job, contractTypeLabels, companyName }: { job: any; c
                   }, 300);
                 }}
               />
-            </motion.div>
+            </div>
           </div>
         )}
 
@@ -2322,12 +2316,7 @@ function JobWithWorkflow({ job, contractTypeLabels, companyName }: { job: any; c
         {/* Step 4: Entrevista com Empresa - after company interviews are scheduled */}
         {(hasCompanyInterviews || isBatchSent) && (
           <div id={`selection-${job.id}`} className="scroll-mt-20 py-6">
-          <motion.div
-            initial={{ opacity: 0, y: 30 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, margin: "-100px" }}
-            transition={{ duration: 0.5, ease: "easeOut" }}
-          >
+          <div>
             <div className="space-y-6">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-[#FF6B35]/10 flex items-center justify-center shrink-0">
@@ -2462,7 +2451,7 @@ function JobWithWorkflow({ job, contractTypeLabels, companyName }: { job: any; c
                 </div>
               </div>
             </div>
-          </motion.div>
+          </div>
           </div>
         )}
 
@@ -2489,12 +2478,7 @@ function JobWithWorkflow({ job, contractTypeLabels, companyName }: { job: any; c
         {/* Step 5: Finalização - renders when hiring process exists */}
         {hasHiringProcess && (
           <div id={`completion-${job.id}`} className="scroll-mt-20 py-6">
-          <motion.div
-            initial={{ opacity: 0, y: 30 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, margin: "-100px" }}
-            transition={{ duration: 0.5, ease: "easeOut" }}
-          >
+          <div>
             <div className="space-y-6">
               <div>
                 <h3 className="text-xl font-bold text-[#0A2342]">Finalização</h3>
@@ -2644,7 +2628,7 @@ function JobWithWorkflow({ job, contractTypeLabels, companyName }: { job: any; c
                 })}
               </div>
             </div>
-          </motion.div>
+          </div>
           </div>
         )}
       </div>

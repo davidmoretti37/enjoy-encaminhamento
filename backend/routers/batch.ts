@@ -24,6 +24,73 @@ import { notifyCandidateRejected, notifyCompany, notifyCandidate } from "../lib/
 // office, and creating a group from that view failed outright.
 // assertAgencyOwnsBatch already got this right; these helpers bring the rest of
 // the router in line with it and with job.ts's assertAgencyOwnsJob.
+/**
+ * Tell the candidates their pre-selection interview was booked.
+ *
+ * This ran silently. The operator's confirmation said "Os candidatos foram
+ * notificados" while schedulePreSelectionSessions notified nobody — no in-app
+ * entry, no email. It is the candidate's FIRST interview with the agency, so
+ * the person most needing to know was the only one not told, and the operator
+ * had no way to discover that. The company-interview path already did this
+ * correctly; this mirrors it.
+ */
+async function notifyPreSelectionScheduled(
+  batch: any,
+  candidateIds: string[],
+  opts: {
+    interviewType: string;
+    scheduledAt: string;
+    perCandidateAt?: Map<string, string>;
+    locationAddress?: string;
+    locationCity?: string;
+    locationState?: string;
+    meetingLink?: string;
+  },
+) {
+  try {
+    const job = await db.getJobById(batch.job_id);
+    const jobTitle = (job as any)?.title || "a vaga";
+    const typeStr = opts.interviewType === "online" ? "online" : "presencial";
+    const locStr =
+      opts.interviewType !== "online" && (opts.locationAddress || opts.locationCity)
+        ? ` Local: ${[opts.locationAddress, opts.locationCity, opts.locationState].filter(Boolean).join(", ")}.`
+        : "";
+    const fmt = (iso: string) => {
+      const d = new Date(iso);
+      return isNaN(d.getTime())
+        ? ""
+        : d.toLocaleString("pt-BR", {
+        dateStyle: "short",
+        timeStyle: "short",
+        // The server runs in UTC. Without this the candidate is told the
+        // interview is 3 hours later than it is — 10:00 BRT was being sent
+        // out as "13:00". Every interview notification had this.
+        timeZone: "America/Sao_Paulo",
+      });
+    };
+
+    for (const candId of candidateIds) {
+      const at = fmt(opts.perCandidateAt?.get(candId) || opts.scheduledAt);
+      const cand = await db.getCandidateById(candId);
+      await notifyCandidate(cand as any, {
+        title: "Entrevista de pré-seleção agendada",
+        message: `Sua entrevista de pré-seleção para "${jobTitle}" foi agendada (${typeStr})${at ? " para " + at : ""}.${locStr} Confira os detalhes no seu portal.`,
+        type: "info",
+        relatedType: "batch",
+        relatedId: batch.id,
+        emailSubject: `Entrevista de pré-seleção agendada — ${jobTitle}`,
+        emailHtml: `<p>Olá ${(cand as any)?.full_name || "Candidato"},</p>
+          <p>Sua entrevista de pré-seleção para a vaga <strong>"${jobTitle}"</strong> foi agendada (${typeStr})${at ? " para <strong>" + at + "</strong>" : ""}.${locStr}</p>
+          ${opts.meetingLink ? `<p>Link da reunião: <a href="${opts.meetingLink}">${opts.meetingLink}</a></p>` : ""}
+          <p>Acesse o portal ANEC para ver todos os detalhes.</p>`,
+      });
+    }
+  } catch (e: any) {
+    // Never fail the scheduling because a notification failed.
+    console.error("[schedulePreSelectionSessions] notify failed:", e?.message);
+  }
+}
+
 function isPlatformAdmin(role: string | null | undefined): boolean {
   return role === "admin" || role === "super_admin";
 }
@@ -1015,7 +1082,14 @@ export const batchRouter = router({
             : "";
         const fmt = (iso: string) => {
           const d = new Date(iso);
-          return isNaN(d.getTime()) ? "" : d.toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
+          return isNaN(d.getTime()) ? "" : d.toLocaleString("pt-BR", {
+        dateStyle: "short",
+        timeStyle: "short",
+        // The server runs in UTC. Without this the candidate is told the
+        // interview is 3 hours later than it is — 10:00 BRT was being sent
+        // out as "13:00". Every interview notification had this.
+        timeZone: "America/Sao_Paulo",
+      });
         };
         for (const candId of input.candidateIds) {
           const at = fmt(scheduleMap.get(candId) || input.scheduledAt);
@@ -1105,6 +1179,15 @@ export const batchRouter = router({
           });
           sessions.push(session);
         }
+        await notifyPreSelectionScheduled(batch, input.candidateSchedules.map(cs => cs.candidateId), {
+          interviewType: input.interviewType,
+          scheduledAt: input.scheduledAt,
+          perCandidateAt: new Map(input.candidateSchedules.map(cs => [cs.candidateId, cs.scheduledAt])),
+          locationAddress: input.locationAddress,
+          locationCity: input.locationCity,
+          locationState: input.locationState,
+          meetingLink: input.meetingLink,
+        });
         return { success: true, sessionsCreated: sessions.length };
       } else {
         // Create one group session with all candidates
@@ -1122,6 +1205,14 @@ export const batchRouter = router({
           meetingLink: input.meetingLink,
           notes: input.notes,
           candidates: input.candidateIds.map(id => ({ candidateId: id, applicationId: null })),
+        });
+        await notifyPreSelectionScheduled(batch, input.candidateIds, {
+          interviewType: input.interviewType,
+          scheduledAt: input.scheduledAt,
+          locationAddress: input.locationAddress,
+          locationCity: input.locationCity,
+          locationState: input.locationState,
+          meetingLink: input.meetingLink,
         });
         return { success: true, sessionsCreated: 1 };
       }
