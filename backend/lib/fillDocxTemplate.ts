@@ -18,13 +18,23 @@ export async function fillDocxTemplate(
   data: Record<string, string>
 ): Promise<Buffer> {
   // 1. Fill placeholders in the DOCX
-  const zip = new PizZip(docxBuffer);
+  //
+  // docxtemplater uses single braces, {company_name}. ANEC authors its documents
+  // with double braces, {{EMPRESA}} — the Carta de Encaminhamento shipped that
+  // way. Rendered as-is, docxtemplater sees a duplicate open tag and THROWS, so
+  // the template did not merely fail to fill, it broke the whole contract send.
+  // Collapsing {{X}} to {X} first means both conventions work and nobody has to
+  // rewrite a document.
+  const zip = new PizZip(normalizeDoubleBraces(docxBuffer));
   const doc = new Docxtemplater(zip, {
     paragraphLoop: true,
     linebreaks: true,
+    // A placeholder we cannot fill becomes blank, exactly like the underscore
+    // blank it replaced. Throwing would block the send over one missing field.
+    nullGetter: () => "",
   });
 
-  doc.render(data);
+  doc.render(withAliases(data));
 
   const filledDocx = doc.getZip().generate({
     type: "nodebuffer",
@@ -37,6 +47,108 @@ export async function fillDocxTemplate(
   console.log(`[FillDocx] PDF generated: ${pdfBuffer.length} bytes`);
 
   return Buffer.from(pdfBuffer);
+}
+
+/**
+ * ANEC's own placeholder vocabulary, in Portuguese, as their documents use it.
+ * Mapped onto the canonical keys buildHiringTemplateData already produces so the
+ * team keeps authoring in the language they think in.
+ */
+const PT_ALIASES: Record<string, string> = {
+  // company / contratante
+  EMPRESA: "company_name",
+  RAZAO_SOCIAL: "company_name",
+  NOME_FANTASIA: "business_name",
+  CNPJ: "cnpj",
+  NOME_CONTATO: "contact_name",
+  CPF_CONTATO: "contact_cpf",
+  TELEFONE: "phone",
+  EMAIL: "email",
+  ENDERECO: "address",
+  ENDERECO_COMPLETO: "full_address",
+  NUMERO: "address_number",
+  BAIRRO: "neighborhood",
+  CIDADE: "city",
+  ESTADO: "state",
+  CEP: "cep",
+  // candidate / estagiário
+  NOME_CANDIDATO: "candidate_name",
+  CANDIDATO: "candidate_name",
+  ESTAGIARIO: "candidate_name",
+  CPF_CANDIDATO: "candidate_cpf",
+  RG_CANDIDATO: "candidate_rg",
+  EMAIL_CANDIDATO: "candidate_email",
+  TELEFONE_CANDIDATO: "candidate_phone",
+  DATA_NASCIMENTO: "candidate_dob",
+  IDADE: "candidate_age",
+  ENDERECO_CANDIDATO: "candidate_full_address",
+  ESCOLARIDADE: "candidate_education",
+  INSTITUICAO: "candidate_institution",
+  CURSO: "candidate_course",
+  // responsável / escola
+  NOME_RESPONSAVEL: "parent_name",
+  CPF_RESPONSAVEL: "parent_cpf",
+  EMAIL_RESPONSAVEL: "parent_email",
+  TELEFONE_RESPONSAVEL: "parent_phone",
+  ASSINATURA_RESPONSAVEL_LEGAL: "parent_name",
+  INSTITUICAO_ENSINO: "school_name",
+  // vaga
+  VAGA: "job_title",
+  CARGO: "job_title",
+  SALARIO: "monthly_salary",
+  BOLSA_AUXILIO: "monthly_salary",
+  // agência — the reason this whole alias layer exists. ANEC standardised its
+  // documents so the UNIT's address is filled in, otherwise an Uberlândia hire
+  // goes out on paper showing the Ipatinga head-office address and the company
+  // questions it.
+  AGENCIA: "agency_name",
+  AGENCIA_CNPJ: "agency_cnpj",
+  AGENCIA_ENDERECO: "agency_address",
+  AGENCIA_CIDADE: "agency_city",
+  AGENCIA_ESTADO: "agency_state",
+  AGENCIA_CEP: "agency_cep",
+  AGENCIA_ENDERECO_COMPLETO: "agency_full_address",
+  ASSINATURA_REPRESENTANTE_ANEC: "agency_name",
+  // interview / carta de encaminhamento
+  DATA_ENTREVISTA: "interview_date",
+  HORARIO: "interview_time",
+  PONTO_REFERENCIA: "interview_landmark",
+  // contrato
+  DATA_INICIO: "start_date",
+  DATA_FIM: "end_date",
+  DURACAO_MESES: "duration_months",
+  DIA_PAGAMENTO: "payment_day",
+  TAXA: "monthly_fee",
+  DATA_HOJE: "today",
+};
+
+/** Add the Portuguese spellings alongside the canonical keys. */
+function withAliases(data: Record<string, string>): Record<string, string> {
+  const out: Record<string, string> = { ...data };
+  for (const [pt, canonical] of Object.entries(PT_ALIASES)) {
+    if (out[pt] === undefined && data[canonical] !== undefined) out[pt] = data[canonical];
+  }
+  return out;
+}
+
+/** Rewrite {{TAG}} to {TAG} inside the document parts docxtemplater reads. */
+function normalizeDoubleBraces(docxBuffer: Buffer): Buffer {
+  const zip = new PizZip(docxBuffer);
+  let touched = false;
+  for (const name of Object.keys((zip as any).files)) {
+    if (!/^word\/(document|header\d*|footer\d*)\.xml$/.test(name)) continue;
+    const xml = zip.file(name)!.asText();
+    // Word can split "{{" across runs; strip the tags between the braces first.
+    const collapsed = xml
+      .replace(/\{(<[^>]+>)*\{/g, "{")
+      .replace(/\}(<[^>]+>)*\}/g, "}");
+    if (collapsed !== xml) {
+      zip.file(name, collapsed);
+      touched = true;
+    }
+  }
+  if (!touched) return docxBuffer;
+  return zip.generate({ type: "nodebuffer" }) as Buffer;
 }
 
 /**
@@ -170,6 +282,10 @@ export function buildHiringTemplateData(input: {
   agency?: {
     name?: string;
     city?: string;
+    cnpj?: string;
+    address?: string;
+    state?: string;
+    postal_code?: string;
   };
   hiring?: {
     start_date?: string;
@@ -266,6 +382,17 @@ export function buildHiringTemplateData(input: {
   // Agency fields
   if (a?.name) data.agency_name = a.name;
   if (a?.city) data.agency_city = a.city;
+  if (a?.cnpj) data.agency_cnpj = formatCnpj(a.cnpj);
+  if (a?.address) data.agency_address = a.address;
+  if (a?.state) data.agency_state = a.state;
+  if (a?.postal_code) data.agency_cep = formatCep(a.postal_code);
+  // The unit's full address, which is what the contracts actually print. ANEC
+  // standardised its templates around this so a hire made by the Uberlândia unit
+  // does not go out showing the Ipatinga head-office address.
+  const agencyAddr = [a?.address, a?.city, a?.state, a?.postal_code ? formatCep(a.postal_code) : null]
+    .filter(Boolean).join(", ");
+  if (agencyAddr) data.agency_full_address = agencyAddr;
+  data.today = new Date().toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
 
   // Hiring/contract fields
   if (h?.start_date) data.start_date = new Date(h.start_date).toLocaleDateString("pt-BR");
@@ -371,6 +498,12 @@ export const PLACEHOLDER_LABELS: Record<string, string> = {
   // Agency
   agency_name: "Nome da Agencia",
   agency_city: "Cidade da Agencia",
+  agency_cnpj: "CNPJ da Agencia",
+  agency_address: "Endereco da Agencia",
+  agency_state: "Estado da Agencia",
+  agency_cep: "CEP da Agencia",
+  agency_full_address: "Endereco Completo da Agencia",
+  today: "Data de Hoje",
   // Contract
   start_date: "Data de Inicio",
   end_date: "Data de Termino",

@@ -553,8 +553,15 @@ export const hiringRouter = router({
                 contract_type: job.contract_type,
               } : undefined,
               agency: agency ? {
-                name: agency.name,
-                city: agency.city,
+                // The column is agency_name; `agency.name` was always undefined,
+                // so every agency placeholder rendered blank. Address fields are
+                // passed so contracts print the UNIT's address, not head office's.
+                name: (agency as any).agency_name || (agency as any).trade_name || (agency as any).legal_name,
+                city: (agency as any).city,
+                cnpj: (agency as any).cnpj,
+                address: (agency as any).address,
+                state: (agency as any).state,
+                postal_code: (agency as any).zip_code || (agency as any).postal_code,
               } : undefined,
               hiring: {
                 start_date: process.start_date,
@@ -1454,9 +1461,16 @@ export const hiringRouter = router({
           contract_type: job.contract_type,
         } : undefined,
         agency: agency ? {
-          name: agency.name,
-          city: agency.city,
-        } : undefined,
+                // The column is agency_name; `agency.name` was always undefined,
+                // so every agency placeholder rendered blank. Address fields are
+                // passed so contracts print the UNIT's address, not head office's.
+                name: (agency as any).agency_name || (agency as any).trade_name || (agency as any).legal_name,
+                city: (agency as any).city,
+                cnpj: (agency as any).cnpj,
+                address: (agency as any).address,
+                state: (agency as any).state,
+                postal_code: (agency as any).zip_code || (agency as any).postal_code,
+              } : undefined,
         hiring: {
           start_date: process.start_date,
           end_date: process.end_date,
@@ -1700,7 +1714,17 @@ export const hiringRouter = router({
             educational_institution_contact: candidate.educational_institution_contact,
           } : undefined,
           job: job ? { title: job.title, salary: job.salary, contract_type: job.contract_type } : undefined,
-          agency: agency ? { name: agency.name, city: agency.city } : undefined,
+          agency: agency ? {
+                // The column is agency_name; `agency.name` was always undefined,
+                // so every agency placeholder rendered blank. Address fields are
+                // passed so contracts print the UNIT's address, not head office's.
+                name: (agency as any).agency_name || (agency as any).trade_name || (agency as any).legal_name,
+                city: (agency as any).city,
+                cnpj: (agency as any).cnpj,
+                address: (agency as any).address,
+                state: (agency as any).state,
+                postal_code: (agency as any).zip_code || (agency as any).postal_code,
+              } : undefined,
           hiring: {
             start_date: process.start_date, end_date: process.end_date,
             duration_months: process.contract_duration_months, monthly_salary: process.monthly_salary,
