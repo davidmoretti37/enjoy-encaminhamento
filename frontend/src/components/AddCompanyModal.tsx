@@ -133,6 +133,7 @@ export default function AddCompanyModal({ open, onClose, onSuccess }: AddCompany
     city: "",
     state: "",
     // Job Data
+    hasJob: true,
     jobTitle: "",
     compensation: "",
     mainActivities: "",
@@ -279,6 +280,11 @@ export default function AddCompanyModal({ open, onClose, onSuccess }: AddCompany
   };
 
   const validateStep2 = () => {
+    // A partnership often closes before there is an open role. Requiring a
+    // fully-filled vaga here made step 2 an impassable wall — the submit button
+    // only exists on step 4 — so a company with no vacancy could never be
+    // saved at all. The vaga is now opt-in; it can be added later from Gestão.
+    if (!formData.hasJob) return true;
     if (!formData.jobTitle || !formData.compensation || !formData.mainActivities ||
         !formData.requiredSkills || !formData.educationLevel ||
         !formData.workScheduleStart || !formData.workScheduleEnd) {
@@ -339,15 +345,19 @@ export default function AddCompanyModal({ open, onClose, onSuccess }: AddCompany
         neighborhood: formData.neighborhood || undefined,
         city: formData.city || undefined,
         state: formData.state || undefined,
-        jobTitle: formData.jobTitle,
-        compensation: formData.compensation,
-        mainActivities: formData.mainActivities,
-        requiredSkills: formData.requiredSkills,
-        employmentType: formData.employmentType || undefined,
-        urgency: formData.urgency || undefined,
-        educationLevel: formData.educationLevel,
-        benefits: formData.benefits.length > 0 ? formData.benefits : undefined,
-        workSchedule,
+        ...(formData.hasJob
+          ? {
+              jobTitle: formData.jobTitle,
+              compensation: formData.compensation,
+              mainActivities: formData.mainActivities,
+              requiredSkills: formData.requiredSkills,
+              employmentType: formData.employmentType || undefined,
+              urgency: formData.urgency || undefined,
+              educationLevel: formData.educationLevel,
+              benefits: formData.benefits.length > 0 ? formData.benefits : undefined,
+              workSchedule,
+            }
+          : {}),
         positionsCount: formData.positionsCount || undefined,
         genderPreference: formData.genderPreference || undefined,
         notes: formData.notes || undefined,
@@ -398,6 +408,7 @@ export default function AddCompanyModal({ open, onClose, onSuccess }: AddCompany
       neighborhood: "",
       city: "",
       state: "",
+      hasJob: true,
       jobTitle: "",
       compensation: "",
       mainActivities: "",
@@ -486,11 +497,55 @@ export default function AddCompanyModal({ open, onClose, onSuccess }: AddCompany
             />
           )}
           {step === 2 && (
-            <Step2JobDescription
-              formData={formData}
-              setFormData={setFormData}
-              handleBenefitChange={handleBenefitChange}
-            />
+            <div className="space-y-4">
+              {/* A partnership can close before there is an open role. Let the
+                  company be saved now and the vaga be added later. */}
+              <div className="rounded-lg border border-slate-200 p-4">
+                <p className="text-sm font-medium text-slate-900">
+                  Esta empresa já tem uma vaga disponível?
+                </p>
+                <p className="mt-1 text-xs text-slate-500">
+                  Você pode cadastrar a empresa agora e criar a vaga depois, em Gestão.
+                </p>
+                <div className="mt-3 flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setFormData((p: any) => ({ ...p, hasJob: true }))}
+                    className={`flex-1 rounded-md border px-3 py-2 text-sm transition ${
+                      formData.hasJob
+                        ? "border-slate-900 bg-slate-900 text-white"
+                        : "border-slate-300 text-slate-700 hover:bg-slate-50"
+                    }`}
+                  >
+                    Sim, cadastrar vaga
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFormData((p: any) => ({ ...p, hasJob: false }))}
+                    className={`flex-1 rounded-md border px-3 py-2 text-sm transition ${
+                      !formData.hasJob
+                        ? "border-slate-900 bg-slate-900 text-white"
+                        : "border-slate-300 text-slate-700 hover:bg-slate-50"
+                    }`}
+                  >
+                    Ainda não tem vaga
+                  </button>
+                </div>
+              </div>
+
+              {formData.hasJob ? (
+                <Step2JobDescription
+                  formData={formData}
+                  setFormData={setFormData}
+                  handleBenefitChange={handleBenefitChange}
+                />
+              ) : (
+                <p className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                  A empresa será cadastrada sem vaga. Para criar a vaga depois, acesse
+                  Gestão → a empresa → Nova Vaga.
+                </p>
+              )}
+            </div>
           )}
           {step === 3 && (
             <Step3Documents

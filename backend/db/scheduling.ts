@@ -4,6 +4,10 @@ import { getAffiliateByUserId } from "./affiliates";
 
 const db = supabaseAdmin as any;
 
+// Brazil standard time is UTC-3 (no DST since 2019). Module-scoped because the
+// day-bounds for the busy-meeting query need it before the slot loop runs.
+const BRT_OFFSET = "-03:00";
+
 // ============ Email Outreach ============
 
 export async function createEmailOutreach(input: {
@@ -542,16 +546,33 @@ export async function getCompanyFormsByAdmin(
 
 // ============ Admin Availability ============
 
+/**
+ * Scope an availability query to the right owner.
+ *
+ * Availability belongs to the AGENCY, not to whichever user happened to
+ * configure it. The rows were originally keyed to `admin_id`, which meant a
+ * branch's opening hours were invisible to everyone except the single user who
+ * entered them — so the head (`admin`) account, and any second person on the
+ * branch, saw an empty scheduler and could not book anyone.
+ *
+ * When an agency context is known we match on `agency_id` alone. Only when
+ * there is no agency at all do we fall back to the per-user rows.
+ */
+function scopeToAgency<T extends { eq: (col: string, val: any) => T }>(
+  query: T,
+  adminId: string,
+  agencyId?: string,
+): T {
+  return agencyId ? query.eq("agency_id", agencyId) : query.eq("admin_id", adminId);
+}
+
 export async function getAdminAvailability(adminId: string, agencyId?: string): Promise<any[]> {
   let query = db
     .from("admin_availability")
     .select("*")
-    .eq("admin_id", adminId)
     .order("day_of_week", { ascending: true });
 
-  if (agencyId) {
-    query = query.eq("agency_id", agencyId);
-  }
+  query = scopeToAgency(query, adminId, agencyId);
 
   const { data, error } = await query;
 
@@ -597,12 +618,13 @@ export async function createAdminAvailability(input: {
 }
 
 export async function deleteAdminAvailability(id: string, adminId: string, agencyId?: string): Promise<void> {
+  // Scoped the same way as reads: otherwise the head account cannot delete a
+  // row the branch login created, even though they share the same schedule.
   let query = db
     .from("admin_availability")
     .delete()
-    .eq("id", id)
-    .eq("admin_id", adminId);
-  if (agencyId) query = query.eq("agency_id", agencyId);
+    .eq("id", id);
+  query = scopeToAgency(query, adminId, agencyId);
   const { error } = await query;
 
   if (error) {
@@ -1210,10 +1232,9 @@ export async function getAvailableSlots(
   let availQuery = db
     .from("admin_availability")
     .select("*")
-    .eq("admin_id", adminId)
     .or(`day_of_week.eq.${dayOfWeek},specific_date.eq.${date}`)
     .eq("is_blocked", false);
-  if (agencyId) availQuery = availQuery.eq("agency_id", agencyId);
+  availQuery = scopeToAgency(availQuery, adminId, agencyId);
   const { data: availability, error: availError } = await availQuery;
 
   if (availError) {
@@ -1224,23 +1245,30 @@ export async function getAvailableSlots(
   let blockQuery = db
     .from("admin_availability")
     .select("*")
-    .eq("admin_id", adminId)
     .or(`day_of_week.eq.${dayOfWeek},specific_date.eq.${date}`)
     .eq("is_blocked", true);
-  if (agencyId) blockQuery = blockQuery.eq("agency_id", agencyId);
+  blockQuery = scopeToAgency(blockQuery, adminId, agencyId);
   const { data: blockedSlots } = await blockQuery;
 
-  const startOfDay = `${date}T00:00:00`;
-  const endOfDay = `${date}T23:59:59`;
+  // Stamp the BRT offset on the day bounds. Without it Postgres reads these as
+  // UTC, so meetings in the last three hours of the local day fall outside the
+  // window and stop blocking their slot — i.e. silent double-booking.
+  const startOfDay = `${date}T00:00:00${BRT_OFFSET}`;
+  const endOfDay = `${date}T23:59:59${BRT_OFFSET}`;
 
+  // Deliberately NOT agency-only: 22 existing Ipatinga meetings still carry
+  // agency_id = NULL, and an agency-only filter would stop them blocking their
+  // slots. Match either the agency or the user so nothing gets double-booked
+  // while the backfill catches up.
   let meetQuery = db
     .from("scheduled_meetings")
     .select("scheduled_at, duration_minutes")
-    .eq("admin_id", adminId)
     .gte("scheduled_at", startOfDay)
     .lte("scheduled_at", endOfDay)
     .neq("status", "cancelled");
-  if (agencyId) meetQuery = meetQuery.eq("agency_id", agencyId);
+  meetQuery = agencyId
+    ? meetQuery.or(`agency_id.eq.${agencyId},admin_id.eq.${adminId}`)
+    : meetQuery.eq("admin_id", adminId);
   const { data: meetings, error: meetError } = await meetQuery;
 
   if (meetError) {
@@ -1250,8 +1278,6 @@ export async function getAvailableSlots(
 
   const slots: { start: string; end: string; blocked?: boolean }[] = [];
 
-  // Brazil standard time is UTC-3 (no DST since 2019)
-  const BRT_OFFSET = "-03:00";
 
   // Helper: build a correct UTC timestamp from a local BRT time
   function brtToIso(h: number, m: number): string {
@@ -1357,8 +1383,6 @@ export async function getAllSlotsForDate(
 
   const slots: { start: string; end: string; blocked?: boolean }[] = [];
 
-  // Brazil standard time is UTC-3 (no DST since 2019)
-  const BRT_OFFSET = "-03:00";
 
   function brtToIso(h: number, m: number): string {
     const iso = `${date}T${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:00${BRT_OFFSET}`;

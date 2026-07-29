@@ -139,6 +139,24 @@ export async function acceptAgencyInvitation(
     throw userError;
   }
 
+  // Never give one user two agencies. `agencies.user_id` is the sole link used
+  // by getAgencyByUserId, which resolves with .single() — a second row for the
+  // same user makes that throw and locks the account out of the whole product.
+  // This is reachable by replaying an invitation token, so guard it here rather
+  // than relying on the token being consumed.
+  const { data: alreadyOwned } = await db
+    .from("agencies")
+    .select("id")
+    .eq("user_id", userId)
+    .limit(1)
+    .maybeSingle();
+
+  if (alreadyOwned) {
+    throw new Error(
+      "Este convite já foi utilizado — esta conta já possui uma agência vinculada.",
+    );
+  }
+
   // Create agency record
   const { data: agency, error: agencyError } = await db
     .from("agencies")
@@ -168,8 +186,13 @@ export async function acceptAgencyInvitation(
     throw agencyError;
   }
 
-  // Update invitation status
-  await db
+  // Mark the invitation consumed. This MUST NOT fail silently: for months the
+  // update targeted a column that did not exist (`agency_id` vs the actual
+  // `school_id`), the error was never inspected, and every invitation stayed
+  // `pending` — leaving its token replayable for the full 7-day window. A
+  // replay reuses the same user and inserts a SECOND agencies row for them,
+  // which then breaks getAgencyByUserId's .single() and locks the user out.
+  const { error: inviteUpdateError } = await db
     .from("agency_invitations")
     .update({
       status: "accepted",
@@ -177,6 +200,16 @@ export async function acceptAgencyInvitation(
       agency_id: agency.id,
     })
     .eq("token", token);
+
+  if (inviteUpdateError) {
+    // The agency and user already exist at this point, so throwing would strand
+    // a half-built account. Log loudly instead — but the token is still live,
+    // so this needs to be visible rather than swallowed.
+    console.error(
+      "[acceptAgencyInvitation] CRITICAL: invitation not marked accepted — token remains replayable:",
+      inviteUpdateError.message,
+    );
+  }
 
   return { agency, user: authData?.user || { id: userId, email: invitation.email } };
 }

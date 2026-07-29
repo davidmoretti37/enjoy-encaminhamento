@@ -136,11 +136,27 @@ export function CompanyInterviewScheduleModal({
     { date: selectedDate ? format(selectedDate, "yyyy-MM-dd") : "", agencyId: currentAgency?.id },
     { enabled: open && !!selectedDate, staleTime: 0 },
   );
-  const timeOptions = useMemo(
-    () => (slots || []).filter((s: any) => !s.blocked).map((s: any) => format(new Date(s.start), "HH:mm")),
+  // Availability *refines* the list; it must never empty it. Driving the picker
+  // purely from configured availability left agencies that had never opened
+  // "Configurações da Agenda" unable to schedule at all, which froze the funnel.
+  const configuredTimes = useMemo(
+    () =>
+      Array.from(
+        new Set<string>(
+          (slots || [])
+            .filter((s: any) => !s.blocked)
+            .map((s: any) => format(new Date(s.start), "HH:mm") as string),
+        ),
+      ),
     [slots],
   );
-  const noSlots = !!selectedDate && slots !== undefined && timeOptions.length === 0;
+  const usingFallbackTimes =
+    !!selectedDate && slots !== undefined && configuredTimes.length === 0;
+  const timeOptions = useMemo(
+    () => (usingFallbackTimes ? getAvailableTimeOptions(selectedDate) : configuredTimes),
+    [usingFallbackTimes, selectedDate, configuredTimes],
+  );
+  const noSlots = usingFallbackTimes;
   useEffect(() => {
     if (timeOptions.length > 0 && !timeOptions.includes(time)) {
       setTime(timeOptions[0]);
@@ -214,10 +230,6 @@ export function CompanyInterviewScheduleModal({
   const handleSubmit = () => {
     if (!selectedDate) {
       toast.error("Selecione uma data");
-      return;
-    }
-    if (timeOptions.length === 0) {
-      toast.error("Nenhum horário disponível nesta data. Configure em Configurações da Agenda.");
       return;
     }
 
@@ -444,7 +456,7 @@ export function CompanyInterviewScheduleModal({
             </Popover>
 
             {!showPerCandidate && (
-              <Select value={time} onValueChange={setTime} disabled={timeOptions.length === 0}>
+              <Select value={time} onValueChange={setTime}>
                 <SelectTrigger className="h-9">
                   <Clock className="mr-1.5 h-3.5 w-3.5 text-muted-foreground" />
                   <SelectValue placeholder={selectedDate ? "Sem horários" : "Escolha a data"} />
@@ -474,7 +486,7 @@ export function CompanyInterviewScheduleModal({
             <div className="space-y-2">
               <label className="text-xs font-medium text-slate-600">Horarios individuais</label>
               {/* Start time selector */}
-              <Select value={time} onValueChange={setTime} disabled={timeOptions.length === 0}>
+              <Select value={time} onValueChange={setTime}>
                 <SelectTrigger className="h-8 text-xs">
                   <Clock className="mr-1.5 h-3 w-3 text-muted-foreground" />
                   <span className="text-muted-foreground mr-1">Inicio:</span>
@@ -514,10 +526,11 @@ export function CompanyInterviewScheduleModal({
             </div>
           )}
 
-          {/* Report #11: guide the team when the picked date has no configured slots */}
+          {/* Informational only — scheduling still works on the default grid. */}
           {noSlots && (
             <p className="text-xs text-amber-600">
-              Nenhum horário disponível nesta data. Configure os horários em Agenda → Configurações da Agenda.
+              Sua agenda ainda não foi configurada — mostrando os horários padrão (08:00–19:00).
+              Para restringir aos seus horários, acesse Agenda → Configurações da Agenda.
             </p>
           )}
 
@@ -565,7 +578,7 @@ export function CompanyInterviewScheduleModal({
           <Button
             size="sm"
             onClick={handleSubmit}
-            disabled={scheduleMutation.isPending || !selectedDate || timeOptions.length === 0}
+            disabled={scheduleMutation.isPending || !selectedDate}
             className="bg-[#FF6B35] hover:bg-[#FF6B35]/90 text-white"
           >
             {scheduleMutation.isPending ? (

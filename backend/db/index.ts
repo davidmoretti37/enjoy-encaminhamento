@@ -58,6 +58,9 @@ export * from "./companyInvitations";
 // Document template and signing operations
 export * from "./documents";
 
+// Document/contract type catalogue (per-agency, data-driven)
+export * from "./documentTypes";
+
 // Interview scheduling operations
 export * from "./interviews";
 

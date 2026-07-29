@@ -39,7 +39,10 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 
-const CATEGORIES = [
+// Fallback only. The real catalogue comes from agency.listDocumentTypes so
+// ANEC can add contract and termo types without a deploy; this keeps the page
+// rendering if that query hasn't resolved yet (or before migration 129 runs).
+const FALLBACK_CATEGORIES = [
   { key: "contrato_inicial", label: "Contrato Inicial", description: "Documentos assinados pela empresa durante o onboarding" },
   { key: "clt", label: "CLT", description: "Documentos para contratação CLT" },
   { key: "estagio", label: "Estágio", description: "Documentos para contratação de estagiários" },
@@ -48,6 +51,23 @@ const CATEGORIES = [
 
 export default function SettingsPage() {
   const { user, loading: authLoading, logout } = useAuth();
+
+  // Contract/termo types live in the database (per agency), so ANEC can add
+  // one without a deploy. Falls back to the original four while the query is
+  // in flight, or if migration 129 hasn't been applied yet.
+  const { data: documentTypes } = (trpc.agency as any).listDocumentTypes.useQuery(
+    undefined,
+    { staleTime: 60_000 },
+  );
+  const categories =
+    documentTypes && documentTypes.length > 0
+      ? documentTypes.map((t: any) => ({
+          key: t.key,
+          label: t.label,
+          description: t.description || "",
+        }))
+      : FALLBACK_CATEGORIES;
+
   const docFileInputRef = useRef<HTMLInputElement>(null);
   const [docUploading, setDocUploading] = useState(false);
   const [docDeleting, setDocDeleting] = useState<string | null>(null);
@@ -316,7 +336,7 @@ export default function SettingsPage() {
                 <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
               </div>
             ) : (
-              CATEGORIES.map((cat, index) => {
+              categories.map((cat: any, index: number) => {
                 const templates = getTemplatesForCategory(cat.key);
                 return (
                   <div key={cat.key}>

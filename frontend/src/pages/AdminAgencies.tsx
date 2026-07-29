@@ -25,6 +25,7 @@ import {
   Mail,
   Pencil,
   Trash2,
+  KeyRound,
 } from "lucide-react";
 import DashboardLayout from "@/components/DashboardLayout";
 import { useState } from "react";
@@ -43,6 +44,10 @@ export default function AdminAgencies() {
   const [editForm, setEditForm] = useState<any>({});
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [agencyToDelete, setAgencyToDelete] = useState<any>(null);
+  const [isAccessDialogOpen, setIsAccessDialogOpen] = useState(false);
+  const [accessAgency, setAccessAgency] = useState<any>(null);
+  const [accessEmail, setAccessEmail] = useState("");
+  const [accessPassword, setAccessPassword] = useState("");
 
   const { data: affiliate, isLoading: affiliateLoading } = trpc.affiliate.getByUserId.useQuery();
   const { data: agencies, isLoading, refetch } = trpc.affiliate.getAgencies.useQuery();
@@ -105,6 +110,33 @@ export default function AdminAgencies() {
       toast.error(error.message || 'Erro ao excluir agência');
     }
   });
+
+  const updateAccessMutation = (trpc.agency as any).updateAccess.useMutation({
+    onSuccess: (data: any) => {
+      const changed = [
+        data?.emailChanged ? 'e-mail' : null,
+        data?.passwordChanged ? 'senha' : null,
+      ].filter(Boolean).join(' e ');
+      toast.success(
+        `Acesso atualizado (${changed}). O acesso anterior deixa de funcionar — informe os novos dados ao responsável.`,
+      );
+      refetch();
+      setIsAccessDialogOpen(false);
+      setAccessAgency(null);
+      setAccessEmail("");
+      setAccessPassword("");
+    },
+    onError: (error: any) => {
+      toast.error(error.message || 'Erro ao atualizar acesso');
+    }
+  });
+
+  const openAccessDialog = (agency: any) => {
+    setAccessAgency(agency);
+    setAccessEmail(agency?.email || "");
+    setAccessPassword("");
+    setIsAccessDialogOpen(true);
+  };
 
   const dataLoading = affiliateLoading || isLoading;
 
@@ -373,6 +405,18 @@ export default function AdminAgencies() {
                       Excluir
                     </Button>
                   </div>
+
+                  {/* Transfer the branch login to a different person. The agency
+                      keeps all of its data — only the credentials move. */}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="w-full border-amber-300 text-amber-700 hover:bg-amber-50"
+                    onClick={() => openAccessDialog(agency)}
+                  >
+                    <KeyRound className="h-4 w-4 mr-1" />
+                    Alterar acesso
+                  </Button>
                 </div>
               </div>
             ))}
@@ -635,6 +679,89 @@ export default function AdminAgencies() {
                 disabled={createInvitationMutation.isPending || !inviteEmail.trim()}
               >
                 {createInvitationMutation.isPending ? <Skeleton className="h-4 w-20" /> : 'Enviar Convite'}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Alterar acesso — move a branch's login to a new person.
+            The agency row is untouched, so candidates, empresas, vagas and
+            reuniões all stay attached exactly as they are. */}
+        <Dialog open={isAccessDialogOpen} onOpenChange={setIsAccessDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Alterar acesso da agência</DialogTitle>
+              <DialogDescription>
+                {accessAgency?.agency_name}
+                {accessAgency?.city ? ` · ${accessAgency.city}` : ''}
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+              Os dados da agência não mudam — candidatos, empresas, vagas e reuniões
+              continuam exatamente como estão. Só o login muda. Quem usava o acesso
+              anterior perde o acesso.
+            </div>
+
+            <div className="space-y-4 py-2">
+              <div>
+                <Label htmlFor="access-email">Novo e-mail de acesso</Label>
+                <Input
+                  id="access-email"
+                  type="email"
+                  value={accessEmail}
+                  onChange={(e) => setAccessEmail(e.target.value)}
+                  placeholder="nome@anecrh.com.br"
+                />
+              </div>
+              <div>
+                <Label htmlFor="access-password">Nova senha</Label>
+                <Input
+                  id="access-password"
+                  type="text"
+                  value={accessPassword}
+                  onChange={(e) => setAccessPassword(e.target.value)}
+                  placeholder="Mínimo 8 caracteres"
+                  autoComplete="off"
+                />
+                <p className="mt-1 text-xs text-slate-500">
+                  Fica visível para você copiar e enviar ao responsável. Deixe em
+                  branco para manter a senha atual.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="outline"
+                onClick={() => setIsAccessDialogOpen(false)}
+                disabled={updateAccessMutation.isPending}
+              >
+                Cancelar
+              </Button>
+              <Button
+                onClick={() => {
+                  const emailChanged =
+                    !!accessEmail.trim() &&
+                    accessEmail.trim().toLowerCase() !== (accessAgency?.email || '').toLowerCase();
+                  const password = accessPassword.trim();
+                  if (!emailChanged && !password) {
+                    toast.error('Informe um novo e-mail ou uma nova senha');
+                    return;
+                  }
+                  if (password && password.length < 8) {
+                    toast.error('A senha deve ter pelo menos 8 caracteres');
+                    return;
+                  }
+                  updateAccessMutation.mutate({
+                    id: accessAgency.id,
+                    ...(emailChanged ? { email: accessEmail.trim() } : {}),
+                    ...(password ? { password } : {}),
+                  });
+                }}
+                disabled={updateAccessMutation.isPending}
+              >
+                {updateAccessMutation.isPending ? <Skeleton className="h-4 w-24" /> : 'Salvar acesso'}
               </Button>
             </div>
           </DialogContent>

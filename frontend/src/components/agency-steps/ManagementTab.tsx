@@ -21,7 +21,7 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
 export default function ManagementTab() {
-  const { managementFilter, setManagementFilter, companies, candidates, isLoading, refreshData } = useAgencyFunnel();
+  const { managementFilter, setManagementFilter, companies, candidates, isLoading, refreshData, setActiveTab, setSelectedCompanyId } = useAgencyFunnel();
   const { isAllAgenciesMode, availableAgencies } = useAgencyContext();
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedEntity, setSelectedEntity] = useState<any>(null);
@@ -116,6 +116,14 @@ export default function ManagementTab() {
       candidate.phone?.toLowerCase().includes(s)
     );
   });
+
+  // Jump straight to this company's vagas screen. Before this, the only way in
+  // was clicking an existing job card, so a company with no active vaga could
+  // never be selected — and therefore never get its first one.
+  const handleCreateJobClick = (company: any) => {
+    setSelectedCompanyId(company.id);
+    setActiveTab("job-description");
+  };
 
   const handleDocumentsClick = (entity: any) => {
     setSelectedEntity(entity);
@@ -234,6 +242,7 @@ export default function ManagementTab() {
           companies={filteredCompanies}
           onDocumentsClick={handleDocumentsClick}
           onPaymentsClick={handlePaymentsClick}
+          onCreateJobClick={handleCreateJobClick}
           searchTerm={searchTerm}
           isAllAgenciesMode={isAllAgenciesMode}
           availableAgencies={availableAgencies}
@@ -411,7 +420,7 @@ export default function ManagementTab() {
   );
 }
 
-function CompanyRow({ company, onDocumentsClick, onPaymentsClick }: { company: any; onDocumentsClick: (entity: any) => void; onPaymentsClick: (entity: any) => void }) {
+function CompanyRow({ company, onDocumentsClick, onPaymentsClick, onCreateJobClick }: { company: any; onDocumentsClick: (entity: any) => void; onPaymentsClick: (entity: any) => void; onCreateJobClick: (company: any) => void }) {
   return (
     <div className="p-3 bg-white rounded-lg border-2 border-slate-200 hover:border-orange-300 hover:shadow-md transition-all">
       <div className="flex items-center justify-between">
@@ -429,6 +438,17 @@ function CompanyRow({ company, onDocumentsClick, onPaymentsClick }: { company: a
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {/* Primary action. Previously the ONLY route to the create-vaga UI
+              was clicking an existing job card, so a company with no active
+              vaga (8 of 37 on prod) was unreachable and could never get one. */}
+          <Button
+            size="sm"
+            className="bg-[#FF6B35] hover:bg-[#FF6B35]/90 text-white"
+            onClick={() => onCreateJobClick(company)}
+          >
+            <Plus className="h-4 w-4 mr-1.5" />
+            Nova Vaga
+          </Button>
           <Button
             variant="outline"
             size="sm"
@@ -453,7 +473,7 @@ function CompanyRow({ company, onDocumentsClick, onPaymentsClick }: { company: a
   );
 }
 
-function CompanyList({ companies, onDocumentsClick, onPaymentsClick, searchTerm, isAllAgenciesMode, availableAgencies }: { companies: any[]; onDocumentsClick: (entity: any) => void; onPaymentsClick: (entity: any) => void; searchTerm: string; isAllAgenciesMode: boolean; availableAgencies: { id: string; name: string; city: string | null }[] }) {
+function CompanyList({ companies, onDocumentsClick, onPaymentsClick, onCreateJobClick, searchTerm, isAllAgenciesMode, availableAgencies }: { companies: any[]; onDocumentsClick: (entity: any) => void; onPaymentsClick: (entity: any) => void; onCreateJobClick: (company: any) => void; searchTerm: string; isAllAgenciesMode: boolean; availableAgencies: { id: string; name: string; city: string | null }[] }) {
   if (!isAllAgenciesMode && companies.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-center">
@@ -485,7 +505,7 @@ function CompanyList({ companies, onDocumentsClick, onPaymentsClick, searchTerm,
               {agencyCompanies.length > 0 ? (
                 <div className="space-y-2 mt-2">
                   {agencyCompanies.map((company: any) => (
-                    <CompanyRow key={company.id} company={company} onDocumentsClick={onDocumentsClick} onPaymentsClick={onPaymentsClick} />
+                    <CompanyRow key={company.id} company={company} onDocumentsClick={onDocumentsClick} onPaymentsClick={onPaymentsClick} onCreateJobClick={onCreateJobClick} />
                   ))}
                 </div>
               ) : (
@@ -507,7 +527,7 @@ function CompanyList({ companies, onDocumentsClick, onPaymentsClick, searchTerm,
               </div>
               <div className="space-y-2 mt-2">
                 {orphans.map((company: any) => (
-                  <CompanyRow key={company.id} company={company} onDocumentsClick={onDocumentsClick} onPaymentsClick={onPaymentsClick} />
+                  <CompanyRow key={company.id} company={company} onDocumentsClick={onDocumentsClick} onPaymentsClick={onPaymentsClick} onCreateJobClick={onCreateJobClick} />
                 ))}
               </div>
             </div>
@@ -520,7 +540,7 @@ function CompanyList({ companies, onDocumentsClick, onPaymentsClick, searchTerm,
   return (
     <div className="space-y-2">
       {companies.map((company: any) => (
-        <CompanyRow key={company.id} company={company} onDocumentsClick={onDocumentsClick} onPaymentsClick={onPaymentsClick} />
+        <CompanyRow key={company.id} company={company} onDocumentsClick={onDocumentsClick} onPaymentsClick={onPaymentsClick} onCreateJobClick={onCreateJobClick} />
       ))}
     </div>
   );

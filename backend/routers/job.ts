@@ -237,14 +237,23 @@ export const jobRouter = router({
         if (!agencyId || !targetCompany || targetCompany.agency_id !== agencyId) {
           throw new TRPCError({ code: 'FORBIDDEN', message: 'Esta empresa não pertence à sua agência' });
         }
-      } else if (ctx.user.role === 'admin') {
-        // For admin, use the company's existing agency_id
+      } else {
+        // admin / super_admin: inherit the agency from the target company.
         const { data: companyData } = await supabaseAdmin
           .from('companies')
           .select('agency_id')
           .eq('id', input.companyId)
           .single();
         agencyId = companyData?.agency_id;
+      }
+
+      // One prod company has agency_id = NULL. Without this guard the insert
+      // fails on a NOT NULL violation and the UI shows a raw Postgres error.
+      if (!agencyId) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Esta empresa não está vinculada a nenhuma agência. Vincule a empresa a uma agência antes de criar a vaga.',
+        });
       }
 
       // Default location from the company's city/state if the caller didn't supply one,
@@ -273,6 +282,9 @@ export const jobRouter = router({
         salary_min: input.salaryMin || null,
         salary_max: input.salaryMax || null,
         specific_requirements: input.requirements || null,
+        // updateForCompany writes `requirements`; keep both in sync so an edit
+        // after creation doesn't appear to lose the text.
+        requirements: input.requirements || null,
         openings: input.openings,
         location,
         status: 'open',
@@ -829,8 +841,10 @@ export const jobRouter = router({
           );
       }
 
-      // Cordial notification to every OTHER candidate who was in the running.
-      // ANEC supplies the canonical wording later; this is a sensible default.
+      // Cordial notification to every OTHER candidate who was in the running,
+      // using ANEC's approved wording. Which of the three messages a candidate
+      // gets depends on whether they study at Inexxa and whether they actually
+      // sat a company interview — see backend/lib/rejectionCopy.ts.
       const apps = await db.getApplicationsByJobId(input.jobId);
       const others = (apps || []).filter((a: any) =>
         a.candidate_id !== input.hiredCandidateId &&
@@ -838,6 +852,18 @@ export const jobRouter = router({
       );
 
       const { notifyCandidate } = await import('../lib/funnelNotify');
+      const { loadRejectionContext } = await import('../lib/rejectionContext');
+      const {
+        selectRejectionVariant, rejectionText, rejectionHtml, rejectionSubject, REJECTION_TITLE,
+      } = await import('../lib/rejectionCopy');
+
+      // One query for the whole cohort rather than two per candidate.
+      const rejCtx = await loadRejectionContext(
+        input.jobId,
+        others.map((a: any) => a.candidate_id).filter(Boolean),
+      );
+      const consultantName = (ctx.user as any)?.name || 'equipe da ANEC';
+
       let notified = 0;
       for (const a of others) {
         try {
@@ -845,16 +871,26 @@ export const jobRouter = router({
             .from('applications')
             .update({ status: 'rejected', decided_at: nowIso })
             .eq('id', a.id);
+
+          const interviewed = rejCtx.interviewedByCandidateId.has(a.candidate_id);
+          const variant = selectRejectionVariant({
+            isSchoolStudent: rejCtx.studentByCandidateId.has(a.candidate_id),
+            interviewed,
+          });
+          const copyInput = {
+            candidateName: a.candidates?.full_name || '',
+            jobTitle,
+            consultantName,
+          };
+
           await notifyCandidate(a.candidates, {
-            title: 'Atualização sobre a vaga',
-            message: `A vaga "${jobTitle}" foi preenchida. Agradecemos muito o seu interesse! Seu perfil continuará sendo encaminhado para outras oportunidades compatíveis.`,
+            title: REJECTION_TITLE,
+            message: rejectionText(variant, copyInput, interviewed),
             type: 'info',
             relatedType: 'application',
             relatedId: input.jobId,
-            emailSubject: `Atualização sobre a vaga — ${jobTitle}`,
-            emailHtml: `<p>Olá ${a.candidates?.full_name || 'candidato(a)'},</p>
-              <p>A vaga <strong>"${jobTitle}"</strong> foi preenchida. Agradecemos muito o seu interesse e a sua participação no processo.</p>
-              <p>Continuaremos encaminhando o seu perfil para outras oportunidades compatíveis — fique de olho no seu portal!</p>`,
+            emailSubject: rejectionSubject(jobTitle),
+            emailHtml: rejectionHtml(variant, copyInput, interviewed),
           });
           notified += 1;
         } catch (err: any) {

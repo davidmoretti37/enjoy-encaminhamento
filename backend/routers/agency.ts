@@ -100,6 +100,107 @@ export const agencyRouter = router({
       return { success: true };
     }),
 
+  // Transfer an agency's login to a different person WITHOUT touching its data.
+  //
+  // The agency↔user link is 1:1 (`agencies.user_id` NOT NULL), so a branch has
+  // exactly one login. When the person holding it leaves, the branch's whole
+  // history (candidates, companies, jobs, meetings) hangs off that agency row —
+  // so the safe move is to re-point the credentials, not to create a new agency.
+  // Changing the email and/or password here locks the previous holder out while
+  // every foreign key stays exactly where it is.
+  updateAccess: adminProcedure
+    .input(z.object({
+      id: z.string().uuid(),
+      email: z.string().email('E-mail inválido').optional(),
+      password: z.string().min(8, 'A senha deve ter pelo menos 8 caracteres').optional(),
+    }).refine((v) => !!v.email || !!v.password, {
+      message: 'Informe um novo e-mail ou uma nova senha',
+    }))
+    .mutation(async ({ ctx, input }) => {
+      // Region guard — same shape as updateStatus/deleteAgency above.
+      if (ctx.user.role !== 'super_admin') {
+        const affiliate = await db.getAffiliateByUserId(ctx.user.id);
+        if (affiliate?.id) {
+          const a = await db.getAgencyById(input.id);
+          if (a && (a as any).affiliate_id && (a as any).affiliate_id !== affiliate.id) {
+            throw new TRPCError({ code: 'FORBIDDEN', message: 'Esta agência não pertence à sua região' });
+          }
+        }
+      }
+
+      const agency = await db.getAgencyById(input.id);
+      if (!agency) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Agência não encontrada' });
+      }
+      const targetUserId = (agency as any).user_id as string | undefined;
+      if (!targetUserId) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Esta agência não possui um acesso vinculado' });
+      }
+
+      const normalizedEmail = input.email?.trim().toLowerCase();
+
+      // Refuse to move the login onto an address that already belongs to someone
+      // else — Supabase would reject it anyway, but a clear message beats a 500.
+      if (normalizedEmail) {
+        const { data: clash } = await supabaseAdmin
+          .from('users')
+          .select('id')
+          .ilike('email', normalizedEmail)
+          .neq('id', targetUserId)
+          .maybeSingle();
+        if (clash) {
+          throw new TRPCError({
+            code: 'CONFLICT',
+            message: 'Este e-mail já está em uso por outro usuário da plataforma',
+          });
+        }
+      }
+
+      const authPatch: Record<string, unknown> = {};
+      if (normalizedEmail) {
+        authPatch.email = normalizedEmail;
+        // The admin is vouching for this address; skip the confirmation round
+        // trip so the new person can sign in immediately.
+        authPatch.email_confirm = true;
+      }
+      if (input.password) authPatch.password = input.password;
+
+      const { error: authError } = await supabaseAdmin.auth.admin.updateUserById(
+        targetUserId,
+        authPatch,
+      );
+      if (authError) {
+        console.error('[agency.updateAccess] auth update failed:', authError.message);
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Não foi possível atualizar o acesso da agência',
+        });
+      }
+
+      // Mirror the address into public.users and onto the agency card. Best
+      // effort: the credential itself already changed above, and failing the
+      // whole call here would leave the caller thinking nothing happened.
+      if (normalizedEmail) {
+        const { error: usersErr } = await supabaseAdmin
+          .from('users')
+          .update({ email: normalizedEmail })
+          .eq('id', targetUserId);
+        if (usersErr) console.error('[agency.updateAccess] users.email sync failed:', usersErr.message);
+
+        try {
+          await db.updateAgency(input.id, { email: normalizedEmail });
+        } catch (e: any) {
+          console.error('[agency.updateAccess] agencies.email sync failed:', e?.message);
+        }
+      }
+
+      return {
+        success: true,
+        emailChanged: !!normalizedEmail,
+        passwordChanged: !!input.password,
+      };
+    }),
+
   // Create agency invitation (admin only) and optionally send email
   createInvitation: adminProcedure
     .input(z.object({
@@ -566,10 +667,84 @@ export const agencyRouter = router({
   // Document Template Management
   // ============================================
 
+  // ---- Document/contract TYPE catalogue (per agency, data-driven) ----
+  // These replace the hardcoded four-category list. Adding a contract or termo
+  // type is now a row, so ANEC can extend it without waiting on a deploy.
+
+  listDocumentTypes: agencyProcedure
+    .input(z.object({ includeInactive: z.boolean().optional() }).optional())
+    .query(async ({ ctx, input }) => {
+      const agency = await db.getAgencyForUserContext(ctx.user.id, ctx.user.role);
+      if (!agency) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Agency not found.' });
+      }
+      return await db.listDocumentTypes(agency.id, { includeInactive: input?.includeInactive });
+    }),
+
+  createDocumentType: agencyProcedure
+    .input(z.object({
+      label: z.string().min(1, 'Informe o nome do tipo de documento'),
+      key: z.string().optional(),
+      description: z.string().optional(),
+      requiresSignature: z.boolean().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const agency = await db.getAgencyForUserContext(ctx.user.id, ctx.user.role);
+      if (!agency) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Agency not found.' });
+      }
+      try {
+        return await db.createDocumentType({
+          agencyId: agency.id,
+          key: input.key || input.label,
+          label: input.label,
+          description: input.description ?? null,
+          requiresSignature: input.requiresSignature,
+        });
+      } catch (e: any) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: e?.message || 'Erro ao criar tipo de documento' });
+      }
+    }),
+
+  updateDocumentType: agencyProcedure
+    .input(z.object({
+      id: z.string().uuid(),
+      label: z.string().min(1).optional(),
+      description: z.string().nullable().optional(),
+      requiresSignature: z.boolean().optional(),
+      isActive: z.boolean().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const agency = await db.getAgencyForUserContext(ctx.user.id, ctx.user.role);
+      if (!agency) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Agency not found.' });
+      }
+      const { id, ...patch } = input;
+      await db.updateDocumentType(id, agency.id, patch);
+      return { success: true };
+    }),
+
+  deleteDocumentType: agencyProcedure
+    .input(z.object({ id: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const agency = await db.getAgencyForUserContext(ctx.user.id, ctx.user.role);
+      if (!agency) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Agency not found.' });
+      }
+      try {
+        await db.deactivateDocumentType(input.id, agency.id);
+        return { success: true };
+      } catch (e: any) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: e?.message || 'Erro ao remover tipo de documento' });
+      }
+    }),
+
   // Get all document templates for the agency
   getDocumentTemplates: agencyProcedure
     .input(z.object({
-      category: z.enum(['contrato_inicial', 'clt', 'estagio', 'menor_aprendiz']).optional(),
+      // Validated against the agency's document_types catalogue rather than a
+      // fixed enum, so a type added at runtime is immediately usable.
+      category: z.string().min(1).optional(),
     }).optional())
     .query(async ({ ctx, input }) => {
       const agency = await db.getAgencyForUserContext(ctx.user.id, ctx.user.role);
@@ -582,7 +757,7 @@ export const agencyRouter = router({
   // Upload a new document template
   uploadDocumentTemplate: agencyProcedure
     .input(z.object({
-      category: z.enum(['contrato_inicial', 'clt', 'estagio', 'menor_aprendiz']),
+      category: z.string().min(1),
       name: z.string().min(1),
       fileBase64: z.string(),
       fileName: z.string(),
@@ -591,6 +766,12 @@ export const agencyRouter = router({
       const agency = await db.getAgencyForUserContext(ctx.user.id, ctx.user.role);
       if (!agency) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Agency not found.' });
+      }
+
+      try {
+        await db.assertValidCategory(agency.id, input.category);
+      } catch (e: any) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: e?.message || 'Tipo de documento inválido' });
       }
 
       const buffer = Buffer.from(input.fileBase64, 'base64');
@@ -767,17 +948,21 @@ export const agencyRouter = router({
       neighborhood: z.string().optional(),
       city: z.string().optional(),
       state: z.string().optional(),
-      // Job data
-      jobTitle: z.string().min(1),
-      compensation: z.string().min(1),
-      mainActivities: z.string().min(1),
-      requiredSkills: z.string().min(1),
+      // Job data — OPTIONAL. A partnership frequently closes before the client
+      // has an open role, and requiring a vaga here made it impossible to
+      // register the company at all. When jobTitle is absent no job is created;
+      // the vaga is added later from Gestão. When it IS present the remaining
+      // job fields are still required (enforced by the refine below).
+      jobTitle: z.string().min(1).optional(),
+      compensation: z.string().min(1).optional(),
+      mainActivities: z.string().min(1).optional(),
+      requiredSkills: z.string().min(1).optional(),
       employmentType: z.string().optional(),
       urgency: z.string().optional(),
       ageRange: z.string().optional(),
-      educationLevel: z.string().min(1),
+      educationLevel: z.string().min(1).optional(),
       benefits: z.array(z.string()).optional(),
-      workSchedule: z.string().min(1),
+      workSchedule: z.string().min(1).optional(),
       positionsCount: z.string().optional(),
       genderPreference: z.string().optional(),
       notes: z.string().optional(),
@@ -787,7 +972,17 @@ export const agencyRouter = router({
         base64: z.string(),
         name: z.string(),
       })).optional(),
-    }))
+    }).refine(
+      (v) =>
+        !v.jobTitle ||
+        (!!v.compensation && !!v.mainActivities && !!v.requiredSkills &&
+         !!v.educationLevel && !!v.workSchedule),
+      {
+        message:
+          'Para cadastrar a vaga, preencha remuneração, atividades, requisitos, escolaridade e horário',
+        path: ['jobTitle'],
+      },
+    ))
     .mutation(async ({ ctx, input }) => {
       let agency = await db.getAgencyForUserContext(ctx.user.id, ctx.user.role);
       // Allow admins to specify an agency directly (for all-agencies mode)
@@ -853,58 +1048,62 @@ export const agencyRouter = router({
         }
       }
 
-      // Create the job (reuse logic from submitOnboarding)
-      const description = `${input.mainActivities}\n\nRequisitos: ${input.requiredSkills}${input.notes ? `\n\nObservações: ${input.notes}` : ''}`;
+      // Create the job (reuse logic from submitOnboarding).
+      // Only when a vaga was actually supplied — a company registered without a
+      // role is a valid partner; the vaga is added later from Gestão.
+      if (input.jobTitle) {
+        const description = `${input.mainActivities}\n\nRequisitos: ${input.requiredSkills}${input.notes ? `\n\nObservações: ${input.notes}` : ''}`;
 
-      const contractTypeMap: Record<string, 'estagio' | 'clt' | 'menor-aprendiz'> = {
-        'clt': 'clt',
-        'estagio': 'estagio',
-        'jovem_aprendiz': 'menor-aprendiz',
-        'pj': 'clt',
-        'temporario': 'clt',
-      };
-      const contractType = contractTypeMap[input.employmentType || 'clt'] || 'clt';
+        const contractTypeMap: Record<string, 'estagio' | 'clt' | 'menor-aprendiz'> = {
+          'clt': 'clt',
+          'estagio': 'estagio',
+          'jovem_aprendiz': 'menor-aprendiz',
+          'pj': 'clt',
+          'temporario': 'clt',
+        };
+        const contractType = contractTypeMap[input.employmentType || 'clt'] || 'clt';
 
-      const salary = input.compensation ? parseCompensation(input.compensation) : null;
+        const salary = input.compensation ? parseCompensation(input.compensation) : null;
 
-      const educationMap: Record<string, 'fundamental' | 'medio' | 'superior' | 'pos-graduacao'> = {
-        'fundamental_incompleto': 'fundamental',
-        'fundamental_completo': 'fundamental',
-        'medio_incompleto': 'medio',
-        'medio_completo': 'medio',
-        'tecnico': 'medio',
-        'superior_incompleto': 'superior',
-        'superior_completo': 'superior',
-        'pos_graduacao': 'pos-graduacao',
-        'mestrado': 'pos-graduacao',
-        'doutorado': 'pos-graduacao',
-      };
+        const educationMap: Record<string, 'fundamental' | 'medio' | 'superior' | 'pos-graduacao'> = {
+          'fundamental_incompleto': 'fundamental',
+          'fundamental_completo': 'fundamental',
+          'medio_incompleto': 'medio',
+          'medio_completo': 'medio',
+          'tecnico': 'medio',
+          'superior_incompleto': 'superior',
+          'superior_completo': 'superior',
+          'pos_graduacao': 'pos-graduacao',
+          'mestrado': 'pos-graduacao',
+          'doutorado': 'pos-graduacao',
+        };
 
-      const location = input.city && input.state
-        ? `${input.city}, ${input.state}`
-        : input.city || input.state || null;
+        const location = input.city && input.state
+          ? `${input.city}, ${input.state}`
+          : input.city || input.state || null;
 
-      await db.createJobForOnboarding(result.companyId, {
-        title: input.jobTitle,
-        description,
-        contract_type: contractType,
-        work_type: 'presencial',
-        salary: salary ? Math.round(salary) : null,
-        salary_min: salary,
-        salary_max: salary,
-        benefits: input.benefits || [],
-        min_education_level: educationMap[input.educationLevel] || null,
-        required_skills: input.requiredSkills ? [input.requiredSkills] : [],
-        requirements: input.requiredSkills || null,
-        work_schedule: input.workSchedule,
-        location,
-        openings: input.positionsCount ? parseInt(input.positionsCount) : 1,
-        status: 'open',
-        published_at: new Date().toISOString(),
-        agency_id: agency.id,
-        gender_preference: input.genderPreference ?? null,
-        urgency: input.urgency ?? null,
-      });
+          await db.createJobForOnboarding(result.companyId, {
+            title: input.jobTitle,
+            description,
+            contract_type: contractType,
+            work_type: 'presencial',
+            salary: salary ? Math.round(salary) : null,
+            salary_min: salary,
+            salary_max: salary,
+            benefits: input.benefits || [],
+            min_education_level: input.educationLevel ? (educationMap[input.educationLevel] || null) : null,
+            required_skills: input.requiredSkills ? [input.requiredSkills] : [],
+            requirements: input.requiredSkills || null,
+            work_schedule: input.workSchedule,
+            location,
+            openings: input.positionsCount ? parseInt(input.positionsCount) : 1,
+            status: 'open',
+            published_at: new Date().toISOString(),
+            agency_id: agency.id,
+            gender_preference: input.genderPreference ?? null,
+            urgency: input.urgency ?? null,
+          });
+      }
 
       // Upload signed contract PDFs if provided
       if (input.contractSigned && input.contractFiles && input.contractFiles.length > 0) {

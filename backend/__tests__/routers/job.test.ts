@@ -173,19 +173,43 @@ describe("job router", () => {
     });
 
     it("throws on DB insert error", async () => {
+      // createForCompany makes three .single() calls in order: resolve the
+      // company's agency_id, look up its city/state for the default location,
+      // then the insert. Only the last one should fail here — a blanket
+      // rejection would trip the "company has no agency" guard first and we'd
+      // be asserting the wrong error.
       const mockChain = {
         select: vi.fn().mockReturnThis(),
         insert: vi.fn().mockReturnThis(),
         eq: vi.fn().mockReturnThis(),
-        single: vi.fn().mockResolvedValue({
-          data: null,
-          error: { message: "duplicate key" },
-        }),
+        single: vi
+          .fn()
+          .mockResolvedValueOnce({ data: { agency_id: MOCK_IDS.agency }, error: null })
+          .mockResolvedValueOnce({ data: { city: "Ipatinga", state: "MG" }, error: null })
+          .mockResolvedValue({ data: null, error: { message: "duplicate key" } }),
       };
       vi.mocked(supabaseAdmin.from).mockReturnValue(mockChain as any);
 
       const caller = createCaller(adminContext());
       await expect(caller.createForCompany(validInput)).rejects.toThrow("duplicate key");
+    });
+
+    it("rejects when the company has no agency", async () => {
+      // agency_id is NOT NULL on jobs; without this guard the insert fails with
+      // a raw Postgres 23502 that the UI surfaces verbatim. One prod company
+      // (Moretti Educação Profissional Eireli) is in exactly this state.
+      const mockChain = {
+        select: vi.fn().mockReturnThis(),
+        insert: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+        single: vi.fn().mockResolvedValue({ data: { agency_id: null }, error: null }),
+      };
+      vi.mocked(supabaseAdmin.from).mockReturnValue(mockChain as any);
+
+      const caller = createCaller(adminContext());
+      await expect(caller.createForCompany(validInput)).rejects.toThrow(
+        /não está vinculada a nenhuma agência/,
+      );
     });
   });
 

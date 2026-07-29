@@ -3194,6 +3194,15 @@ export default function CompanyJobFlow() {
             <h2 className="text-2xl font-bold text-[#0A2342]">{companyName}</h2>
             <p className="text-sm text-slate-600">Vagas e candidatos compatíveis</p>
           </div>
+          {/* Creating a vaga used to live only behind a dashed tab further down
+              the page, which is why the team logged in as the company instead. */}
+          <Button
+            onClick={() => setIsCreateDialogOpen(true)}
+            className="ml-auto bg-[#FF6B35] hover:bg-[#FF6B35]/90 text-white"
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Nova Vaga
+          </Button>
         </div>
       </div>
 

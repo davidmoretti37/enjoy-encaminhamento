@@ -114,11 +114,30 @@ export function AgencyScheduleModal({
     { date: selectedDate ? format(selectedDate, "yyyy-MM-dd") : "", agencyId: currentAgency?.id },
     { enabled: open && !!selectedDate, staleTime: 0 },
   );
-  const timeOptions = useMemo(
-    () => (slots || []).filter((s: any) => !s.blocked).map((s: any) => format(new Date(s.start), "HH:mm")),
+  // Report #11 drove this list purely from configured availability, which meant
+  // an agency that had never opened "Configurações da Agenda" got an EMPTY
+  // picker and could not schedule anyone — the scheduler hard-blocked and the
+  // whole hiring funnel stopped behind it. Availability now *refines* the list;
+  // when none is configured we fall back to the standard business-hours grid so
+  // the flow is never blocked, and surface a non-blocking hint instead.
+  const configuredTimes = useMemo(
+    () =>
+      Array.from(
+        new Set<string>(
+          (slots || [])
+            .filter((s: any) => !s.blocked)
+            .map((s: any) => format(new Date(s.start), "HH:mm") as string),
+        ),
+      ),
     [slots],
   );
-  const noSlots = !!selectedDate && slots !== undefined && timeOptions.length === 0;
+  const usingFallbackTimes =
+    !!selectedDate && slots !== undefined && configuredTimes.length === 0;
+  const timeOptions = useMemo(
+    () => (usingFallbackTimes ? getAvailableTimeOptions(selectedDate) : configuredTimes),
+    [usingFallbackTimes, selectedDate, configuredTimes],
+  );
+  const noSlots = usingFallbackTimes;
 
   // Keep the chosen start time valid: when availability loads (or the date
   // changes), snap `time` to the first configured slot if the current one isn't
@@ -170,10 +189,6 @@ export function AgencyScheduleModal({
   const handleSubmit = () => {
     if (!selectedDate) {
       toast.error("Selecione uma data");
-      return;
-    }
-    if (timeOptions.length === 0) {
-      toast.error("Nenhum horário disponível nesta data. Configure em Configurações da Agenda.");
       return;
     }
 
@@ -346,7 +361,7 @@ export function AgencyScheduleModal({
             </Popover>
 
             {!showPerCandidate && (
-              <Select value={time} onValueChange={setTime} disabled={timeOptions.length === 0}>
+              <Select value={time} onValueChange={setTime}>
                 <SelectTrigger className="h-9">
                   <Clock className="mr-1.5 h-3.5 w-3.5 text-muted-foreground" />
                   <SelectValue placeholder={selectedDate ? "Sem horários" : "Escolha a data"} />
@@ -379,7 +394,7 @@ export function AgencyScheduleModal({
                 <span className="text-xs text-slate-400">Inicio: </span>
               </div>
               {/* Start time selector */}
-              <Select value={time} onValueChange={setTime} disabled={timeOptions.length === 0}>
+              <Select value={time} onValueChange={setTime}>
                 <SelectTrigger className="h-8 text-xs">
                   <Clock className="mr-1.5 h-3 w-3 text-muted-foreground" />
                   <span className="text-muted-foreground mr-1">Inicio:</span>
@@ -419,10 +434,12 @@ export function AgencyScheduleModal({
             </div>
           )}
 
-          {/* Report #11: guide the team when the picked date has no configured slots */}
+          {/* Informational only — scheduling still works on the default grid.
+              Previously this state blocked the whole flow. */}
           {noSlots && (
             <p className="text-xs text-amber-600">
-              Nenhum horário disponível nesta data. Configure os horários em Agenda → Configurações da Agenda.
+              Sua agenda ainda não foi configurada — mostrando os horários padrão (08:00–19:00).
+              Para restringir aos seus horários, acesse Agenda → Configurações da Agenda.
             </p>
           )}
 
@@ -483,7 +500,7 @@ export function AgencyScheduleModal({
           <Button
             size="sm"
             onClick={handleSubmit}
-            disabled={scheduleMutation.isPending || !selectedDate || timeOptions.length === 0}
+            disabled={scheduleMutation.isPending || !selectedDate}
           >
             {scheduleMutation.isPending ? (
               <Loader2 className="h-4 w-4 animate-spin" />
