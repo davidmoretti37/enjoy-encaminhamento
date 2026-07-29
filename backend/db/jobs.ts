@@ -4,6 +4,7 @@ import type { Job, InsertJob } from "./types";
 import { generateJobSummary } from "../services/ai/summarizer";
 import { generateJobEmbedding } from "../services/matching";
 import { parseCompensation } from "../lib/parseCompensation";
+import { extractSkillTags } from '../services/matching/skillTags';
 
 // Cast to any to work around TS 5.9 overload resolution issues with Supabase client
 const db = supabaseAdmin as any;
@@ -142,6 +143,8 @@ export async function createJobForOnboarding(
     benefits?: string[];
     min_education_level?: "fundamental" | "medio" | "superior" | "pos-graduacao" | null;
     required_skills?: string[];
+    /** Derived by the caller via extractSkillTags(); see migration 135. */
+    skill_tags?: string[];
     requirements?: string;
     work_schedule?: string;
     location?: string;
@@ -170,6 +173,9 @@ export async function createJobForOnboarding(
       benefits: data.benefits,
       min_education_level: data.min_education_level,
       required_skills: data.required_skills,
+      // Canonical tags for matching (migration 135). Derived here so a vaga is
+      // matchable the moment it is saved, without waiting for a backfill.
+      skill_tags: extractSkillTags(data.required_skills || []),
       requirements: data.requirements,
       work_schedule: data.work_schedule,
       location: data.location,
@@ -291,6 +297,7 @@ export async function createJobFromCompanyForm(
     benefits: formData.benefits || [],
     min_education_level: minEducation,
     required_skills: formData.required_skills ? [formData.required_skills] : [],
+    skill_tags: extractSkillTags(formData.required_skills ? [formData.required_skills] : []),
     requirements: formData.required_skills || null,
     work_schedule: formData.work_schedule,
     location,

@@ -3,6 +3,7 @@ import { supabase, supabaseAdmin } from "../supabase";
 import type { Candidate, InsertCandidate } from "./types";
 import { generateCandidateSummary } from "../services/ai/summarizer";
 import { generateCandidateEmbedding } from "../services/matching";
+import { extractSkillTags } from '../services/matching/skillTags';
 
 // Cast to any to work around TS 5.9 overload resolution issues with Supabase client
 const db = supabaseAdmin as any;
@@ -378,7 +379,13 @@ export async function bulkCreateCandidates(
       if (candidate.currently_studying !== undefined) candidateData.currently_studying = candidate.currently_studying;
       if (candidate.institution) candidateData.institution = candidate.institution;
       if (candidate.course) candidateData.course = candidate.course;
-      if (candidate.skills) candidateData.skills = candidate.skills;
+      if (candidate.skills) {
+        candidateData.skills = candidate.skills;
+        // Canonical tags for matching (migration 135). Candidates type skills as
+        // free text, often several in one box, and scoreSkills compares whole
+        // strings — so the normalised form is what makes a match possible.
+        candidateData.skill_tags = extractSkillTags(candidate.skills);
+      }
       if (candidate.languages) candidateData.languages = candidate.languages;
       if (candidate.has_work_experience !== undefined) candidateData.has_work_experience = candidate.has_work_experience;
       if (candidate.profile_summary) candidateData.profile_summary = candidate.profile_summary;

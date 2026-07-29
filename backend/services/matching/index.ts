@@ -130,6 +130,7 @@ async function retrieveCandidatesBroad(
     return fallbackData.map((c: any) => ({
       ...c,
       skills: Array.isArray(c.skills) ? c.skills : [],
+      skill_tags: Array.isArray(c.skill_tags) ? c.skill_tags : [],
       languages: Array.isArray(c.languages) ? c.languages : [],
       experience: Array.isArray(c.experience) ? c.experience : [],
       semantic_similarity: 0.5, // Default similarity for fallback
@@ -145,6 +146,7 @@ async function retrieveCandidatesBroad(
     state: c.state,
     education_level: c.education_level,
     skills: Array.isArray(c.skills) ? c.skills : [],
+    skill_tags: Array.isArray(c.skill_tags) ? c.skill_tags : [],
     languages: Array.isArray(c.languages) ? c.languages : [],
     experience: Array.isArray(c.experience) ? c.experience : [],
     summary: c.summary,
@@ -281,6 +283,9 @@ export async function runMatchingPipeline(
     salary_max: job.salary_max,
     min_education_level: job.min_education_level,
     required_skills: Array.isArray(job.required_skills) ? job.required_skills : [],
+    // Canonical tags (migration 135). scoreSkills prefers these; without them
+    // it falls back to comparing whole free-text entries, which scored 1.5/100.
+    skill_tags: Array.isArray(job.skill_tags) ? job.skill_tags : [],
     required_languages: Array.isArray(job.required_languages) ? job.required_languages : [],
     min_age: job.min_age,
     max_age: job.max_age,
@@ -335,6 +340,7 @@ export async function runMatchingPipeline(
         const formattedApplicants = missingApplicants.map((c: any) => ({
           ...c,
           skills: Array.isArray(c.skills) ? c.skills : [],
+          skill_tags: Array.isArray(c.skill_tags) ? c.skill_tags : [],
           languages: Array.isArray(c.languages) ? c.languages : [],
           experience: Array.isArray(c.experience) ? c.experience : [],
           semantic_similarity: 0.5, // Default similarity for applicants not in vector search

@@ -18,6 +18,8 @@ export interface CandidateData {
   state?: string;
   education_level?: string;
   skills?: string[];
+  /** Canonical tags derived by skillTags.ts (migration 135). Preferred over `skills`. */
+  skill_tags?: string[];
   languages?: string[];
   experience?: any[];
   summary?: string;
@@ -49,6 +51,8 @@ export interface JobData {
   salary_max?: number;
   min_education_level?: string;
   required_skills?: string[];
+  /** Canonical tags derived by skillTags.ts (migration 135). Preferred over `required_skills`. */
+  skill_tags?: string[];
   required_languages?: string[];
   min_age?: number;
   max_age?: number;
@@ -212,8 +216,18 @@ export function scoreSemanticSimilarity(candidate: CandidateData): number {
  * Score skills match with partial credit for related skills
  */
 export async function scoreSkills(candidate: CandidateData, job: JobData): Promise<number> {
-  const requiredSkills = (job.required_skills || []).map(normalizeSkill);
-  const candidateSkills = (candidate.skills || []).map(normalizeSkill);
+  // Prefer the canonical tags. The raw arrays are free text typed by humans —
+  // "Comunicativa", "Boa comunicação" and "Comunicação" are three different
+  // strings for one skill, and a job requirement is often a whole sentence, so
+  // comparing them directly scored ~1.5/100. skill_tags is already canonical on
+  // both sides, so exact comparison finally means something. Falls back to the
+  // raw arrays for any row the backfill has not reached.
+  const requiredSkills = (
+    job.skill_tags?.length ? job.skill_tags : (job.required_skills || [])
+  ).map(normalizeSkill);
+  const candidateSkills = (
+    candidate.skill_tags?.length ? candidate.skill_tags : (candidate.skills || [])
+  ).map(normalizeSkill);
 
   if (requiredSkills.length === 0) return 100; // No requirements = full score
   if (candidateSkills.length === 0) return 30; // No skills listed = minimum score

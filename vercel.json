@@ -4,14 +4,27 @@
   "framework": "vite",
   "functions": {
     "api/trpc.ts": {
-      "includeFiles": "backend/_bundled.mjs"
+      "includeFiles": "backend/_bundled.mjs",
+      "maxDuration": 300
     }
   },
   "rewrites": [
-    { "source": "/api/webhooks/autentique", "destination": "/api/webhooks/autentique" },
-    { "source": "/api/trpc/:path*", "destination": "/api/trpc" },
-    { "source": "/trpc/:path*", "destination": "/api/trpc" },
-    { "source": "/((?!api/).*)", "destination": "/" }
+    {
+      "source": "/api/webhooks/autentique",
+      "destination": "/api/webhooks/autentique"
+    },
+    {
+      "source": "/api/trpc/:path*",
+      "destination": "/api/trpc"
+    },
+    {
+      "source": "/trpc/:path*",
+      "destination": "/api/trpc"
+    },
+    {
+      "source": "/((?!api/).*)",
+      "destination": "/"
+    }
   ],
   "crons": [
     {

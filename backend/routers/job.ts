@@ -125,7 +125,7 @@ export const jobRouter = router({
 
       // Verify job exists
       const { data: job } = await supabaseAdmin
-        .from('jobs').select('id, company_id, agency_id').eq('id', jobId).single();
+        .from('jobs').select('id, company_id, agency_id, required_skills').eq('id', jobId).single();
       if (!job) throw new TRPCError({ code: 'NOT_FOUND', message: 'Vaga não encontrada' });
 
       // Agency users can only edit jobs belonging to their agency
@@ -148,6 +148,13 @@ export const jobRouter = router({
       if (fields.requirements !== undefined) {
         updateData.requirements = fields.requirements || null;
         updateData.specific_requirements = fields.requirements || null;
+        // Keep the matcher in sync with what was just typed. Without this, an
+        // edited vaga keeps matching against whatever it was created with.
+        const { deriveJobSkillTags } = await import('../services/matching/skillTags');
+        updateData.skill_tags = deriveJobSkillTags(
+          (job as any).required_skills,
+          fields.requirements,
+        );
       }
       if (fields.openings !== undefined) updateData.openings = fields.openings;
       if (fields.status !== undefined) updateData.status = fields.status;
