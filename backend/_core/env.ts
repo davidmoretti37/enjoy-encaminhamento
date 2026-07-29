@@ -56,7 +56,10 @@ export const ENV = {
 
   // LLM / OpenRouter
   openrouterApiKey: optionalEnv("OPENROUTER_API_KEY"),
-  llmModel: optionalEnv("LLM_MODEL", "anthropic/claude-haiku-4-5-20250414"),
+  // NOTE: "anthropic/claude-haiku-4-5-20250414" was the previous default and is
+  // NOT a real OpenRouter model id (verified against /api/v1/models) — every
+  // request using it failed. The real id uses dots and carries no date suffix.
+  llmModel: optionalEnv("LLM_MODEL", "anthropic/claude-haiku-4.5"),
 
   // Legacy Forge API (internal services)
   forgeApiUrl: optionalEnv("BUILT_IN_FORGE_API_URL"),

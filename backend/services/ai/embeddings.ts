@@ -1,119 +1,54 @@
-// OpenRouter Embeddings Client
-// Using OpenAI text-embedding-3-small via OpenRouter
-
-const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/embeddings';
-const EMBEDDING_MODEL = 'openai/text-embedding-3-small';
+// Embeddings — CURRENTLY UNAVAILABLE, BY DESIGN.
+//
+// This module used to POST to https://openrouter.ai/api/v1/embeddings with the
+// model 'openai/text-embedding-3-small'. Both are wrong:
+//   * OpenRouter hosts ZERO embedding models. Verified against
+//     https://openrouter.ai/api/v1/models — there is no model whose output
+//     modality is `embedding`, and 'openai/text-embedding-3-small' is not in the
+//     catalogue.
+//   * So every call failed, which is why production has 0 embeddings on 274
+//     candidates and 0 on 40 jobs, and why vector matching never returned a
+//     single row since launch.
+//
+// Rather than keep retrying an endpoint that cannot work, these functions now
+// return null immediately and say why. Nothing is lost: candidate matching was
+// moved to Postgres full-text ranking (migrations 130-132), which uses the data
+// ANEC actually has — 269/274 candidates have skills, 274 have education,
+// 270 have a city — costs nothing per query, and needs no vendor at all.
+//
+// TO RE-ENABLE: embeddings need a provider that offers them (Voyage, Cohere,
+// OpenAI direct, or a local model). Point EMBEDDING_PROVIDER_URL at it and
+// restore the fetch. `match_candidates_hybrid` already blends vector scores
+// back in automatically the moment rows appear in candidates.embedding — no
+// further change required.
+const EMBEDDING_MODEL = 'unavailable';
 const EMBEDDING_DIMENSIONS = 1536;
 
-interface EmbeddingResponse {
-  object: string;
-  data: {
-    object: string;
-    index: number;
-    embedding: number[];
-  }[];
-  model: string;
-  usage: {
-    prompt_tokens: number;
-    total_tokens: number;
-  };
+/** True when a real embeddings provider is configured. Currently never. */
+export function embeddingsAvailable(): boolean {
+  return false;
 }
 
-export async function generateEmbedding(text: string): Promise<number[] | null> {
-  const apiKey = process.env.OPENROUTER_API_KEY;
-
-  if (!apiKey) {
-    console.warn('OPENROUTER_API_KEY not configured, skipping embedding generation');
-    return null;
+let warnedOnce = false;
+function warnUnavailable(context: string): null {
+  if (!warnedOnce) {
+    warnedOnce = true;
+    console.warn(
+      `[ai/embeddings] Embeddings are not available (${context}). OpenRouter hosts no `
+      + `embedding models. Matching uses Postgres full-text ranking instead — see `
+      + `migrations 130-132. This is expected, not an error.`,
+    );
   }
+  return null;
+}
 
-  if (!text || text.trim().length === 0) {
-    console.warn('Empty text provided for embedding');
-    return null;
-  }
-
-  try {
-    const response = await fetch(OPENROUTER_API_URL, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-        'HTTP-Referer': process.env.APP_URL || 'http://localhost:5001',
-        'X-Title': 'Recruitment Platform',
-      },
-      body: JSON.stringify({
-        model: EMBEDDING_MODEL,
-        input: text.slice(0, 8000),
-      }),
-    });
-
-    if (!response.ok) {
-      const error = await response.text();
-      console.error('OpenRouter Embeddings API error:', error);
-      throw new Error(`OpenRouter API error: ${response.status}`);
-    }
-
-    const data: EmbeddingResponse = await response.json();
-    return data.data[0]?.embedding || null;
-  } catch (error) {
-    console.error('Failed to generate embedding:', error);
-    return null;
-  }
+export async function generateEmbedding(_text: string): Promise<number[] | null> {
+  return warnUnavailable('generateEmbedding');
 }
 
 export async function generateEmbeddings(texts: string[]): Promise<(number[] | null)[]> {
-  const apiKey = process.env.OPENROUTER_API_KEY;
-
-  if (!apiKey) {
-    console.warn('OPENROUTER_API_KEY not configured, skipping batch embedding generation');
-    return texts.map(() => null);
-  }
-
-  const validTexts: { text: string; originalIndex: number }[] = [];
-  texts.forEach((text, index) => {
-    if (text && text.trim().length > 0) {
-      validTexts.push({ text: text.slice(0, 8000), originalIndex: index });
-    }
-  });
-
-  if (validTexts.length === 0) {
-    return texts.map(() => null);
-  }
-
-  try {
-    const response = await fetch(OPENROUTER_API_URL, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-        'HTTP-Referer': process.env.APP_URL || 'http://localhost:5001',
-        'X-Title': 'Recruitment Platform',
-      },
-      body: JSON.stringify({
-        model: EMBEDDING_MODEL,
-        input: validTexts.map(v => v.text),
-      }),
-    });
-
-    if (!response.ok) {
-      const error = await response.text();
-      console.error('OpenRouter Embeddings API error:', error);
-      throw new Error(`OpenRouter API error: ${response.status}`);
-    }
-
-    const data: EmbeddingResponse = await response.json();
-
-    const results: (number[] | null)[] = texts.map(() => null);
-    data.data.forEach((item, i) => {
-      const originalIndex = validTexts[i].originalIndex;
-      results[originalIndex] = item.embedding;
-    });
-
-    return results;
-  } catch (error) {
-    console.error('Failed to generate batch embeddings:', error);
-    return texts.map(() => null);
-  }
+  warnUnavailable('generateEmbeddings');
+  return texts.map(() => null);
 }
 
 export function formatEmbeddingForPostgres(embedding: number[]): string {

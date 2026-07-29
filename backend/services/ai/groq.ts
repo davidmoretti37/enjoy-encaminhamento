@@ -2,7 +2,8 @@
 // Using Llama 3.1 70B through OpenRouter
 
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
-const GROQ_MODEL = process.env.RERANKING_MODEL || process.env.LLM_MODEL || 'meta-llama/llama-3.1-70b-instruct';
+// Fallback aligned with ENV.llmModel. Both are verified-real OpenRouter ids.
+const GROQ_MODEL = process.env.RERANKING_MODEL || process.env.LLM_MODEL || 'anthropic/claude-haiku-4.5';
 
 interface Message {
   role: 'system' | 'user' | 'assistant';
@@ -81,7 +82,14 @@ export async function generateWithGroq(
       return data.choices[0]?.message?.content || '';
     } catch (error) {
       if (attempt === MAX_RETRIES - 1) {
-        console.error('Failed to generate with OpenRouter:', error);
+        // Returning '' here is why this failed silently for five months: every
+        // caller does `if (summary)` and treats empty as "nothing to add", so a
+        // dead key, an invalid model id and a network error all looked identical
+        // to success-with-no-content. Log loudly enough to be findable.
+        console.error(
+          `[ai/groq] LLM call FAILED after ${MAX_RETRIES} attempts (model=${GROQ_MODEL}). `
+          + `Callers will see an empty result and silently skip. Cause:`, error,
+        );
         return '';
       }
     }

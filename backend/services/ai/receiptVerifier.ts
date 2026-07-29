@@ -7,7 +7,10 @@ import { supabaseAdmin } from "../../supabase";
 const sb = supabaseAdmin as any;
 
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
-const VISION_MODEL = 'google/gemini-2.0-flash-001';
+// 'google/gemini-2.0-flash-001' does not exist on OpenRouter (verified against
+// /api/v1/models), so receipt verification failed on every call. Overridable
+// via VISION_MODEL so the model can change without a deploy.
+const VISION_MODEL = process.env.VISION_MODEL || 'google/gemini-3.5-flash-lite';
 
 export async function verifyReceiptWithAI(
   paymentId: string,
