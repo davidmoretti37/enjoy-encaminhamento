@@ -13,12 +13,17 @@
 // já mandei para o processo seletivo."
 //
 // So this shows both: everyone who applied, and how far each one has got.
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Users, MapPin, GraduationCap, ChevronDown, ChevronUp } from "lucide-react";
+import { CandidateCardModal } from "@/components/candidate-card/CandidateCard";
+import CandidateDocumentsModal from "@/components/CandidateDocumentsModal";
+import {
+  Users, MapPin, GraduationCap, ChevronDown, ChevronUp, FileText, Loader2,
+} from "lucide-react";
 
 // Mirrors the `application_status` values actually present in production.
 const STATUS_META: Record<string, { label: string; className: string; order: number }> = {
@@ -40,18 +45,58 @@ const EDUCATION_LABELS: Record<string, string> = {
   "pos-graduacao": "Pós-graduação",
 };
 
-export default function JobApplicantsList({
-  jobId,
-  onOpenCandidate,
-}: {
-  jobId: string;
-  onOpenCandidate?: (candidate: any) => void;
-}) {
+export default function JobApplicantsList({ jobId }: { jobId: string }) {
   const [expanded, setExpanded] = useState(false);
+  // Opening a candidate needs the FULL row. The applications query only joins a
+  // slice of the candidate (no PDP answers, no summary, no experience), which is
+  // enough for the list but not for the profile card.
+  const [openCandidateId, setOpenCandidateId] = useState<string | null>(null);
+  const [docsCandidate, setDocsCandidate] = useState<{ id: string; name: string } | null>(null);
+
   const { data: applications, isLoading } = trpc.application.getByJob.useQuery(
     { jobId },
     { enabled: !!jobId },
   );
+
+  // candidate.getById is role-gated server-side: admin passes, agency only for
+  // candidates inside its own agency. Same authorisation the management screen
+  // relies on, so opening a profile from here grants nothing extra.
+  const {
+    data: fullCandidate,
+    isLoading: isCandidateLoading,
+    error: candidateError,
+  } = trpc.candidate.getById.useQuery(
+    { id: openCandidateId || "" },
+    { enabled: !!openCandidateId, retry: false },
+  );
+
+  // A candidate can be unreachable (removed, or belonging to another agency).
+  // Without this the overlay would vanish and the click would look broken.
+  useEffect(() => {
+    if (candidateError) {
+      toast.error(
+        candidateError.data?.code === "FORBIDDEN"
+          ? "Este candidato não pertence à sua agência."
+          : "Não foi possível abrir o perfil deste candidato.",
+      );
+      setOpenCandidateId(null);
+    }
+  }, [candidateError]);
+
+  const pdfMutation = trpc.candidate.generateProfilePdf.useMutation({
+    onSuccess: (data: any) => {
+      const byteString = atob(data.base64);
+      const bytes = new Uint8Array(byteString.length);
+      for (let i = 0; i < byteString.length; i++) bytes[i] = byteString.charCodeAt(i);
+      const url = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = data.filename;
+      a.click();
+      URL.revokeObjectURL(url);
+    },
+    onError: (error: any) => toast.error(error.message || "Erro ao gerar PDF"),
+  });
 
   // Active candidatures first (contratado -> em processo -> candidatou-se), so
   // the people who still need a decision are at the top rather than buried
@@ -127,10 +172,16 @@ export default function JobApplicantsList({
               return (
                 <div
                   key={app.id}
-                  className={`flex items-center justify-between gap-3 rounded-lg border p-3 transition-colors ${
-                    onOpenCandidate ? "cursor-pointer hover:border-orange-300 hover:bg-orange-50/40" : ""
-                  }`}
-                  onClick={() => onOpenCandidate?.(c)}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => setOpenCandidateId(c.id)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      setOpenCandidateId(c.id);
+                    }
+                  }}
+                  className="flex cursor-pointer items-center justify-between gap-3 rounded-lg border p-3 text-left transition-colors hover:border-orange-300 hover:bg-orange-50/40 focus:outline-none focus:ring-2 focus:ring-orange-300"
                 >
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium text-gray-900">
@@ -156,13 +207,69 @@ export default function JobApplicantsList({
                       )}
                     </div>
                   </div>
-                  <Badge variant="outline" className={`shrink-0 text-xs ${meta.className}`}>
-                    {meta.label}
-                  </Badge>
+                  <div className="flex shrink-0 items-center gap-2">
+                    {/* Documents are reachable without opening the profile first,
+                        the same pair of actions the management screen offers. */}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 px-2 text-slate-500 hover:text-[#0A2342]"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setDocsCandidate({ id: c.id, name: c.full_name || "Candidato" });
+                      }}
+                    >
+                      <FileText className="mr-1 h-3.5 w-3.5" />
+                      Documentos
+                    </Button>
+                    <Badge variant="outline" className={`text-xs ${meta.className}`}>
+                      {meta.label}
+                    </Badge>
+                  </div>
                 </div>
               );
             })}
           </div>
+
+          {/* Full profile — the same modal the management screen opens, so DISC,
+              PDP answers, applications and the PDF download all behave
+              identically no matter where you clicked the candidate from. */}
+          {openCandidateId && fullCandidate && (
+            <CandidateCardModal
+              open
+              onClose={() => setOpenCandidateId(null)}
+              profile={{
+                ...(fullCandidate as any),
+                name: (fullCandidate as any).full_name || "Candidato",
+                education: (fullCandidate as any).education_level,
+                email: (fullCandidate as any).email || (fullCandidate as any).users?.email,
+                phone: (fullCandidate as any).phone,
+              }}
+              onDownloadPdf={() => pdfMutation.mutate({ candidateId: openCandidateId })}
+              isPdfLoading={pdfMutation.isPending}
+              showApplications
+              showQuestionnaire
+            />
+          )}
+
+          {/* The fetch is a round trip; without this the row looks dead on click. */}
+          {openCandidateId && isCandidateLoading && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20">
+              <div className="flex items-center gap-2 rounded-lg bg-white px-4 py-3 shadow-lg">
+                <Loader2 className="h-4 w-4 animate-spin text-[#FF6B35]" />
+                <span className="text-sm text-slate-600">Carregando perfil...</span>
+              </div>
+            </div>
+          )}
+
+          {docsCandidate && (
+            <CandidateDocumentsModal
+              candidateId={docsCandidate.id}
+              candidateName={docsCandidate.name}
+              open
+              onClose={() => setDocsCandidate(null)}
+            />
+          )}
 
           {sorted.length > VISIBLE && (
             <Button
