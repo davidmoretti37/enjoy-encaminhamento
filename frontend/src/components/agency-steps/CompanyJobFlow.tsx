@@ -20,6 +20,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import VerticalWorkflowStepper, { WorkflowStep } from '@/components/ui/VerticalWorkflowStepper';
 import CandidateGroupManagement from './CandidateGroupManagement';
+import JobApplicantsList from './JobApplicantsList';
 import { CompanyInterviewScheduleModal } from '@/components/CompanyInterviewScheduleModal';
 import {
   Briefcase,
@@ -2529,6 +2530,11 @@ function JobWithWorkflow({ job, contractTypeLabels, companyName }: { job: any; c
             viewport={{ once: true, margin: "-100px" }}
             transition={{ duration: 0.5, ease: "easeOut" }}
           >
+            {/* Real candidaturas first — the agent's suggestions come from the
+                whole talent pool and were previously the ONLY thing shown here,
+                so applicants to this specific vaga were invisible. */}
+            <JobApplicantsList jobId={job.id} />
+
             <MatchingStatusCard jobId={job.id} autoTrigger={shouldAutoTrigger} />
             <MatchedCandidatesList
               jobId={job.id}
