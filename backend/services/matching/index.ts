@@ -508,6 +508,7 @@ export async function saveMatchResults(
 
   // Upsert in batches
   const batchSize = 50;
+  let writeFailed = false;
   for (let i = 0; i < records.length; i += batchSize) {
     const batch = records.slice(i, i + batchSize);
     const { error } = await sb
@@ -518,7 +519,36 @@ export async function saveMatchResults(
 
     if (error) {
       console.error('Error saving match results:', error);
+      writeFailed = true;
     }
+  }
+
+  // Stamp the job even when `results` is empty. "Searched and found nobody" and
+  // "never searched" both leave zero rows in job_matches, and the UI has to be
+  // able to tell them apart — otherwise an empty result looks like a vaga nobody
+  // ever ran a search on. See migration 133.
+  //
+  // But NOT when a write failed. The upsert errors above are swallowed, so a
+  // pipeline that found 48 people and failed to persist them would otherwise be
+  // stamped as a completed search over an empty table — the UI would state, with
+  // a timestamp, that the vaga has no compatible candidates. Leaving the stamp
+  // off keeps the vaga in "never searched", which is wrong but recoverable: the
+  // operator can just search again.
+  if (writeFailed) {
+    console.error(
+      `[matching] Not stamping jobs.last_matched_at for ${jobId}: at least one `
+      + `job_matches upsert failed, so the saved results are incomplete.`,
+    );
+    return;
+  }
+
+  const { error: stampError } = await sb
+    .from('jobs')
+    .update({ last_matched_at: new Date().toISOString() })
+    .eq('id', jobId);
+
+  if (stampError) {
+    console.error('[matching] Failed to stamp jobs.last_matched_at:', stampError);
   }
 }
 

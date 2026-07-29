@@ -261,6 +261,21 @@ describe("job router", () => {
   });
 
   describe("triggerMatchingForAgency", () => {
+    // Earlier describes call vi.mocked(supabaseAdmin.from).mockReturnValue(...)
+    // with narrow per-test chains, and vi.clearAllMocks() clears recorded calls
+    // but NOT implementations — so those chains leak forwards. This procedure
+    // stamps jobs.matching_started_at before running the pipeline, so it needs a
+    // chain that supports update().eq().
+    beforeEach(() => {
+      const chain: any = {
+        select: vi.fn().mockReturnThis(),
+        update: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+        single: vi.fn().mockResolvedValue({ data: null, error: null }),
+      };
+      vi.mocked(supabaseAdmin.from).mockReturnValue(chain);
+    });
+
     it("allows admin to trigger matching", async () => {
       vi.mocked(db.getJobById).mockResolvedValue({ id: MOCK_IDS.job, agency_id: MOCK_IDS.agency } as any);
       const caller = createCaller(adminContext());

@@ -18,9 +18,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import VerticalWorkflowStepper, { WorkflowStep } from '@/components/ui/VerticalWorkflowStepper';
 import CandidateGroupManagement from './CandidateGroupManagement';
 import JobApplicantsList from './JobApplicantsList';
+import JobSearchPanel from './JobSearchPanel';
 import { CompanyInterviewScheduleModal } from '@/components/CompanyInterviewScheduleModal';
 import {
   Briefcase,
@@ -37,7 +37,6 @@ import {
   Upload,
   Bot,
   UserCheck,
-  AlertCircle,
   Plus,
   ChevronDown,
   ChevronUp,
@@ -49,7 +48,6 @@ import {
   ThumbsUp,
   SlidersHorizontal,
   UserPlus,
-  ArrowDown,
   Building2,
   User,
   Video,
@@ -863,201 +861,19 @@ function MatchedCandidatesList({ jobId, onGroupCreated }: { jobId: string; onGro
 }
 
 // Component to show AI matching status for a job
-function AgentMessage({ text, isLatest }: { text: string; isLatest: boolean }) {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 10, scale: 0.95 }}
-      animate={{ opacity: isLatest ? 1 : 0.6, y: 0, scale: 1 }}
-      transition={{ duration: 0.3, ease: "easeOut" }}
-      className="flex items-start gap-2.5"
-    >
-      <div className="w-6 h-6 rounded-full bg-gradient-to-br from-[#1B4D7A] to-[#FF6B35] flex items-center justify-center flex-shrink-0 mt-0.5">
-        <Bot className="h-3.5 w-3.5 text-white" />
-      </div>
-      <div className={`px-3.5 py-2 rounded-2xl rounded-tl-sm max-w-[85%] ${isLatest ? 'bg-slate-100 text-slate-800' : 'bg-slate-50 text-slate-500'}`}>
-        <p className="text-sm leading-relaxed">{text}</p>
-      </div>
-    </motion.div>
-  );
-}
-
-function TypingIndicator() {
-  return (
-    <div className="flex items-start gap-2.5">
-      <div className="w-6 h-6 rounded-full bg-gradient-to-br from-[#1B4D7A] to-[#FF6B35] flex items-center justify-center flex-shrink-0 mt-0.5">
-        <Bot className="h-3.5 w-3.5 text-white" />
-      </div>
-      <div className="px-4 py-2.5 rounded-2xl rounded-tl-sm bg-slate-100">
-        <div className="flex gap-1">
-          {[0, 1, 2].map((i) => (
-            <motion.div
-              key={i}
-              className="w-1.5 h-1.5 rounded-full bg-slate-400"
-              animate={{ y: [0, -4, 0] }}
-              transition={{ duration: 0.6, repeat: Infinity, delay: i * 0.15 }}
-            />
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function MatchingStatusCard({ jobId, autoTrigger }: { jobId: string; autoTrigger?: boolean }) {
-  const utils = trpc.useUtils();
-  const [hasTriggered, setHasTriggered] = useState(false);
-  const [isReSearching, setIsReSearching] = useState(false);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const { data: progress, isLoading } = trpc.job.getMatchingProgress.useQuery(
-    { jobId },
-    { refetchInterval: (query: any) => {
-      const status = query.state?.data?.status;
-      return (status === 'running' || status === 'pending' || status === 'not_started' || isReSearching) ? 1500 : false;
-    }}
-  );
-
-  const triggerMatchingMutation = trpc.job.triggerMatchingForAgency.useMutation({
-    onSuccess: () => {
-      utils.job.getMatchingProgress.invalidate({ jobId });
-      utils.job.getMatchesForJob.invalidate({ jobId });
-    },
-  });
-
-  // Auto-trigger matching when autoTrigger is set and no search is running/completed
-  useEffect(() => {
-    if (autoTrigger && !hasTriggered && !isLoading) {
-      const shouldTrigger = !progress || progress.status === 'not_started';
-      if (shouldTrigger && !triggerMatchingMutation.isPending) {
-        setHasTriggered(true);
-        triggerMatchingMutation.mutate({ jobId });
-      } else if (!shouldTrigger) {
-        setHasTriggered(true);
-      }
-    }
-  }, [autoTrigger, hasTriggered, isLoading, progress, triggerMatchingMutation, jobId]);
-
-  // Auto-scroll to bottom when new messages arrive
-  const messages = (progress as any)?.messages || [];
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages.length]);
-
-  const isRunning = isReSearching || !progress || progress.status === 'not_started' || progress.status === 'running' || progress.status === 'pending';
-
-  // Stop re-searching state when progress shows completed after a re-search
-  useEffect(() => {
-    if (isReSearching && progress?.status === 'completed') {
-      setIsReSearching(false);
-    }
-  }, [isReSearching, progress?.status]);
-
-  // Loading / Running state with chat bubbles
-  if (isLoading || (autoTrigger && !hasTriggered) || isRunning) {
-    return (
-      <div className="flex flex-col gap-4 py-6 px-2">
-        <div className="flex items-center gap-3 mb-2">
-          <motion.div
-            animate={{ scale: [1, 1.08, 1] }}
-            transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-            className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#1B4D7A] to-[#FF6B35] flex items-center justify-center"
-          >
-            <Bot className="h-5 w-5 text-white" />
-          </motion.div>
-          <div>
-            <p className="text-sm font-semibold text-[#0A2342]">Agente de Recrutamento</p>
-            <p className="text-xs text-slate-400">Buscando candidatos...</p>
-          </div>
-        </div>
-
-        <div className="flex flex-col gap-3 max-h-[280px] overflow-y-auto">
-          {messages.map((msg: any, i: number) => (
-            <AgentMessage key={i} text={msg.text} isLatest={i === messages.length - 1} />
-          ))}
-          {progress?.status !== 'completed' && progress?.status !== 'failed' && <TypingIndicator />}
-          <div ref={messagesEndRef} />
-        </div>
-
-        {progress && progress.percentComplete > 0 && progress.status !== 'completed' && (
-          <div className="w-full max-w-sm mx-auto mt-2">
-            <div className="flex justify-between text-xs text-slate-500 mb-1.5">
-              <span>Progresso</span>
-              <span className="font-medium">{progress.percentComplete}%</span>
-            </div>
-            <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
-              <motion.div
-                className="h-full rounded-full"
-                style={{ background: 'linear-gradient(90deg, #1B4D7A, #FF6B35)' }}
-                initial={{ width: 0 }}
-                animate={{ width: `${progress.percentComplete}%` }}
-                transition={{ duration: 0.5, ease: "easeOut" }}
-              />
-            </div>
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  const statusConfig: Record<string, { bg: string; border: string; icon: React.ReactNode; text: string }> = {
-    completed: {
-      bg: 'bg-green-50',
-      border: 'border-green-200',
-      icon: <UserCheck className="h-5 w-5 text-green-500" />,
-      text: 'text-green-700'
-    },
-    failed: {
-      bg: 'bg-red-50',
-      border: 'border-red-200',
-      icon: <AlertCircle className="h-5 w-5 text-red-500" />,
-      text: 'text-red-700'
-    }
-  };
-
-  const config = statusConfig[progress.status] || statusConfig.completed;
-
-  // Completed or failed states
-  return (
-    <div className={`p-5 ${config.bg} rounded-xl border ${config.border}`}>
-      <div className="flex items-start gap-3">
-        {config.icon}
-        <div className="flex-1">
-          <p className={`text-sm font-medium ${config.text}`}>
-            {progress.status === 'completed' && `Busca concluída — ${progress.matchesFound} candidatos encontrados`}
-            {progress.status === 'failed' && 'Erro na busca de candidatos'}
-          </p>
-
-          {progress.status === 'completed' && progress.matchesFound > 0 && (
-            <p className="text-xs text-green-600 mt-1">
-              {progress.matchesFound} candidatos compatíveis identificados pela IA
-            </p>
-          )}
-
-          {progress.status === 'completed' && progress.matchesFound === 0 && (
-            <p className="text-xs text-gray-500 mt-1">
-              Nenhum candidato compatível encontrado no momento
-            </p>
-          )}
-
-          {(progress.status === 'completed' || progress.status === 'failed') && (
-            <Button
-              size="sm"
-              variant="outline"
-              className="mt-3"
-              onClick={() => {
-                setIsReSearching(true);
-                triggerMatchingMutation.mutate({ jobId });
-              }}
-              disabled={triggerMatchingMutation.isPending}
-            >
-              <Search className="h-4 w-4 mr-1.5" />
-              {triggerMatchingMutation.isPending ? 'Iniciando...' : 'Buscar novamente'}
-            </Button>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
+// AgentMessage / TypingIndicator / MatchingStatusCard were deleted here.
+//
+// MatchingStatusCard rendered a chat-bubble 'Buscando candidatos...' UI whose
+// running check was:
+//
+//   isRunning = isReSearching || !progress || status === 'not_started'
+//             || status === 'running' || status === 'pending'
+//
+// Treating 'not_started' as running meant a vaga that had never been searched
+// animated as though it were searching, forever — 25 of 32 active vagas. It
+// also auto-fired the pipeline via an autoTrigger prop. Both behaviours are
+// gone; see JobSearchPanel.tsx, which makes searching an explicit action and
+// reads saved results back from job_matches.
 
 // Document assignment section — agency selects which documents to send
 function DocumentAssignmentSection({
@@ -2104,7 +1920,6 @@ function HiringFinalizationActions({
 // Helper component to handle individual job workflow state
 function JobWithWorkflow({ job, contractTypeLabels, companyName }: { job: any; contractTypeLabels: Record<string, string>; companyName: string }) {
   const [hasCreatedGroup, setHasCreatedGroup] = useState(false);
-  const [shouldAutoTrigger, setShouldAutoTrigger] = useState(false);
 
   // Edit/delete state
   const [isEditOpen, setIsEditOpen] = useState(false);
@@ -2265,12 +2080,6 @@ function JobWithWorkflow({ job, contractTypeLabels, companyName }: { job: any; c
     }, 100);
   }, [job.id]);
 
-  // Handle step click - scroll to section
-  const handleStepClick = useCallback((stepId: string) => {
-    const el = document.getElementById(`${stepId}-${job.id}`);
-    el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }, [job.id]);
-
   // Check if batch has been sent/forwarded to company
   const currentBatch = batches?.[0];
   const isBatchSent = currentBatch?.status === 'sent' || currentBatch?.status === 'unlocked' || currentBatch?.status === 'forwarded' || currentBatch?.status === 'completed';
@@ -2322,67 +2131,36 @@ function JobWithWorkflow({ job, contractTypeLabels, companyName }: { job: any; c
     setIsCompanyInterviewModalOpen(true);
   }, []);
 
-  // Get workflow steps for this job
-  const getWorkflowSteps = (): WorkflowStep[] => {
-    const groupExists = hasCreatedGroup || hasBatches;
-
-    return [
-      {
-        id: 'job-details',
-        label: 'Detalhes da Vaga',
-        status: 'completed',
-        sectionId: `job-details-${job.id}`,
-      },
-      {
-        id: 'matched-candidates',
-        label: 'Buscar Candidatos',
-        status: groupExists ? 'completed' : 'current',
-        sectionId: `matched-candidates-${job.id}`,
-      },
-      {
-        id: 'group-management',
-        label: 'Gerenciar Grupo',
-        status: groupExists ? ((hasCompanyInterviews || isBatchSent || hasHiringProcess) ? 'completed' : 'current') : 'upcoming',
-        sectionId: `group-management-${job.id}`,
-      },
-      {
-        id: 'selection',
-        label: 'Entrevista Empresa',
-        status: hasHiringProcess ? 'completed' : ((hasCompanyInterviews || isBatchSent) ? 'current' : 'upcoming'),
-        sectionId: `selection-${job.id}`,
-      },
-      {
-        id: 'completion',
-        label: 'Finalização',
-        status: hasActiveContract ? 'completed' : (hasPendingContract ? 'current' : 'upcoming'),
-        sectionId: `completion-${job.id}`,
-      },
-    ];
-  };
-
   const statusConfig = jobStatusConfig[job.status] || jobStatusConfig.open;
   const showGroupManagement = hasCreatedGroup || hasBatches;
 
   return (
     <div>
       <div className="flex-1 min-w-0">
-        {/* Step 1: Job Details */}
-        <div id={`job-details-${job.id}`} className="scroll-mt-20 min-h-screen flex flex-col justify-start pt-4 pb-8">
-          <motion.div
-            initial={{ opacity: 0, y: 30 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, margin: "-100px" }}
-            transition={{ duration: 0.5, ease: "easeOut" }}
-          >
+        {/* Job details — a plain section at the top of the page, not "step 1".
+            It used to be min-h-screen, which pushed everything else below the
+            fold and turned one vaga into a five-screen scroll. */}
+        <div id={`job-details-${job.id}`} className="scroll-mt-20 pb-6">
+          <div>
             <Card className="overflow-hidden hover:shadow-lg transition-shadow w-full">
               <CardContent className="p-0">
                 <div className="p-6 pb-4">
                   <div className="flex items-start justify-between mb-4">
                     <div>
                       <h3 className="text-xl font-semibold text-gray-900 mb-1">{job.title}</h3>
-                      <Badge variant="secondary" className="bg-gray-100 text-gray-700 font-medium">
-                        {contractTypeLabels[job.contract_type] || job.contract_type}
-                      </Badge>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge variant="secondary" className="bg-gray-100 text-gray-700 font-medium">
+                          {contractTypeLabels[job.contract_type] || job.contract_type}
+                        </Badge>
+                        {/* Which client this vaga belongs to. Internal portal only —
+                            candidates still never see the company name. */}
+                        {companyName && (
+                          <span className="flex items-center gap-1 text-sm text-slate-500">
+                            <Building2 className="h-3.5 w-3.5" />
+                            {companyName}
+                          </span>
+                        )}
+                      </div>
                     </div>
                     <div className="flex items-center gap-2">
                       <Badge className={statusConfig.color}>
@@ -2497,55 +2275,28 @@ function JobWithWorkflow({ job, contractTypeLabels, companyName }: { job: any; c
                 </div>
               </CardContent>
             </Card>
-
-            {/* Scroll to next step button */}
-            <div className="flex justify-center mt-8">
-              <Button
-                onClick={() => {
-                  setShouldAutoTrigger(true);
-                  handleStepClick('matched-candidates');
-                }}
-                className="bg-gradient-to-r from-[#1B4D7A] to-[#FF6B35] hover:opacity-90 text-white px-6 py-3 rounded-xl shadow-lg shadow-[#FF6B35]/25 hover:shadow-[#FF6B35]/40 transition-all"
-                size="lg"
-              >
-                <Search className="h-5 w-5 mr-2" />
-                Buscar Candidatos
-                <motion.div
-                  animate={{ y: [0, 4, 0] }}
-                  transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
-                  className="ml-2"
-                >
-                  <ArrowDown className="h-4 w-4" />
-                </motion.div>
-              </Button>
-            </div>
-          </motion.div>
+          </div>
         </div>
 
-        {/* Step 2: Matched Candidates */}
-        <div id={`matched-candidates-${job.id}`} className="scroll-mt-20 min-h-screen flex flex-col justify-start pt-4 pb-8">
-          <motion.div
-            initial={{ opacity: 0, y: 30 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, margin: "-100px" }}
-            transition={{ duration: 0.5, ease: "easeOut" }}
-          >
-            {/* Real candidaturas first — the agent's suggestions come from the
-                whole talent pool and were previously the ONLY thing shown here,
-                so applicants to this specific vaga were invisible. */}
-            <JobApplicantsList jobId={job.id} />
+        {/* Who applied to THIS vaga — its own container, always visible, never
+            behind a search. This is the list the operator was looking for. */}
+        <div id={`matched-candidates-${job.id}`} className="scroll-mt-20 space-y-6 pb-6">
+          <JobApplicantsList jobId={job.id} />
 
-            <MatchingStatusCard jobId={job.id} autoTrigger={shouldAutoTrigger} />
+          {/* Searching the wider talent pool is a separate, deliberate action.
+              It no longer fires on open, and its saved results are read back
+              from job_matches instead of being recomputed. */}
+          <JobSearchPanel jobId={job.id}>
             <MatchedCandidatesList
               jobId={job.id}
               onGroupCreated={handleGroupCreated}
             />
-          </motion.div>
+          </JobSearchPanel>
         </div>
 
-        {/* Step 3: Group Management - only renders when group exists */}
+        {/* Group management — only renders when a group exists */}
         {showGroupManagement && (
-          <div id={`group-management-${job.id}`} className="scroll-mt-20 min-h-screen flex flex-col justify-center py-8">
+          <div id={`group-management-${job.id}`} className="scroll-mt-20 py-6">
             <motion.div
               initial={{ opacity: 0, y: 30 }}
               whileInView={{ opacity: 1, y: 0 }}
@@ -2570,7 +2321,7 @@ function JobWithWorkflow({ job, contractTypeLabels, companyName }: { job: any; c
 
         {/* Step 4: Entrevista com Empresa - after company interviews are scheduled */}
         {(hasCompanyInterviews || isBatchSent) && (
-          <div id={`selection-${job.id}`} className="scroll-mt-20 min-h-screen flex flex-col justify-center py-8">
+          <div id={`selection-${job.id}`} className="scroll-mt-20 py-6">
           <motion.div
             initial={{ opacity: 0, y: 30 }}
             whileInView={{ opacity: 1, y: 0 }}
@@ -2737,7 +2488,7 @@ function JobWithWorkflow({ job, contractTypeLabels, companyName }: { job: any; c
 
         {/* Step 5: Finalização - renders when hiring process exists */}
         {hasHiringProcess && (
-          <div id={`completion-${job.id}`} className="scroll-mt-20 min-h-screen flex flex-col justify-center py-8 pb-[20vh]">
+          <div id={`completion-${job.id}`} className="scroll-mt-20 py-6">
           <motion.div
             initial={{ opacity: 0, y: 30 }}
             whileInView={{ opacity: 1, y: 0 }}
@@ -2898,11 +2649,10 @@ function JobWithWorkflow({ job, contractTypeLabels, companyName }: { job: any; c
         )}
       </div>
 
-      {/* Vertical Workflow Stepper - fixed on the right side */}
-      <VerticalWorkflowStepper
-        steps={getWorkflowSteps()}
-        onStepClick={handleStepClick}
-      />
+      {/* The fixed right-hand VerticalWorkflowStepper used to live here. It was
+          removed with the funnel: a vaga is now one page, so a five-step
+          progress rail navigating between full-screen sections had nothing left
+          to navigate. */}
 
       {/* Edit Job Dialog */}
       <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>

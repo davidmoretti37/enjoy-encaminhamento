@@ -13,6 +13,12 @@ const supabaseAdmin = _supabaseAdmin as any;
 import { generateJobSummary } from "../services/ai/summarizer";
 import { generateJobEmbedding, findMatchingCandidates } from "../services/matching";
 
+// How long a started-but-unfinished search is believed to still be running.
+// The pipeline runs inline in the mutation, so a crash or a Vercel function
+// timeout leaves matching_started_at set with nothing to clear it. After this
+// window the job falls back to its saved state rather than spinning forever.
+const MATCHING_STALE_MS = 10 * 60 * 1000;
+
 /**
  * Assert the caller's agency owns the given job (via job.agency_id, falling back
  * to the job's company.agency_id). admin/super_admin bypass. Returns the job.
@@ -337,6 +343,13 @@ export const jobRouter = router({
       // Tenant guard: only run matching for a job the caller's agency owns.
       await assertAgencyOwnsJob(ctx, input.jobId);
 
+      // Mark the run as started BEFORE it begins, so a reload or a different
+      // serverless instance can still tell that a search is in flight.
+      await supabaseAdmin
+        .from('jobs')
+        .update({ matching_started_at: new Date().toISOString() })
+        .eq('id', input.jobId);
+
       try {
         // Import and run matching pipeline
         const { runMatchingPipeline, saveMatchResults } = await import('../services/matching/index');
@@ -355,6 +368,18 @@ export const jobRouter = router({
           code: 'INTERNAL_SERVER_ERROR',
           message: error.message || 'Erro ao iniciar busca de candidatos',
         });
+      } finally {
+        // Clear the in-flight marker however the run ended. The in-memory
+        // 'failed' entry is deleted after 60s, and without this the start stamp
+        // would outlive it and make a search that already crashed read as still
+        // running for the rest of the stale window. Same for a run whose results
+        // failed to persist, which deliberately leaves last_matched_at unset.
+        // A process that dies outright never reaches here — that is what
+        // MATCHING_STALE_MS is for.
+        await supabaseAdmin
+          .from('jobs')
+          .update({ matching_started_at: null })
+          .eq('id', input.jobId);
       }
     }),
 
@@ -419,31 +444,90 @@ export const jobRouter = router({
       const { getProgress } = await import('../services/matching/progress');
       const liveProgress = getProgress(input.jobId);
 
-      if (liveProgress) {
+      // ONLY an in-flight run short-circuits. A terminal in-memory entry lingers
+      // for 60s after completeProgress()/failProgress(), and it carries no match
+      // count — returning it verbatim made a search that had just found 48
+      // people report "found nobody" for a minute while the list below rendered
+      // all 48. Terminal states fall through so the counts come from the DB.
+      if (liveProgress && liveProgress.status === 'running') {
         return {
-          status: liveProgress.status as string,
+          status: 'running',
           matchesFound: 0,
           percentComplete: liveProgress.percentComplete,
           messages: liveProgress.messages,
+          lastSearchedAt: null as string | null,
         };
       }
 
-      // Check if matches exist for this job (pipeline already finished)
-      const { count, error } = await supabaseAdmin
-        .from('job_matches')
-        .select('*', { count: 'exact', head: true })
-        .eq('job_id', input.jobId);
+      // Three facts decide what the UI shows, and they are different questions:
+      //   * is a search in flight?  -> matching_started_at vs last_matched_at (134)
+      //   * WAS a search ever run?  -> jobs.last_matched_at (133)
+      //   * WHAT did it find?       -> count of job_matches rows
+      // Counting rows alone cannot distinguish "found nobody" from "never ran",
+      // which is why an unsearched vaga used to look like a broken search.
+      const [countRes, jobRes] = await Promise.all([
+        supabaseAdmin
+          .from('job_matches')
+          .select('*', { count: 'exact', head: true })
+          .eq('job_id', input.jobId),
+        supabaseAdmin
+          .from('jobs')
+          .select('last_matched_at, matching_started_at')
+          .eq('id', input.jobId)
+          .single(),
+      ]);
 
-      if (error) {
-        console.error('[Job.getMatchingProgress] Error:', error);
+      if (countRes.error) {
+        console.error('[Job.getMatchingProgress] count error:', countRes.error);
+      }
+      if (jobRes.error) {
+        console.error('[Job.getMatchingProgress] job error:', jobRes.error);
       }
 
-      if (count && count > 0) {
+      const count = countRes.count ?? 0;
+      const lastSearchedAt = (jobRes.data as any)?.last_matched_at ?? null;
+      const startedAt = (jobRes.data as any)?.matching_started_at ?? null;
+
+      // A run whose in-memory progress we cannot see — reloaded page, different
+      // serverless instance. Bounded by MATCHING_STALE_MS so a crashed run
+      // eventually reverts to its saved state instead of spinning forever.
+      if (
+        !liveProgress &&
+        startedAt &&
+        (!lastSearchedAt || new Date(startedAt) > new Date(lastSearchedAt)) &&
+        Date.now() - new Date(startedAt).getTime() < MATCHING_STALE_MS
+      ) {
+        return {
+          status: 'running',
+          matchesFound: count,
+          percentComplete: 0,
+          messages: [],
+          lastSearchedAt: lastSearchedAt as string | null,
+        };
+      }
+
+      // A failure must never read as "ran and found nobody". Both leave the
+      // count at whatever was already saved, so the status is the only signal
+      // the operator has that something actually broke.
+      if (liveProgress && liveProgress.status === 'failed') {
+        return {
+          status: 'failed',
+          matchesFound: count,
+          percentComplete: 100,
+          messages: liveProgress.messages,
+          lastSearchedAt: lastSearchedAt as string | null,
+        };
+      }
+
+      // Rows but no stamp = searched before migration 133 existed. Treat it as
+      // searched so historical work is not thrown away.
+      if (lastSearchedAt || count > 0) {
         return {
           status: 'completed',
           matchesFound: count,
           percentComplete: 100,
-          messages: [],
+          messages: liveProgress?.messages ?? [],
+          lastSearchedAt: lastSearchedAt as string | null,
         };
       }
 
@@ -452,6 +536,7 @@ export const jobRouter = router({
         matchesFound: 0,
         percentComplete: 0,
         messages: [],
+        lastSearchedAt: null as string | null,
       };
     }),
 
