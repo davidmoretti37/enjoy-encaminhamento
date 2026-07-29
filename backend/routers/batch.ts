@@ -302,12 +302,12 @@ export const batchRouter = router({
 
       // Get agency for current user
       const agency = await db.getAgencyForUserContext(ctx.user.id, ctx.user.role);
-      if (!agency) {
+      if (!agency && !isPlatformAdmin(ctx.user.role)) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Agency not found" });
       }
 
       // Verify agency owns this job
-      if (job.agency_id !== agency.id && ctx.user.role !== "admin") {
+      if (job.agency_id !== agency?.id && !isPlatformAdmin(ctx.user.role)) {
         throw new TRPCError({ code: "FORBIDDEN", message: "Not authorized to access this job" });
       }
 
@@ -377,7 +377,7 @@ export const batchRouter = router({
     }))
     .mutation(async ({ ctx, input }) => {
       const agency = await db.getAgencyForUserContext(ctx.user.id, ctx.user.role);
-      if (!agency) {
+      if (!agency && !isPlatformAdmin(ctx.user.role)) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Agency not found" });
       }
 
@@ -387,7 +387,7 @@ export const batchRouter = router({
         throw new TRPCError({ code: "NOT_FOUND", message: "Batch not found" });
       }
 
-      if (batch.agency_id !== agency.id && ctx.user.role !== "admin") {
+      if (batch.agency_id !== agency?.id && !isPlatformAdmin(ctx.user.role)) {
         throw new TRPCError({ code: "FORBIDDEN" });
       }
 
@@ -430,13 +430,13 @@ export const batchRouter = router({
     }))
     .mutation(async ({ ctx, input }) => {
       const agency = await db.getAgencyForUserContext(ctx.user.id, ctx.user.role);
-      if (!agency) {
+      if (!agency && !isPlatformAdmin(ctx.user.role)) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Agency not found" });
       }
 
       // Verify batch belongs to agency
       const batch = await batchDb.getBatchById(input.batchId);
-      if (!batch || (batch.agency_id !== agency.id && ctx.user.role !== "admin")) {
+      if (!batch || (batch.agency_id !== agency?.id && !isPlatformAdmin(ctx.user.role))) {
         throw new TRPCError({ code: "FORBIDDEN" });
       }
 
@@ -478,12 +478,12 @@ export const batchRouter = router({
     }))
     .mutation(async ({ ctx, input }) => {
       const agency = await db.getAgencyForUserContext(ctx.user.id, ctx.user.role);
-      if (!agency) {
+      if (!agency && !isPlatformAdmin(ctx.user.role)) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Agency not found" });
       }
 
       const batch = await batchDb.getBatchById(input.batchId);
-      if (!batch || (batch.agency_id !== agency.id && ctx.user.role !== "admin")) {
+      if (!batch || (batch.agency_id !== agency?.id && !isPlatformAdmin(ctx.user.role))) {
         throw new TRPCError({ code: "FORBIDDEN" });
       }
 
@@ -522,8 +522,14 @@ export const batchRouter = router({
     }).optional())
     .query(async ({ ctx, input }) => {
       const agency = await db.getAgencyForUserContext(ctx.user.id, ctx.user.role);
+      // Unlike the job-scoped endpoints, this one answers "which batches belong
+      // to THIS agency", so it genuinely needs an agency selected. Head office in
+      // all-agencies mode has no sensible answer here.
       if (!agency) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Agency not found" });
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Selecione uma agência para ver os lotes.",
+        });
       }
 
       const batches = await batchDb.getBatchesByAgencyId(agency.id, input?.status);
@@ -536,8 +542,14 @@ export const batchRouter = router({
   getAgencyBatchStats: agencyProcedure
     .query(async ({ ctx }) => {
       const agency = await db.getAgencyForUserContext(ctx.user.id, ctx.user.role);
+      // Unlike the job-scoped endpoints, this one answers "which batches belong
+      // to THIS agency", so it genuinely needs an agency selected. Head office in
+      // all-agencies mode has no sensible answer here.
       if (!agency) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Agency not found" });
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Selecione uma agência para ver os lotes.",
+        });
       }
 
       const stats = await batchDb.getAgencyBatchStats(agency.id);
@@ -554,12 +566,12 @@ export const batchRouter = router({
     }))
     .mutation(async ({ ctx, input }) => {
       const agency = await db.getAgencyForUserContext(ctx.user.id, ctx.user.role);
-      if (!agency) {
+      if (!agency && !isPlatformAdmin(ctx.user.role)) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Agency not found" });
       }
 
       const batch = await batchDb.getBatchById(input.batchId);
-      if (!batch || (batch.agency_id !== agency.id && ctx.user.role !== "admin")) {
+      if (!batch || (batch.agency_id !== agency?.id && !isPlatformAdmin(ctx.user.role))) {
         throw new TRPCError({ code: "FORBIDDEN" });
       }
 
@@ -579,7 +591,7 @@ export const batchRouter = router({
     }))
     .mutation(async ({ ctx, input }) => {
       const agency = await db.getAgencyForUserContext(ctx.user.id, ctx.user.role);
-      if (!agency) {
+      if (!agency && !isPlatformAdmin(ctx.user.role)) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Agency not found" });
       }
 
@@ -588,7 +600,7 @@ export const batchRouter = router({
         throw new TRPCError({ code: "NOT_FOUND", message: "Batch not found" });
       }
 
-      if (batch.agency_id !== agency.id && ctx.user.role !== "admin") {
+      if (batch.agency_id !== agency?.id && !isPlatformAdmin(ctx.user.role)) {
         throw new TRPCError({ code: "FORBIDDEN" });
       }
 
@@ -906,7 +918,7 @@ export const batchRouter = router({
       if (isPlatformAdmin(ctx.user.role)) {
         return await batchDb.getBatchesByJobId(input.jobId);
       }
-      if (!agency) {
+      if (!agency && !isPlatformAdmin(ctx.user.role)) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Agency not found" });
       }
       const batches = await batchDb.getBatchesByJobId(input.jobId);
