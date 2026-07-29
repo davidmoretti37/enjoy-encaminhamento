@@ -2281,7 +2281,7 @@ function JobWithWorkflow({ job, contractTypeLabels, companyName }: { job: any; c
         {/* Who applied to THIS vaga — its own container, always visible, never
             behind a search. This is the list the operator was looking for. */}
         <div id={`matched-candidates-${job.id}`} className="scroll-mt-20 space-y-6 pb-6">
-          <JobApplicantsList jobId={job.id} />
+          <JobApplicantsList jobId={job.id} onGroupCreated={handleGroupCreated} />
 
           {/* Searching the wider talent pool is a separate, deliberate action.
               It no longer fires on open, and its saved results are read back

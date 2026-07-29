@@ -17,6 +17,40 @@ import { notifyCandidateRejected, notifyCompany, notifyCandidate } from "../lib/
  * the loaded batch. agencyProcedure only checks role, so every agency endpoint
  * that takes a client batchId must call this before reading/mutating.
  */
+// Head office browsing in "all agencies" mode has NO agency context, and every
+// endpoint here treated that as an error and treated only "admin" (never
+// "super_admin") as privileged. The result: batch.getBatchesByJobId threw
+// "Agency not found", so the entire Gerenciar Grupo step was invisible to head
+// office, and creating a group from that view failed outright.
+// assertAgencyOwnsBatch already got this right; these helpers bring the rest of
+// the router in line with it and with job.ts's assertAgencyOwnsJob.
+function isPlatformAdmin(role: string | null | undefined): boolean {
+  return role === "admin" || role === "super_admin";
+}
+
+/**
+ * The agency a batch should be attributed to. Platform admins fall back to the
+ * job's own agency, which is the correct owner regardless of what they happen to
+ * have selected in the agency switcher.
+ */
+async function resolveActingAgencyId(ctx: any, job: any): Promise<string> {
+  const agency = await db.getAgencyForUserContext(ctx.user.id, ctx.user.role);
+  if (isPlatformAdmin(ctx.user.role)) {
+    const agencyId = job.agency_id || agency?.id;
+    if (!agencyId) {
+      throw new TRPCError({ code: "BAD_REQUEST", message: "Esta vaga não tem agência associada" });
+    }
+    return agencyId;
+  }
+  if (!agency) {
+    throw new TRPCError({ code: "NOT_FOUND", message: "Agency not found" });
+  }
+  if (job.agency_id !== agency.id) {
+    throw new TRPCError({ code: "FORBIDDEN", message: "Esta vaga não pertence à sua agência" });
+  }
+  return agency.id;
+}
+
 export async function assertAgencyOwnsBatch(ctx: any, batchId: string): Promise<any> {
   const batch = await batchDb.getBatchById(batchId);
   if (!batch) {
@@ -241,19 +275,12 @@ export const batchRouter = router({
         throw new TRPCError({ code: "NOT_FOUND", message: "Job not found" });
       }
 
-      const agency = await db.getAgencyForUserContext(ctx.user.id, ctx.user.role);
-      if (!agency) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Agency not found" });
-      }
-
-      if (job.agency_id !== agency.id && ctx.user.role !== "admin") {
-        throw new TRPCError({ code: "FORBIDDEN" });
-      }
+      const actingAgencyId = await resolveActingAgencyId(ctx, job);
 
       // Create batch
       const batchId = await batchDb.createBatch({
         jobId: input.jobId,
-        agencyId: agency.id,
+        agencyId: actingAgencyId,
         companyId: job.company_id,
         candidateIds: input.candidateIds,
         unlockFee: input.unlockFee || 0,
@@ -806,16 +833,17 @@ export const batchRouter = router({
     .input(z.object({ jobId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
       const agency = await db.getAgencyForUserContext(ctx.user.id, ctx.user.role);
+      // Platform admins see the job's groups whether or not they have an agency
+      // selected. Throwing here is what hid the Gerenciar Grupo step entirely
+      // from head office in "all agencies" mode.
+      if (isPlatformAdmin(ctx.user.role)) {
+        return await batchDb.getBatchesByJobId(input.jobId);
+      }
       if (!agency) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Agency not found" });
       }
-
       const batches = await batchDb.getBatchesByJobId(input.jobId);
-      // Filter to only this agency's batches (unless admin)
-      if (ctx.user.role !== "admin") {
-        return batches.filter((b: any) => b.agency_id === agency.id);
-      }
-      return batches;
+      return batches.filter((b: any) => b.agency_id === agency.id);
     }),
 
   getBatchSessions: agencyProcedure
