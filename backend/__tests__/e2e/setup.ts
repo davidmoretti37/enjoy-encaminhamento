@@ -33,6 +33,22 @@ export function createAnonClient(): SupabaseClient {
 }
 
 /**
+ * An agency for tests to hang jobs off.
+ *
+ * jobs.agency_id is NOT NULL, and every e2e file created jobs without one, so
+ * each of those inserts died with 23502. Reuses whatever agency already exists
+ * locally rather than creating one per run, since agencies also require an
+ * affiliate_id.
+ */
+export async function getTestAgencyId(client: SupabaseClient): Promise<string> {
+  const { data } = await client.from('agencies').select('id').limit(1).maybeSingle();
+  if (data?.id) return data.id as string;
+  throw new Error(
+    'No agency exists in the e2e database. Seed one before running these tests.',
+  );
+}
+
+/**
  * Insert straight into auth.users over the local Postgres connection.
  *
  * Only `id` is required by the table; the rest mirrors what a real signup writes

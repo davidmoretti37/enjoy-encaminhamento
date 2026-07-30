@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { SupabaseClient } from '@supabase/supabase-js';
 import {
+  getTestAgencyId,
   createServiceClient,
   createTestUser,
   createTestCandidate,
@@ -54,12 +55,14 @@ describe('Feedback/Reviews flow (E2E)', () => {
     }
   });
 
+  let testAgencyId: string;
   let companyId: string;
   let candidateId: string;
   let contractId: string;
   let feedbackId: string;
 
   it('creates prerequisites (company, candidate, job, application, contract)', async () => {
+    testAgencyId = await getTestAgencyId(supabase);
     // Company user + company
     const companyUser = await createTestUser(supabase, { role: 'company' });
     cleanupIds.userIds.push(companyUser.id);
@@ -92,6 +95,7 @@ describe('Feedback/Reviews flow (E2E)', () => {
     const { data: job, error: jobErr } = await supabase
       .from('jobs')
       .insert({
+        agency_id: testAgencyId,
         company_id: companyId,
         title: 'Feedback Test Role',
         description: 'Role for feedback flow E2E',

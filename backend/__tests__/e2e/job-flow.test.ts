@@ -52,6 +52,7 @@ describe('Job flow (E2E)', () => {
     const { data: job, error } = await supabase
       .from('jobs')
       .insert({
+        agency_id: testAgencyId,
         id: jobId,
         company_id: companyId,
         title: 'Software Engineer Intern',
@@ -85,6 +86,7 @@ describe('Job flow (E2E)', () => {
     const { data: job, error } = await supabase
       .from('jobs')
       .insert({
+        agency_id: testAgencyId,
         id: jobId,
         company_id: companyId,
         title: 'Full Stack Developer',
