@@ -788,7 +788,7 @@ describe("contract router", () => {
       );
     });
 
-    it("activates CLT hiring process when all signatures complete", async () => {
+    it("marks the candidate signed without activating a CLT hire (setup-fee gate)", async () => {
       vi.mocked(db.getCandidateByUserId).mockResolvedValue(mockCandidate());
       vi.mocked(db.getHiringProcessById).mockResolvedValue({
         id: hpId,
@@ -815,9 +815,20 @@ describe("contract router", () => {
       const caller = createCaller(candidateContext());
       await caller.signDocumentAsCandidate(signInput);
 
-      // Should have been called twice: once for candidate_signed, once for status: active
-      expect(hiringDb.updateHiringProcess).toHaveBeenCalledTimes(2);
-      expect(hiringDb.updateHiringProcess).toHaveBeenCalledWith(hpId, { status: "active" });
+      // Signing marks the candidate as signed and nothing more. Forcing
+      // status: "active" here was removed deliberately — it skipped the setup-fee
+      // gate and leaked revenue. The DB trigger moves a CLT hire to
+      // pending_payment, and confirmCLTPayment activates it once paid.
+      expect(hiringDb.updateHiringProcess).toHaveBeenCalledTimes(1);
+      expect(hiringDb.updateHiringProcess).toHaveBeenCalledWith(
+        hpId,
+        expect.objectContaining({ candidate_signed: true }),
+      );
+      expect(hiringDb.checkAllSignaturesComplete).toHaveBeenCalledWith(hpId);
+      expect(hiringDb.updateHiringProcess).not.toHaveBeenCalledWith(
+        hpId,
+        expect.objectContaining({ status: "active" }),
+      );
     });
 
     it("throws NOT_FOUND when candidate not found", async () => {

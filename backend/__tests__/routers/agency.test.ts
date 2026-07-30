@@ -153,7 +153,9 @@ describe("agency router", () => {
         status: "active",
       });
       expect(result).toEqual({ success: true });
-      expect(db.updateAgencyStatus).toHaveBeenCalledWith(MOCK_IDS.agency, "active");
+      // The router passes rejectionReason as a third argument; it is undefined
+      // when the caller does not supply one, and arity is matched exactly.
+      expect(db.updateAgencyStatus).toHaveBeenCalledWith(MOCK_IDS.agency, "active", undefined);
     });
 
     it("validates status enum", async () => {

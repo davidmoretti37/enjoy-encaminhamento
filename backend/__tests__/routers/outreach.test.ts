@@ -194,7 +194,10 @@ describe("outreach router", () => {
       expect(sendEmail).toHaveBeenCalledWith(
         "company@test.com",
         "Job opportunity",
-        expect.stringContaining("We have a great position for you")
+        expect.stringContaining("We have a great position for you"),
+        // The router also passes the unit-specific sender, so the call has four
+        // arguments and toHaveBeenCalledWith matches on arity.
+        expect.objectContaining({ email: expect.any(String) }),
       );
     });
 

@@ -2,6 +2,15 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { TRPCError } from "@trpc/server";
 
 // Mock all external dependencies before importing router
+// changePassword now verifies the current password by signing in with a fresh
+// anon client before changing it. Without this mock that sign-in is a real
+// network call.
+vi.mock("@supabase/supabase-js", () => ({
+  createClient: vi.fn(() => ({
+    auth: { signInWithPassword: vi.fn().mockResolvedValue({ data: {}, error: null }) },
+  })),
+}));
+
 vi.mock("../../supabase", () => ({
   supabase: { auth: { getUser: vi.fn() } },
   supabaseAdmin: {
@@ -241,7 +250,7 @@ describe("auth router", () => {
       } as any);
 
       const caller = createCaller(candidateContext());
-      const result = await caller.changePassword({ newPassword: "newpass123" });
+      const result = await caller.changePassword({ currentPassword: "oldpass123", newPassword: "newpass123" });
 
       expect(result).toEqual({ success: true });
       expect(supabaseAdmin.auth.admin.updateUserById).toHaveBeenCalledWith(
@@ -258,7 +267,7 @@ describe("auth router", () => {
 
       const caller = createCaller(candidateContext());
       await expect(
-        caller.changePassword({ newPassword: "newpass123" })
+        caller.changePassword({ currentPassword: "oldpass123", newPassword: "newpass123" })
       ).rejects.toThrow(TRPCError);
     });
 
