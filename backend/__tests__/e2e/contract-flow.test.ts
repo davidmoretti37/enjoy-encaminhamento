@@ -64,6 +64,7 @@ describe('Contract + Payment flow (E2E)', () => {
   let contractId: string;
 
   it('creates prerequisite data (users, company, candidate, job, application)', async () => {
+    testAgencyId = await getTestAgencyId(supabase);
     // Company user
     const companyUser = await createTestUser(supabase, { role: 'company' });
     cleanupIds.userIds.push(companyUser.id);

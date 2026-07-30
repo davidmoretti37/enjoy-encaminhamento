@@ -22,6 +22,7 @@ describe('Application flow (E2E)', () => {
 
   beforeAll(async () => {
     supabase = createServiceClient();
+    testAgencyId = await getTestAgencyId(supabase);
 
     // Create company user + company
     const companyUser = await createTestUser(supabase, { role: 'company' });

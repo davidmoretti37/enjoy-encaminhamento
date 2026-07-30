@@ -69,6 +69,7 @@ describe('Agency flow (E2E)', () => {
   let jobId: string;
 
   it('creates an agency owner user and the agency', async () => {
+    testAgencyId = await getTestAgencyId(supabase);
     // Agency needs a user_id (owner)
     const ownerUser = await createTestUser(supabase, { role: 'agency' });
     agencyOwnerUserId = ownerUser.id;
