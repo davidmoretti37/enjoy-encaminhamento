@@ -33,6 +33,19 @@ export function createAnonClient(): SupabaseClient {
 }
 
 /**
+ * An affiliate for tests that create agencies.
+ *
+ * agencies.affiliate_id is NOT NULL, so the agency-flow tests could never insert
+ * one. Reuses the affiliate already present locally rather than creating one,
+ * since affiliates themselves require a user and a creator.
+ */
+export async function getTestAffiliateId(client: SupabaseClient): Promise<string> {
+  const { data } = await client.from('affiliates').select('id').limit(1).maybeSingle();
+  if (data?.id) return data.id as string;
+  throw new Error('No affiliate exists in the e2e database. Seed one first.');
+}
+
+/**
  * An agency for tests to hang jobs off.
  *
  * jobs.agency_id is NOT NULL, and every e2e file created jobs without one, so

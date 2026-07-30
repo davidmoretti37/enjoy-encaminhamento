@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { SupabaseClient } from '@supabase/supabase-js';
 import {
   getTestAgencyId,
+  getTestAffiliateId,
   createServiceClient,
   createTestUser,
   createTestCandidate,
@@ -76,6 +77,8 @@ describe('Agency flow (E2E)', () => {
     const { data: agency, error } = await supabase
       .from('agencies')
       .insert({
+        // agencies.affiliate_id is NOT NULL; without it this insert always died.
+        affiliate_id: await getTestAffiliateId(supabase),
         user_id: ownerUser.id,
         agency_name: 'Test Agency E2E',
         cnpj: '12.345.678/0001-90',
