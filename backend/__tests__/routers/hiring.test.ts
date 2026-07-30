@@ -110,6 +110,9 @@ import {
 
 const createCaller = (ctx: any) => hiringRouter.createCaller(ctx);
 
+// 30 days out, so the start-date validation cannot expire this fixture.
+const FUTURE_DATE = new Date(Date.now() + 30 * 864e5).toISOString().slice(0, 10);
+
 describe("hiring router", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -200,7 +203,10 @@ describe("hiring router", () => {
   describe("initiateHiring", () => {
     const validInput = {
       applicationId: MOCK_IDS.application,
-      startDate: "2026-04-01",
+      // Relative, not hardcoded. This was "2026-04-01", which stopped being in
+      // the future and started failing the "data de início não pode ser no
+      // passado" validation on its own.
+      startDate: FUTURE_DATE,
     };
 
     it("creates estágio hiring process with awaiting_configuration status", async () => {
@@ -323,7 +329,7 @@ describe("hiring router", () => {
 
       const caller = createCaller(companyContext());
       await expect(
-        caller.initiateHiring({ startDate: "2026-04-01" })
+        caller.initiateHiring({ startDate: FUTURE_DATE })
       ).rejects.toThrow("Forneça applicationId ou candidateId + jobId");
     });
 
