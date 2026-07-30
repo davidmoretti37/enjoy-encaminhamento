@@ -279,6 +279,23 @@ export async function scoreSkills(candidate: CandidateData, job: JobData): Promi
 /**
  * Score location match with distance decay
  */
+/**
+ * City names for comparison: accent- and case-insensitive, whitespace-trimmed.
+ *
+ * Comparing raw strings cost real points. Production holds "Uberlândia",
+ * "Uberlandia" and "Uberlãndia" side by side, and one vaga is spelled
+ * "Timotéo, MG" while its candidates all write "Timóteo" — so every one of them
+ * dropped from a same-city 100 to a same-state 75 over an accent.
+ */
+function normalizeCity(value?: string | null): string {
+  return (value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 export function scoreLocation(candidate: CandidateData, job: JobData): number {
   // Remote jobs are location-agnostic
   if (job.work_type === 'remoto') {
@@ -292,9 +309,10 @@ export function scoreLocation(candidate: CandidateData, job: JobData): number {
 
   // Parse job location (usually "City, State" format)
   const jobLocation = job.location || '';
-  const [jobCity, jobState] = jobLocation.split(',').map(s => s?.trim().toLowerCase());
+  const [rawJobCity, jobState] = jobLocation.split(',').map(s => s?.trim().toLowerCase());
+  const jobCity = normalizeCity(rawJobCity);
 
-  const candidateCity = candidate.city?.toLowerCase().trim();
+  const candidateCity = normalizeCity(candidate.city);
   const candidateState = candidate.state?.toUpperCase().trim();
   const jobStateUpper = jobState?.toUpperCase();
 
