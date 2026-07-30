@@ -4,6 +4,18 @@ import { TRPCError } from "@trpc/server";
 // Mock external dependencies before imports
 vi.mock("../../supabase", () => {
   const mockChain = {
+    upsert: vi.fn().mockReturnThis(),
+    gt: vi.fn().mockReturnThis(),
+    gte: vi.fn().mockReturnThis(),
+    lt: vi.fn().mockReturnThis(),
+    lte: vi.fn().mockReturnThis(),
+    like: vi.fn().mockReturnThis(),
+    ilike: vi.fn().mockReturnThis(),
+    contains: vi.fn().mockReturnThis(),
+    or: vi.fn().mockReturnThis(),
+    not: vi.fn().mockReturnThis(),
+    filter: vi.fn().mockReturnThis(),
+    range: vi.fn().mockReturnThis(),
     select: vi.fn().mockReturnThis(),
     insert: vi.fn().mockReturnThis(),
     update: vi.fn().mockReturnThis(),

@@ -77,6 +77,12 @@ vi.mock("../../lib/fillDocxTemplate", () => ({
 }));
 
 vi.mock("../../routers/email", () => ({
+  // Routers call this to pick the unit-specific sender address. Omitting it
+  // made every send throw "No senderUnitForAgencyId export is defined".
+  senderUnitForAgencyId: vi.fn().mockResolvedValue({
+    email: "contato@anecrh.com.br",
+    name: "ANEC",
+  }),
   sendEmail: vi.fn(),
 }));
 

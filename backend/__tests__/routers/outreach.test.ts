@@ -6,6 +6,26 @@ vi.mock("../../supabase", () => ({
   supabase: { auth: { getUser: vi.fn() } },
   supabaseAdmin: {
     from: vi.fn().mockReturnValue({
+      insert: vi.fn().mockReturnThis(),
+      update: vi.fn().mockReturnThis(),
+      delete: vi.fn().mockReturnThis(),
+      upsert: vi.fn().mockReturnThis(),
+      neq: vi.fn().mockReturnThis(),
+      gt: vi.fn().mockReturnThis(),
+      gte: vi.fn().mockReturnThis(),
+      lt: vi.fn().mockReturnThis(),
+      lte: vi.fn().mockReturnThis(),
+      like: vi.fn().mockReturnThis(),
+      ilike: vi.fn().mockReturnThis(),
+      is: vi.fn().mockReturnThis(),
+      in: vi.fn().mockReturnThis(),
+      contains: vi.fn().mockReturnThis(),
+      or: vi.fn().mockReturnThis(),
+      not: vi.fn().mockReturnThis(),
+      filter: vi.fn().mockReturnThis(),
+      order: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockReturnThis(),
+      range: vi.fn().mockReturnThis(),
       select: vi.fn().mockReturnThis(),
       eq: vi.fn().mockReturnThis(),
       single: vi.fn().mockResolvedValue({ data: null, error: null }),
@@ -69,6 +89,12 @@ vi.mock("../../db", () => ({
 }));
 
 vi.mock("../../routers/email", () => ({
+  // Routers call this to pick the unit-specific sender address. Omitting it
+  // made every send throw "No senderUnitForAgencyId export is defined".
+  senderUnitForAgencyId: vi.fn().mockResolvedValue({
+    email: "contato@anecrh.com.br",
+    name: "ANEC",
+  }),
   sendEmail: vi.fn().mockResolvedValue(undefined),
 }));
 
