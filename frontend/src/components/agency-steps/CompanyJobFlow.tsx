@@ -1926,6 +1926,8 @@ function JobWithWorkflow({ job, contractTypeLabels, companyName }: { job: any; c
   // Close-as-filled state (report items #9 + #10)
   const [isCloseFilledOpen, setIsCloseFilledOpen] = useState(false);
   const [hiredCandidateId, setHiredCandidateId] = useState<string>('');
+  // Name of the hire when they have no candidate record (migration 137).
+  const [hiredPersonName, setHiredPersonName] = useState<string>('');
   const [editForm, setEditForm] = useState({
     title: job.title || '',
     contract_type: job.contract_type || '',
@@ -2021,6 +2023,7 @@ function JobWithWorkflow({ job, contractTypeLabels, companyName }: { job: any; c
       );
       setIsCloseFilledOpen(false);
       setHiredCandidateId('');
+      setHiredPersonName('');
       utils.job.getByCompanyId.invalidate({ companyId: job.company_id });
     },
     onError: (error) => toast.error(error.message || 'Erro ao fechar a vaga'),
@@ -2030,6 +2033,11 @@ function JobWithWorkflow({ job, contractTypeLabels, companyName }: { job: any; c
     closeAsFilledMutation.mutate({
       jobId: job.id,
       hiredCandidateId: hiredCandidateId || undefined,
+      // Only sent when no registered candidate was chosen; the backend ignores it
+      // otherwise so there is never a second source of truth.
+      hiredPersonName: !hiredCandidateId && hiredPersonName.trim()
+        ? hiredPersonName.trim()
+        : undefined,
     });
   };
 
@@ -2803,6 +2811,27 @@ function JobWithWorkflow({ job, contractTypeLabels, companyName }: { job: any; c
               <p className="text-xs text-gray-400">
                 Nenhum candidato encontrado para esta vaga.
               </p>
+            )}
+
+            {/* Not everyone placed is registered on the platform. Operator: "se o
+                candidato não cadastrou, não conseguimos colocá-lo no preenchimento
+                da vaga." Without this the vaga either stayed open or closed with no
+                record of who filled it. */}
+            {!hiredCandidateId && (
+              <div className="pt-3 border-t mt-3 space-y-2">
+                <label className="text-sm font-medium text-gray-700">
+                  Ou digite o nome de quem foi contratado
+                </label>
+                <Input
+                  value={hiredPersonName}
+                  onChange={(e) => setHiredPersonName(e.target.value)}
+                  placeholder="Nome completo (para quem não tem cadastro)"
+                />
+                <p className="text-xs text-gray-400">
+                  Use este campo quando a pessoa contratada não estiver cadastrada
+                  na plataforma.
+                </p>
+              </div>
             )}
           </div>
           <DialogFooter>

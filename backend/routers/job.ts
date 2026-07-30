@@ -917,11 +917,28 @@ export const jobRouter = router({
     .input(z.object({
       jobId: z.string().uuid(),
       hiredCandidateId: z.string().uuid().optional(),
+      /**
+       * Name of the hire when they never registered on the platform. Operator:
+       * "se o candidato não cadastrou, não conseguimos colocá-lo no preenchimento
+       * da vaga." Plenty of real placements are people with no candidate row, and
+       * those hires could not be recorded at all.
+       */
+      hiredPersonName: z.string().trim().min(1).max(160).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       const job = await assertAgencyOwnsJob(ctx, input.jobId);
       const nowIso = new Date().toISOString();
       const jobTitle = (job as any).title || 'a vaga';
+
+      // An unregistered hire is recorded by name on the job itself (migration 137).
+      // Only when no candidate was chosen — a real candidate's application carries
+      // the record instead, and storing both would leave two sources of truth.
+      if (!input.hiredCandidateId && input.hiredPersonName) {
+        await supabaseAdmin
+          .from('jobs')
+          .update({ hired_person_name: input.hiredPersonName })
+          .eq('id', input.jobId);
+      }
 
       // Mark the chosen candidate's application as selected (create if missing).
       if (input.hiredCandidateId) {
