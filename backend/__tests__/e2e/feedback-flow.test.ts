@@ -169,11 +169,9 @@ describe('Feedback/Reviews flow (E2E)', () => {
     cleanupIds.feedbackIds.push(feedbackId);
   });
 
-  // punctuality/communication/teamwork/technical_skills do not exist on
-
-  // feedback, in this database or in production. Pending until they do.
-
-  it.todo('updates ratings (punctuality, communication, teamwork, technical_skills)', async () => {
+  // All four rating columns exist on feedback here and in production, each with
+  // a CHECK constraint of 1..5, so every value below stays inside that range.
+  it('updates ratings (punctuality, communication, teamwork, technical_skills)', async () => {
     const { data: updated, error } = await supabase
       .from('feedback')
       .update({

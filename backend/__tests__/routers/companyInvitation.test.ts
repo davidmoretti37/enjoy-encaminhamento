@@ -39,6 +39,12 @@ vi.mock("../../supabase", () => {
         },
       },
     },
+    // db/jobs.ts binds the anon client at module load (`const dbAnon = supabase`),
+    // so importing the router pulls this in even though no test here touches it.
+    // Without the export the whole suite fails to load, not just one test.
+    supabase: {
+      from: vi.fn(() => mockChain),
+    },
   };
 });
 
@@ -59,6 +65,18 @@ vi.mock("../../routers/email", () => ({
   sendEmail: vi.fn().mockResolvedValue(true),
 }));
 
+// createAndSend and resend both start with assertAgencyOwnsCompany, the tenant
+// guard that stops one agency minting a registration token for another agency's
+// company. It runs its own `companies` query, so left unmocked it consumes the
+// first response queued by mockSupabaseFrom and every test below fails on the
+// guard instead of on what it means to assert. Stubbed here so these tests cover
+// the router's own logic; "refuses a company owned by another agency" below
+// covers the guard being wired in at all.
+vi.mock("../../routers/agency", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../routers/agency")>();
+  return { ...actual, assertAgencyOwnsCompany: vi.fn().mockResolvedValue({}) };
+});
+
 vi.mock("../../_core/env", () => ({
   ENV: { isDevelopment: true, appUrl: "http://localhost:5001" },
 }));
@@ -71,6 +89,7 @@ import { companyInvitationRouter } from "../../routers/companyInvitation";
 import { supabaseAdmin } from "../../supabase";
 import * as companyInvDb from "../../db/companyInvitations";
 import { sendEmail } from "../../routers/email";
+import { assertAgencyOwnsCompany } from "../../routers/agency";
 import {
   adminContext,
   agencyContext,
@@ -125,6 +144,28 @@ describe("companyInvitation router", () => {
 
   // ---- createAndSend ----
   describe("createAndSend", () => {
+    it("refuses a company owned by another agency, before any token is minted", async () => {
+      // The guard is stubbed for every other test in this file, so this is the
+      // one place proving createAndSend still calls it. If someone drops the
+      // call, this fails: a registration token for another agency's company is
+      // an account takeover, so nothing may be created or emailed first.
+      vi.mocked(assertAgencyOwnsCompany).mockRejectedValueOnce(
+        new TRPCError({ code: "FORBIDDEN", message: "Esta empresa não pertence à sua agência" }),
+      );
+
+      const caller = createCaller(agencyContext());
+      await expect(caller.createAndSend({ companyId: MOCK_IDS.company })).rejects.toThrow(
+        "Esta empresa não pertence à sua agência",
+      );
+
+      expect(assertAgencyOwnsCompany).toHaveBeenCalledWith(
+        expect.anything(),
+        MOCK_IDS.company,
+      );
+      expect(companyInvDb.createCompanyInvitation).not.toHaveBeenCalled();
+      expect(sendEmail).not.toHaveBeenCalled();
+    });
+
     it("creates and sends invitation for agency user", async () => {
       // Mock: company found, no user_id, has email
       mockSupabaseFrom([

@@ -184,15 +184,20 @@ describe('Agency flow (E2E)', () => {
   });
 
   it('creates a candidate_batch with draft status', async () => {
+    // Mirrors db/batches.ts createDraftBatch. candidate_batches has no `name`
+    // column and never has: a batch is identified by its job, not a label.
     const { data: batch, error } = await supabase
       .from('candidate_batches')
       .insert({
         agency_id: testAgencyId,
         job_id: jobId,
         company_id: companyId,
-        name: 'E2E Batch',
         candidate_ids: [candidateId],
+        batch_size: 1,
+        unlock_fee: 0,
         status: 'draft',
+        payment_status: 'pending',
+        unlocked: false,
       })
       .select()
       .single();
@@ -205,6 +210,9 @@ describe('Agency flow (E2E)', () => {
 
   it('updates batch status from draft to sent', async () => {
     const batchId = cleanupIds.batchIds[0];
+    // Without this the previous test failing shows up here as an opaque
+    // 22P02 (undefined passed as a uuid) instead of a missing batch.
+    expect(batchId, 'the draft batch from the previous test').toBeDefined();
     const { data: updated, error } = await supabase
       .from('candidate_batches')
       .update({ status: 'sent' })
