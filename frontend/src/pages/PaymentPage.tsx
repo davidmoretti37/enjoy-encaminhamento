@@ -197,17 +197,26 @@ export default function PaymentPage() {
     setReceiptModalOpen(true);
   };
 
-  const handleApproveReceipt = (p: any = selectedReceiptPayment) => {
-    if (p) {
-      reviewReceiptMutation.mutate({ paymentId: p.id, action: 'approve' });
+  // Take an id, not an object. The modal buttons were wired as
+  // onClick={handleApproveReceipt}, so React passed the click event: `p` became a
+  // MouseEvent, which is truthy, the guard passed, and p.id was undefined — the
+  // operator saw a raw zod error and the receipt stayed pending. Requiring a
+  // string id makes that shape of mistake impossible to repeat.
+  const reviewReceipt = (payment: any, action: 'approve' | 'reject') => {
+    const id = typeof payment?.id === 'string' ? payment.id : null;
+    if (!id) {
+      toast.error('Nao foi possivel identificar o pagamento. Recarregue a pagina e tente de novo.');
+      return;
     }
+    reviewReceiptMutation.mutate(
+      action === 'approve'
+        ? { paymentId: id, action: 'approve' }
+        : { paymentId: id, action: 'reject', notes: 'Comprovante rejeitado pelo administrador' },
+    );
   };
 
-  const handleRejectReceipt = (p: any = selectedReceiptPayment) => {
-    if (p) {
-      reviewReceiptMutation.mutate({ paymentId: p.id, action: 'reject', notes: 'Comprovante rejeitado pelo administrador' });
-    }
-  };
+  const handleApproveReceipt = (p: any = selectedReceiptPayment) => reviewReceipt(p, 'approve');
+  const handleRejectReceipt = (p: any = selectedReceiptPayment) => reviewReceipt(p, 'reject');
 
   const handleEditPayment = (payment: any) => {
     setEditingPayment(payment);
@@ -793,11 +802,11 @@ export default function PaymentPage() {
               </Button>
               {(isAdmin || isAgency) && (
                 <>
-                  <Button variant="destructive" onClick={handleRejectReceipt} disabled={reviewReceiptMutation.isPending}>
+                  <Button variant="destructive" onClick={() => handleRejectReceipt()} disabled={reviewReceiptMutation.isPending}>
                     <ThumbsDown className="h-4 w-4 mr-1" />
                     Rejeitar
                   </Button>
-                  <Button onClick={handleApproveReceipt} disabled={reviewReceiptMutation.isPending}>
+                  <Button onClick={() => handleApproveReceipt()} disabled={reviewReceiptMutation.isPending}>
                     <ThumbsUp className="h-4 w-4 mr-1" />
                     Aprovar
                   </Button>

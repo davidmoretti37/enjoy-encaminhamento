@@ -157,10 +157,16 @@ export const adminRouter = router({
 
   getPaymentsPendingReview: agencyProcedure.query(async ({ ctx }) => {
     const agencyId = await getAgencyScope(ctx);
-    if (agencyId) {
-      return await db.getPaymentsPendingReviewByAgency(agencyId);
-    }
-    return await db.getPaymentsPendingReview();
+    const rows = agencyId
+      ? await db.getPaymentsPendingReviewByAgency(agencyId)
+      : await db.getPaymentsPendingReview();
+    // This is the review queue, so the comprovante has to be visible. Receipts sit
+    // in the private `contracts` bucket and the stored URL is a public one, which
+    // renders as a broken image; signing also repairs the literal newlines some
+    // stored receipt_url values carry.
+    const { signContractsUrlsInResponse } = await import('../storage');
+    await signContractsUrlsInResponse(rows);
+    return rows;
   }),
 
   updatePaymentDetails: agencyProcedure

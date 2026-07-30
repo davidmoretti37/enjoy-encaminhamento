@@ -543,7 +543,13 @@ export const agencyRouter = router({
     if (!agency) {
       throw new TRPCError({ code: 'NOT_FOUND', message: 'Agency not found. Please select an agency first.' });
     }
-    return await db.getPaymentsByAgencyId(agency.id);
+    // Receipts live in the private `contracts` bucket, so a stored public URL
+    // renders as a broken image. Sign before returning. This also repairs the
+    // literal newlines some stored receipt_url values carry.
+    const rows = await db.getPaymentsByAgencyId(agency.id);
+    const { signContractsUrlsInResponse } = await import('../storage');
+    await signContractsUrlsInResponse(rows);
+    return rows;
   }),
 
   // Get payments grouped by company for dashboard
@@ -552,7 +558,13 @@ export const agencyRouter = router({
     if (!agency) {
       throw new TRPCError({ code: 'NOT_FOUND', message: 'Agency not found. Please select an agency first.' });
     }
-    return await db.getPaymentsGroupedByCompany(agency.id);
+    // Receipts live in the private `contracts` bucket, so a stored public URL
+    // renders as a broken image. Sign before returning. This also repairs the
+    // literal newlines some stored receipt_url values carry.
+    const rows = await db.getPaymentsGroupedByCompany(agency.id);
+    const { signContractsUrlsInResponse } = await import('../storage');
+    await signContractsUrlsInResponse(rows);
+    return rows;
   }),
 
   // Get overdue payments for alerts

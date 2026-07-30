@@ -10,8 +10,16 @@
  */
 
 // Validation helpers
+// Env values are TRIMMED on read.
+//
+// A trailing newline in a variable is invisible and corrupts everything built from
+// it. SUPABASE_URL carried one, so every storage URL came out as
+// "https://...supabase.co\n/storage/v1/..." — payment receipts rendered as broken
+// images and a contract template URL was unusable. 26 variables had the same
+// whitespace. Trimming here kills the whole class instead of repairing values one
+// table at a time.
 function requireEnv(key: string): string {
-  const value = process.env[key];
+  const value = process.env[key]?.trim();
   if (value === undefined || value === "") {
     throw new Error(`Missing required environment variable: ${key}`);
   }
@@ -19,7 +27,8 @@ function requireEnv(key: string): string {
 }
 
 function optionalEnv(key: string, defaultValue: string = ""): string {
-  return process.env[key] ?? defaultValue;
+  const value = process.env[key]?.trim();
+  return value === undefined || value === "" ? defaultValue : value;
 }
 
 function optionalEnvInt(key: string, defaultValue: number): number {
