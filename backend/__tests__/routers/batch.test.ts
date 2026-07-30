@@ -9,6 +9,8 @@ vi.mock("../../supabase", () => ({
 }));
 
 vi.mock("../../db", () => ({
+  // sendBatchToCompany looks the company up to notify it.
+  getCompanyById: vi.fn().mockResolvedValue({ id: 'company-1', company_name: 'Empresa', email: 'empresa@test.com', user_id: 'user-1' }),
   getCandidateByUserId: vi.fn(),
   getCandidateById: vi.fn(),
   getCandidatesByIds: vi.fn(),
