@@ -60,11 +60,17 @@ export function rejectionText(
 ): string {
   const nome = candidateName || "candidato(a)";
   const consultor = consultantName || "equipe da ANEC";
+  // Without a named consultant, "Aqui é ${consultor}, da equipe da ANEC" reads
+  // "Aqui é equipe da ANEC, da equipe da ANEC". Automated sends have no
+  // consultant, so the sentence has to work both ways.
+  const intro = consultantName
+    ? `Aqui é ${consultantName}, da equipe da ANEC (Agência Nacional de Emprego e Carreira). 😊`
+    : "Aqui é a equipe da ANEC (Agência Nacional de Emprego e Carreira). 😊";
 
   if (variant === "student_applied") {
     return `Olá, ${nome}! Tudo bem?
 
-Aqui é ${consultor}, da equipe da ANEC (Agência Nacional de Emprego e Carreira). 😊
+${intro}
 
 Queremos agradecer, de coração, por ter se candidatado à vaga de ${jobTitle}. A empresa já concluiu esse processo e optou por outro(a) candidato(a) — isso não diz respeito à sua capacidade ou ao seu potencial, e sim ao que a empresa precisava naquele momento específico.
 
@@ -89,7 +95,7 @@ ${SIGNOFF_ORG}`;
   if (variant === "student_interviewed") {
     return `Olá, ${nome}! Tudo bem?
 
-Aqui é ${consultor}, da equipe da ANEC (Agência Nacional de Emprego e Carreira). 😊
+${intro}
 
 Primeiro, parabéns por ter chegado até a entrevista para a vaga de ${jobTitle} — isso já mostra o quanto você está empenhado(a) na sua trajetória profissional! Queremos te contar, com carinho, que desta vez a empresa optou por seguir com outro(a) candidato(a). Isso não tem relação com o quanto você se saiu bem — é super comum que, entre bons candidatos, a escolha final dependa de detalhes bem específicos da vaga.
 
@@ -121,7 +127,7 @@ ${SIGNOFF_ORG}`;
 
   return `Olá, ${nome}! Tudo bem?
 
-Aqui é ${consultor}, da equipe da ANEC (Agência Nacional de Emprego e Carreira). 😊
+${intro}
 
 ${opening}
 

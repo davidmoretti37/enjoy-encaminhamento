@@ -35,10 +35,44 @@ async function email(to: string | null | undefined, subject: string, title: stri
   }
 }
 
-/** Candidate was NOT selected. Never ghost — in-app + email, with the reason if given. */
+/**
+ * Candidate was NOT selected. Never ghost — in-app + email.
+ *
+ * Uses ANEC's own approved wording (lib/rejectionCopy.ts), which has three
+ * variants: an Inexxa student who only applied, one who sat a company interview,
+ * and an external candidate. That copy was already written and reviewed, but it
+ * was only wired into job.closeAsFilled. Rejecting one candidate mid-process —
+ * far and away the more common case — fell through to generic text instead, so
+ * the carefully-worded version almost never went out.
+ */
 export async function notifyCandidateRejected(candidate: Person, jobTitle: string, reason?: string | null, jobId?: string) {
   if (!candidate) return;
   const name = candidate.full_name || "Candidato";
+
+  if (jobId && (candidate as any).id) {
+    try {
+      const [{ loadRejectionContext }, copy] = await Promise.all([
+        import("./rejectionContext"),
+        import("./rejectionCopy"),
+      ]);
+      const ctx = await loadRejectionContext(jobId, [(candidate as any).id]);
+      const interviewed = ctx.interviewedByCandidateId.has((candidate as any).id);
+      const isSchoolStudent = ctx.studentByCandidateId.has((candidate as any).id);
+      const variant = copy.selectRejectionVariant({ isSchoolStudent, interviewed });
+      // consultantName is required; the copy falls back to "equipe da ANEC"
+      // when it is blank, which is the right voice for an automated send.
+      const input = { candidateName: name, jobTitle, consultantName: "" };
+      await inApp(candidate.user_id, copy.REJECTION_TITLE,
+        copy.rejectionText(variant, input, interviewed), "info", "application", jobId);
+      await email(candidate.email, copy.rejectionSubject(jobTitle), copy.REJECTION_TITLE,
+        copy.rejectionHtml(variant, input, interviewed));
+      return;
+    } catch (e: any) {
+      // Fall through to the generic wording rather than ghosting the candidate.
+      console.error("[funnelNotify] approved rejection copy failed, using generic:", e?.message);
+    }
+  }
+
   const reasonMsg = reason ? ` Retorno da empresa: ${reason}.` : "";
   await inApp(
     candidate.user_id,
