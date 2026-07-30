@@ -520,8 +520,16 @@ export const agencyRouter = router({
       // opened with an empty list and the payment stayed on the wrong company.
       // Admins legitimately see every agency's payments, so give them every
       // company. Non-admins still need a selected agency.
+      //
+      // Except companies with no agency_id. Every payment list joins through
+      // companies.agency_id (db/payments.ts, db/affiliates.ts), so a payment
+      // moved onto an agency-less company vanishes from the admin page, the
+      // agency page and the totals at once, recoverable only by direct SQL.
+      // Offering one in a reassignment dropdown is handing the operator a way to
+      // lose a receivable. Production currently has one such row.
       if (ctx.user.role === 'admin' || ctx.user.role === 'super_admin') {
-        return await db.getAllCompanies();
+        const all = await db.getAllCompanies();
+        return (all || []).filter((c: any) => c.agency_id);
       }
       throw new TRPCError({ code: 'NOT_FOUND', message: 'Agency not found. Please select an agency first.' });
     }

@@ -49,6 +49,9 @@ vi.mock("../../db", () => ({
   getAffiliateByUserId: vi.fn(),
   createAgencyInvitation: vi.fn(),
   getAgencyInvitationByToken: vi.fn(),
+  getAgencyForUserContext: vi.fn(),
+  getAllCompanies: vi.fn(),
+  getCompaniesByAgencyId: vi.fn(),
 }));
 
 vi.mock("../../routers/email", () => ({
@@ -247,6 +250,59 @@ describe("agency router", () => {
       const caller = createCaller(unauthenticatedContext());
       const result = await caller.validateInvitation({ token: validToken });
       expect(result.isValid).toBe(false);
+    });
+  });
+
+  // ---- getCompanies ----
+  describe("getCompanies", () => {
+    // Every payment list joins through companies.agency_id, so a payment moved
+    // onto a company with no agency disappears from the admin page, the agency
+    // page and the totals at once, recoverable only by direct SQL. The payments
+    // page builds its reassignment dropdown from this procedure, so an
+    // agency-less company here is a way for the operator to lose a receivable.
+    // Production has one such row.
+    it("hides agency-less companies from an admin in all-agencies mode", async () => {
+      vi.mocked(db.getAgencyForUserContext).mockResolvedValue(null as any);
+      vi.mocked(db.getAllCompanies).mockResolvedValue([
+        { id: "c1", company_name: "Empresa Boa", agency_id: "ag-1" },
+        { id: "c2", company_name: "Moretti Educação Profissional Eireli", agency_id: null },
+        { id: "c3", company_name: "Outra Empresa", agency_id: "ag-2" },
+      ] as any);
+
+      const caller = createCaller(adminContext());
+      const result = await caller.getCompanies();
+
+      expect(result.map((c: any) => c.id)).toEqual(["c1", "c3"]);
+      expect(result.every((c: any) => c.agency_id)).toBe(true);
+    });
+
+    it("still returns every agency's companies to an admin, not just one", async () => {
+      vi.mocked(db.getAgencyForUserContext).mockResolvedValue(null as any);
+      vi.mocked(db.getAllCompanies).mockResolvedValue([
+        { id: "c1", company_name: "A", agency_id: "ag-1" },
+        { id: "c3", company_name: "B", agency_id: "ag-2" },
+      ] as any);
+
+      const caller = createCaller(adminContext());
+      expect((await caller.getCompanies()).length).toBe(2);
+    });
+
+    it("refuses a non-admin with no agency rather than falling back to all", async () => {
+      vi.mocked(db.getAgencyForUserContext).mockResolvedValue(null as any);
+
+      const caller = createCaller(agencyContext());
+      await expect(caller.getCompanies()).rejects.toThrow(TRPCError);
+      expect(db.getAllCompanies).not.toHaveBeenCalled();
+    });
+
+    it("scopes a normal agency user to its own companies", async () => {
+      vi.mocked(db.getAgencyForUserContext).mockResolvedValue({ id: "ag-1" } as any);
+      vi.mocked(db.getCompaniesByAgencyId).mockResolvedValue([{ id: "c1", agency_id: "ag-1" }] as any);
+
+      const caller = createCaller(agencyContext());
+      expect(await caller.getCompanies()).toHaveLength(1);
+      expect(db.getCompaniesByAgencyId).toHaveBeenCalledWith("ag-1");
+      expect(db.getAllCompanies).not.toHaveBeenCalled();
     });
   });
 });
