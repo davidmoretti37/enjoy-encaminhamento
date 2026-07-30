@@ -99,6 +99,79 @@ async function graphqlRequest(query: string, variables?: Record<string, any>): P
 }
 
 /**
+ * Pair the signers Autentique echoes back with the roles we sent them under.
+ *
+ * createDocument deliberately omits `email` (see the comment on the `signers`
+ * variable below) so that Autentique returns each signing link in the API
+ * response instead of emailing it. The consequence is that `email` comes back
+ * NULL on every signer, so matching the response to our roles by email — which
+ * is what configureAndSendContract did — never matches, and every signer was
+ * stored as role "unknown". Downstream that meant the company could never
+ * confirm its signature, signing links were never propagated to invitations,
+ * and getDocumentsToSign read the missing role as "this party is not required"
+ * and marked a hire fully signed off a single signature.
+ *
+ * Matching by array index alone is not safe either: createDocument filters its
+ * result to signers that came back with a short_link, so one link-less signer
+ * shifts every subsequent role by one — silently assigning the candidate's
+ * signature to the parent.
+ *
+ * So: match on `name`, which we DO send and which Autentique echoes verbatim,
+ * and fall back to position among whatever is still unclaimed. Both sides are
+ * consumed as they match, so a duplicate name can never bind twice.
+ */
+export function mapSignersToRoles<
+  TOurs extends { name: string; email: string; role: string },
+  TApi extends { public_id: string; name: string; email?: string | null; signUrl: string },
+>(
+  ourSigners: TOurs[],
+  apiSigners: TApi[],
+): Array<{
+  role: string;
+  email: string | null;
+  name: string;
+  autentiqueSignerId: string;
+  signUrl: string;
+}> {
+  const norm = (s: string | null | undefined) =>
+    (s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ").trim().toLowerCase();
+
+  const unclaimed = ourSigners.map((s, i) => ({ signer: s, index: i, taken: false }));
+
+  const claim = (api: TApi): TOurs | null => {
+    const byName = unclaimed.find((u) => !u.taken && norm(u.signer.name) === norm(api.name));
+    if (byName) {
+      byName.taken = true;
+      return byName.signer;
+    }
+    return null;
+  };
+
+  // Pass 1: names. Pass 2: position among what is left, in the order both
+  // lists were built, which is the order we handed to Autentique.
+  const resolved: Array<TOurs | null> = apiSigners.map((api) => claim(api));
+  resolved.forEach((r, i) => {
+    if (r) return;
+    const next = unclaimed.find((u) => !u.taken);
+    if (next) {
+      next.taken = true;
+      resolved[i] = next.signer;
+    }
+  });
+
+  return apiSigners.map((api, i) => {
+    const ours = resolved[i];
+    return {
+      role: ours?.role || "unknown",
+      email: ours?.email ?? api.email ?? null,
+      name: api.name || ours?.name || "",
+      autentiqueSignerId: api.public_id,
+      signUrl: api.signUrl,
+    };
+  });
+}
+
+/**
  * Create a document on Autentique with file upload
  * Uses GraphQL multipart request spec for file uploads
  */

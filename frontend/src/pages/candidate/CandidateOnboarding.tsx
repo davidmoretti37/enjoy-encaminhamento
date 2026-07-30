@@ -197,8 +197,29 @@ export default function CandidateOnboarding() {
       window.location.href = "/candidate";
     },
     onError: (error) => {
-      toast.error(error.message || "Erro ao criar perfil");
       setSubmitting(false);
+
+      // A zod failure on the final submit used to surface as a raw JSON blob on
+      // the last screen, with no way back to the field that caused it — after
+      // the candidate had already spent ~20 minutes on DISC and PDP. Send them
+      // back to the step that owns the data and say what to fix, in Portuguese.
+      const raw = error.message || "";
+      const isValidation =
+        error.data?.code === "BAD_REQUEST" || raw.trim().startsWith("[") || raw.includes('"code"');
+
+      if (isValidation) {
+        const cpfDigits = formData.cpf.replace(/\D/g, "").length;
+        if (cpfDigits !== 11) {
+          toast.error("Informe o CPF completo (11 dígitos) para concluir o cadastro.");
+        } else {
+          toast.error("Revise os dados pessoais: algum campo obrigatório está incompleto.");
+        }
+        setStep(1);
+        window.scrollTo({ top: 0, behavior: "smooth" });
+        return;
+      }
+
+      toast.error(raw || "Erro ao criar perfil");
     },
   });
 
@@ -293,6 +314,14 @@ export default function CandidateOnboarding() {
   const validateStep1 = () => {
     if (!formData.full_name || !formData.cpf || !formData.email || !formData.phone || !formData.city || !formData.state) {
       toast.error("Preencha todos os campos obrigatórios");
+      return false;
+    }
+    // The server requires 11 digits, but this only checked the field was
+    // non-empty. A partial CPF passed here, and the candidate then completed the
+    // DISC and PDP assessments before the final submit failed with a raw
+    // validation error they could neither fix nor navigate back from.
+    if (formData.cpf.replace(/\D/g, "").length !== 11) {
+      toast.error("Informe o CPF completo (11 dígitos)");
       return false;
     }
     if (!formData.education_level) {

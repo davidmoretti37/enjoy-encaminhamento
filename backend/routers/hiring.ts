@@ -14,7 +14,7 @@ const supabaseAdmin = _supabaseAdmin as any;
 import { sendEmail } from "./email";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { createDocument as createAutentiqueDoc, isAutentiqueConfigured } from "../integrations/autentique";
+import { createDocument as createAutentiqueDoc, isAutentiqueConfigured, mapSignersToRoles } from "../integrations/autentique";
 import { ENV } from "../_core/env";
 import { fillDocxTemplate, buildHiringTemplateData, scanPlaceholders, PLACEHOLDER_LABELS } from "../lib/fillDocxTemplate";
 
@@ -625,6 +625,8 @@ export const hiringRouter = router({
 
               autentiqueDocIds.push(result.documentId);
 
+              const mappedSigners = mapSignersToRoles(autentiqueSigners, result.signers);
+
               // Track in our DB
               await db.createAutentiqueDocument({
                 autentiqueDocumentId: result.documentId,
@@ -632,31 +634,29 @@ export const hiringRouter = router({
                 contextType: "hiring_contract",
                 contextId: process.id,
                 templateId: template.id,
-                signers: result.signers.map((apiSigner) => {
-                  // Match API signer to our role by email
-                  const ourSigner = autentiqueSigners.find((s) => s.email === apiSigner.email);
-                  return {
-                    role: ourSigner?.role || "unknown",
-                    email: apiSigner.email,
-                    name: apiSigner.name,
-                    autentiqueSignerId: apiSigner.public_id,
-                    signUrl: apiSigner.signUrl,
-                  };
-                }),
+                // Autentique returns email: null by design (see mapSignersToRoles),
+                // so this pairs on name and falls back to position. Matching on
+                // email here stored every signer as role "unknown".
+                signers: mappedSigners,
               });
 
-              // Update signing_invitations with Autentique signer IDs and URLs
-              for (const apiSigner of result.signers) {
-                const matchingInvitation = invitations.find(
-                  (inv: any) => inv.signer_email === apiSigner.email
+              // Update signing_invitations with Autentique signer IDs and URLs.
+              // Keyed on the resolved role, not on apiSigner.email — that is null,
+              // so this never matched and autentique_sign_url was never written,
+              // leaving every invitation to fall back to the in-app link.
+              for (const mapped of mappedSigners) {
+                const matchingInvitation = invitations.find((inv: any) =>
+                  mapped.role !== "unknown"
+                    ? inv.signer_role === mapped.role
+                    : mapped.email && inv.signer_email === mapped.email
                 );
                 if (matchingInvitation) {
                   await supabaseAdmin
                     .from("signing_invitations")
                     .update({
                       autentique_document_id: result.documentId,
-                      autentique_signer_id: apiSigner.public_id,
-                      autentique_sign_url: apiSigner.signUrl,
+                      autentique_signer_id: mapped.autentiqueSignerId,
+                      autentique_sign_url: mapped.signUrl,
                     })
                     .eq("id", matchingInvitation.id);
                 }
@@ -903,10 +903,20 @@ export const hiringRouter = router({
         });
       }
 
-      // Check that the company signer has signed all documents
+      // Check that the company signer has signed all documents.
+      //
+      // Was matched on s.email === company.email. Autentique returns email: null
+      // (we omit it so the signing link comes back in the response), so on the
+      // configureAndSendContract path this never matched: the company signed
+      // everything and was still told it had not signed, with no other way to
+      // set company_signed. Match on the stored role, falling back to email for
+      // rows written before mapSignersToRoles existed.
       const companyEmail = company.email;
       const allSignedByCompany = autentiqueDocs.every((doc: any) => {
-        const companySigner = doc.signers?.find((s: any) => s.email === companyEmail);
+        const signers = doc.signers || [];
+        const companySigner =
+          signers.find((s: any) => s.role === "company") ||
+          (companyEmail ? signers.find((s: any) => s.email === companyEmail) : undefined);
         return companySigner?.signed_at != null;
       });
 
@@ -1794,12 +1804,11 @@ export const hiringRouter = router({
             await db.createAutentiqueDocument({
               autentiqueDocumentId: result.documentId, documentName: template.name,
               contextType: 'hiring_contract', contextId: process.id, templateId: template.id,
-              signers: result.signers.map((apiSigner: any, idx: number) => {
-                // Match by index since Autentique doesn't return emails when we omit them
-                const ourSigner = signers[idx];
-                return { role: ourSigner?.role || 'unknown', email: ourSigner?.email || apiSigner.email, name: apiSigner.name,
-                  autentiqueSignerId: apiSigner.public_id, signUrl: apiSigner.signUrl };
-              }),
+              // Was matched on raw index. createDocument filters its result to
+              // signers that came back with a short_link, so a single link-less
+              // signer shifted every later role by one and could file the
+              // candidate's signature under the parent. Name-first, then position.
+              signers: mapSignersToRoles(signers, result.signers),
             });
             created++;
           } catch (err) {

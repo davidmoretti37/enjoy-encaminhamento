@@ -2174,6 +2174,15 @@ function JobWithWorkflow({ job, contractTypeLabels, companyName }: { job: any; c
                         <span className="flex items-center gap-1">
                           {statusConfig.icon}
                           {statusConfig.label}
+                          {/* The name of an unregistered hire was stored and then
+                              never shown anywhere, so the operator typed it, got
+                              a success toast, and could never see who filled the
+                              vaga again. */}
+                          {job.status === 'filled' && (job as any).hired_person_name && (
+                            <span className="font-normal">
+                              {' · '}{(job as any).hired_person_name}
+                            </span>
+                          )}
                         </span>
                       </Badge>
                       {!['filled', 'closed'].includes(job.status) && (

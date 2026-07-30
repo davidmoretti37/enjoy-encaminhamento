@@ -9,6 +9,43 @@ import * as _hiringDb from "../db/hiring";
 const db: any = _db;
 const hiringDb: any = _hiringDb;
 
+/**
+ * Decide, from the signed state of a hire's documents, whether the company and
+ * the candidate have signed everything required of them.
+ *
+ * "No signer for this role on this document" legitimately means the role is not
+ * required to sign it. A document whose signers carry role "unknown" is NOT
+ * evidence of that — it is evidence we could not tell who is who. Conflating the
+ * two was a real defect: configureAndSendContract stored every signer as
+ * "unknown" (it matched Autentique's reply by email, which Autentique returns as
+ * null), so the first signature by ANY party satisfied both checks, set
+ * company_signed and candidate_signed together, and fired the DB trigger — an
+ * estágio hire went active and a CLT hire moved to pending_payment off a single
+ * signature.
+ *
+ * So a document with any unresolved role contributes nothing: it cannot confirm
+ * a signature and it cannot excuse one. Existing rows are repaired by
+ * backend/scripts/repair-autentique-signer-roles.ts.
+ */
+export function deriveSignatureFlags(
+  docs: Array<{ signers?: Array<{ role?: string; signed_at?: string | null }> }>,
+): { allCompanySigned: boolean; allCandidateSigned: boolean; unresolvedDocs: number } {
+  const rolesAreResolved = (d: any) =>
+    (d.signers || []).every((s: any) => s.role && s.role !== "unknown");
+
+  const roleSignedOn = (d: any, role: string) => {
+    if (!rolesAreResolved(d)) return false;
+    const cs = (d.signers || []).find((s: any) => s.role === role);
+    return !cs || !!cs.signed_at; // genuinely absent = not required to sign
+  };
+
+  return {
+    allCompanySigned: docs.every((d) => roleSignedOn(d, "company")),
+    allCandidateSigned: docs.every((d) => roleSignedOn(d, "candidate")),
+    unresolvedDocs: docs.filter((d) => !rolesAreResolved(d)).length,
+  };
+}
+
 export const contractRouter = router({
   // Create contract
   create: companyProcedure
@@ -293,14 +330,15 @@ export const contractRouter = router({
                     }
                     const latestDocs = Array.from(latestByTemplate.values());
 
-                    const allCompanySigned = latestDocs.every((d: any) => {
-                      const cs = (d.signers || []).find((s: any) => s.role === 'company');
-                      return !cs || cs.signed_at; // no company signer = not required
-                    });
-                    const allCandidateSigned = latestDocs.every((d: any) => {
-                      const cs = (d.signers || []).find((s: any) => s.role === 'candidate');
-                      return !cs || cs.signed_at;
-                    });
+                    const { allCompanySigned, allCandidateSigned, unresolvedDocs } =
+                      deriveSignatureFlags(latestDocs);
+
+                    if (unresolvedDocs > 0) {
+                      console.warn(
+                        `[Contract] ${unresolvedDocs} document(s) on hiring process ${aDoc.context_id} have unresolved signer roles; ` +
+                        `not inferring signature flags from them. Run backend/scripts/repair-autentique-signer-roles.ts`,
+                      );
+                    }
 
                     const hpUpdates: any = {};
                     if (allCompanySigned) hpUpdates.company_signed = true;

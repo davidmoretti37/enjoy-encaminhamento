@@ -9,10 +9,19 @@ import { extractSkillTags } from '../services/matching/skillTags';
 const db = supabaseAdmin as any;
 
 export async function createCandidate(candidate: InsertCandidate): Promise<string> {
+  // Derive skill_tags at the write choke-point. Only the spreadsheet importer
+  // used to do this, so every candidate who registered on the site landed with
+  // skill_tags = [] and matching silently fell back to comparing raw free text —
+  // the behaviour migration 135 was written to replace.
+  const row: any = { ...candidate };
+  if (Array.isArray(row.skills) && row.skills.length > 0) {
+    row.skill_tags = extractSkillTags(row.skills);
+  }
+
   // Use admin client to bypass RLS during candidate creation (e.g., during onboarding)
   const { data, error } = await db
     .from("candidates")
-    .insert(candidate)
+    .insert(row)
     .select("id")
     .single();
 
@@ -80,6 +89,13 @@ export async function updateCandidate(id: string, data: Partial<InsertCandidate>
   const clean: any = { ...data };
   for (const f of ["education_level", "preferred_work_type"] as const) {
     if (clean[f] === "") clean[f] = null;
+  }
+
+  // Keep skill_tags in step with skills on every edit, for the same reason
+  // createCandidate derives them: otherwise editing a profile leaves the tags
+  // describing whatever the skills used to be.
+  if (Array.isArray(clean.skills)) {
+    clean.skill_tags = extractSkillTags(clean.skills);
   }
 
   // Use admin client to bypass RLS (needed during onboarding flow)

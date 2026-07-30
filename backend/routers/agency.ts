@@ -514,6 +514,15 @@ export const agencyRouter = router({
   getCompanies: agencyProcedure.query(async ({ ctx }) => {
     const agency = await db.getAgencyForUserContext(ctx.user.id, ctx.user.role);
     if (!agency) {
+      // An admin in "all agencies" mode has no selected agency, and this used to
+      // throw. The payments page feeds its "Empresa" dropdown from here, so the
+      // reassign-to-the-right-company fix was dead for that role: the dialog
+      // opened with an empty list and the payment stayed on the wrong company.
+      // Admins legitimately see every agency's payments, so give them every
+      // company. Non-admins still need a selected agency.
+      if (ctx.user.role === 'admin' || ctx.user.role === 'super_admin') {
+        return await db.getAllCompanies();
+      }
       throw new TRPCError({ code: 'NOT_FOUND', message: 'Agency not found. Please select an agency first.' });
     }
     return await db.getCompaniesByAgencyId(agency.id);
