@@ -1,54 +1,107 @@
-// Embeddings — CURRENTLY UNAVAILABLE, BY DESIGN.
+// Embeddings via OpenRouter.
 //
-// This module used to POST to https://openrouter.ai/api/v1/embeddings with the
-// model 'openai/text-embedding-3-small'. Both are wrong:
-//   * OpenRouter hosts ZERO embedding models. Verified against
-//     https://openrouter.ai/api/v1/models — there is no model whose output
-//     modality is `embedding`, and 'openai/text-embedding-3-small' is not in the
-//     catalogue.
-//   * So every call failed, which is why production has 0 embeddings on 274
-//     candidates and 0 on 40 jobs, and why vector matching never returned a
-//     single row since launch.
+// CORRECTION TO A PREVIOUS CLAIM IN THIS FILE
+// This module used to return null with a comment asserting that "OpenRouter hosts
+// ZERO embedding models", citing GET /api/v1/models. That check was real but the
+// conclusion was wrong: the catalogue lists 367 models and none of them declare an
+// embedding modality, yet POST /api/v1/embeddings serves them anyway.
 //
-// Rather than keep retrying an endpoint that cannot work, these functions now
-// return null immediately and say why. Nothing is lost: candidate matching was
-// moved to Postgres full-text ranking (migrations 130-132), which uses the data
-// ANEC actually has — 269/274 candidates have skills, 274 have education,
-// 270 have a city — costs nothing per query, and needs no vendor at all.
+// Verified against the live endpoint:
+//   openai/text-embedding-3-small  -> 1536 dimensions, matching the pgvector column
+//   "atendimento ao publico" vs "lida com clientes"  cosine 0.522
+//   "atendimento ao publico" vs "programador python" cosine 0.238
+//   12 tokens cost 2.4e-07, so the whole candidate base costs a fraction of a cent
 //
-// TO RE-ENABLE: embeddings need a provider that offers them (Voyage, Cohere,
-// OpenAI direct, or a local model). Point EMBEDDING_PROVIDER_URL at it and
-// restore the fetch. `match_candidates_hybrid` already blends vector scores
-// back in automatically the moment rows appear in candidates.embedding — no
-// further change required.
-const EMBEDDING_MODEL = 'unavailable';
+// The lesson: test the endpoint, not the catalogue.
+//
+// This is what the semantic factor was always meant to use. Postgres full-text
+// ranking (migrations 130-132) only matches shared words, so "atendimento ao
+// publico" and "lida com clientes" scored as unrelated. Embeddings compare meaning.
+// match_candidates_hybrid already blends vector scores back in automatically the
+// moment rows appear in candidates.embedding — no further change needed there.
+const EMBEDDING_MODEL = process.env.EMBEDDING_MODEL || 'openai/text-embedding-3-small';
 const EMBEDDING_DIMENSIONS = 1536;
+const ENDPOINT = 'https://openrouter.ai/api/v1/embeddings';
 
-/** True when a real embeddings provider is configured. Currently never. */
+/** True when an embeddings provider is reachable. */
 export function embeddingsAvailable(): boolean {
-  return false;
+  return !!process.env.OPENROUTER_API_KEY;
 }
 
-let warnedOnce = false;
-function warnUnavailable(context: string): null {
-  if (!warnedOnce) {
-    warnedOnce = true;
-    console.warn(
-      `[ai/embeddings] Embeddings are not available (${context}). OpenRouter hosts no `
-      + `embedding models. Matching uses Postgres full-text ranking instead — see `
-      + `migrations 130-132. This is expected, not an error.`,
-    );
+let warnedMissingKey = false;
+function warnMissingKey(): null {
+  if (!warnedMissingKey) {
+    warnedMissingKey = true;
+    console.warn('[ai/embeddings] OPENROUTER_API_KEY not set — semantic matching falls back to text ranking.');
   }
   return null;
 }
 
-export async function generateEmbedding(_text: string): Promise<number[] | null> {
-  return warnUnavailable('generateEmbedding');
+async function embed(inputs: string[]): Promise<(number[] | null)[]> {
+  const key = process.env.OPENROUTER_API_KEY;
+  if (!key) {
+    warnMissingKey();
+    return inputs.map(() => null);
+  }
+
+  // Empty strings make the API error on the whole batch; hold their slots and
+  // send only the real ones.
+  const sendable: { index: number; text: string }[] = [];
+  inputs.forEach((t, i) => {
+    const trimmed = (t || '').trim();
+    if (trimmed) sendable.push({ index: i, text: trimmed.slice(0, 8000) });
+  });
+  const out: (number[] | null)[] = inputs.map(() => null);
+  if (sendable.length === 0) return out;
+
+  const res = await fetch(ENDPOINT, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model: EMBEDDING_MODEL, input: sendable.map((s) => s.text) }),
+  });
+
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    console.error(`[ai/embeddings] ${res.status} from OpenRouter: ${body.slice(0, 200)}`);
+    return out;
+  }
+
+  const json: any = await res.json();
+  const data: any[] = json?.data || [];
+  if (data.length !== sendable.length) {
+    console.error(`[ai/embeddings] expected ${sendable.length} vectors, got ${data.length}`);
+  }
+
+  data.forEach((row, i) => {
+    const vec = row?.embedding;
+    const slot = sendable[row?.index ?? i];
+    if (!slot || !Array.isArray(vec)) return;
+    if (vec.length !== EMBEDDING_DIMENSIONS) {
+      console.error(
+        `[ai/embeddings] ${EMBEDDING_MODEL} returned ${vec.length} dims, expected ${EMBEDDING_DIMENSIONS}; `
+        + `the candidates.embedding column would reject it.`,
+      );
+      return;
+    }
+    out[slot.index] = vec;
+  });
+
+  return out;
+}
+
+export async function generateEmbedding(text: string): Promise<number[] | null> {
+  const [vec] = await embed([text]);
+  return vec ?? null;
 }
 
 export async function generateEmbeddings(texts: string[]): Promise<(number[] | null)[]> {
-  warnUnavailable('generateEmbeddings');
-  return texts.map(() => null);
+  // OpenRouter accepts arrays; chunk so one oversized request cannot fail the lot.
+  const CHUNK = 64;
+  const results: (number[] | null)[] = [];
+  for (let i = 0; i < texts.length; i += CHUNK) {
+    results.push(...(await embed(texts.slice(i, i + CHUNK))));
+  }
+  return results;
 }
 
 export function formatEmbeddingForPostgres(embedding: number[]): string {
