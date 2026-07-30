@@ -23,11 +23,26 @@
  *   npx tsx backend/scripts/repair-autentique-signer-roles.ts
  *   npx tsx backend/scripts/repair-autentique-signer-roles.ts --apply
  */
-import { supabaseAdmin } from "../supabase";
+import dotenv from "dotenv";
+import path from "path";
+import { fileURLToPath } from "url";
+import { createClient } from "@supabase/supabase-js";
 import { mapSignersToRoles } from "../integrations/autentique";
 
+// Own client rather than importing ../supabase: that module reads ENV at import
+// time, and ESM hoists imports above dotenv.config(), so it throws first.
+dotenv.config({ path: path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../.env") });
+
 const APPLY = process.argv.includes("--apply");
-const sb = supabaseAdmin as any;
+
+const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+if (!url || !key) {
+  console.error("[repair] SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set (.env at repo root)");
+  process.exit(2);
+}
+
+const sb = createClient(url, key) as any;
 
 type StoredSigner = {
   role?: string;
@@ -39,7 +54,8 @@ type StoredSigner = {
 };
 
 async function main() {
-  console.log(`[repair] ${APPLY ? "APPLY" : "DRY RUN"} — hiring_contract signer roles\n`);
+  console.log(`[repair] ${APPLY ? "APPLY" : "DRY RUN"} — hiring_contract signer roles`);
+  console.log(`[repair] target: ${new URL(url!).host}\n`);
 
   const { data: docs, error } = await sb
     .from("autentique_documents")
