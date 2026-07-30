@@ -183,6 +183,7 @@ describe('Agency flow (E2E)', () => {
     const { data: batch, error } = await supabase
       .from('candidate_batches')
       .insert({
+        agency_id: testAgencyId,
         job_id: jobId,
         company_id: companyId,
         name: 'E2E Batch',

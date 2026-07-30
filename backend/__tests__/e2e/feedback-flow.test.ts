@@ -125,6 +125,7 @@ describe('Feedback/Reviews flow (E2E)', () => {
     const { data: contract, error: ctrErr } = await supabase
       .from('contracts')
       .insert({
+        agency_id: testAgencyId,
         company_id: companyId,
         candidate_id: candidateId,
         job_id: job.id,
@@ -149,6 +150,7 @@ describe('Feedback/Reviews flow (E2E)', () => {
     const { data: fb, error } = await supabase
       .from('feedback')
       .insert({
+        agency_id: testAgencyId,
         contract_id: contractId,
         company_id: companyId,
         candidate_id: candidateId,

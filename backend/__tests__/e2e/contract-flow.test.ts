@@ -130,6 +130,7 @@ describe('Contract + Payment flow (E2E)', () => {
     const { data: contract, error } = await supabase
       .from('contracts')
       .insert({
+        agency_id: testAgencyId,
         company_id: companyId,
         candidate_id: candidateId,
         job_id: jobId,
