@@ -594,10 +594,15 @@ export const hiringRouter = router({
               // Check if DOCX - if so, fill placeholders and convert to PDF
               const isDocx = template.file_url?.endsWith(".docx") || template.name?.endsWith(".docx");
               let pdfBuffer: Buffer;
+              let uploadFile: { ext: "pdf" | "docx"; mime: string } = { ext: "pdf", mime: "application/pdf" };
 
               if (isDocx) {
                 console.log(`[Hiring] Filling DOCX template: ${template.name}`);
-                pdfBuffer = await fillDocxTemplate(fileBuffer, templateData);
+                const filled = await fillDocxTemplate(fileBuffer, templateData);
+                pdfBuffer = filled.buffer;
+                // PDF when LibreOffice is available, otherwise the filled
+                // DOCX — Autentique renders either one for signing.
+                uploadFile = { ext: filled.ext, mime: filled.mime };
                 console.log(`[Hiring] Template filled and converted to PDF: ${pdfBuffer.length} bytes`);
               } else {
                 // Already a PDF, use as-is
@@ -609,11 +614,13 @@ export const hiringRouter = router({
                 template.name,
                 pdfBuffer,
                 autentiqueSigners.map((s) => ({ email: s.email, name: s.name, action: s.action })),
+                // uploadFile is appended after the options object below.
                 {
                   message: `Contrato de ${process.hiring_type} - ${candidate?.full_name} - ${company?.company_name}`,
                   reminder: "WEEKLY",
                   sortable: false,
-                }
+                },
+                uploadFile,
               );
 
               autentiqueDocIds.push(result.documentId);
@@ -1766,8 +1773,13 @@ export const hiringRouter = router({
             const fileBuffer = Buffer.from(await storageGetBytes(template.file_key || template.file_url));
             const isDocx = template.file_url?.endsWith('.docx') || template.name?.endsWith('.docx');
             let pdfBuffer: Buffer;
+              let uploadFile: { ext: "pdf" | "docx"; mime: string } = { ext: "pdf", mime: "application/pdf" };
             if (isDocx) {
-              pdfBuffer = await fillDocxTemplate(fileBuffer, templateData);
+              const filled = await fillDocxTemplate(fileBuffer, templateData);
+                pdfBuffer = filled.buffer;
+                // PDF when LibreOffice is available, otherwise the filled
+                // DOCX — Autentique renders either one for signing.
+                uploadFile = { ext: filled.ext, mime: filled.mime };
             } else {
               pdfBuffer = fileBuffer;
             }
@@ -1775,7 +1787,8 @@ export const hiringRouter = router({
             const result = await createAutentiqueDoc(
               template.name, pdfBuffer,
               signers.map(s => ({ email: s.email, name: s.name, action: s.action })),
-              { message: `Contrato - ${candidate?.full_name} - ${company?.company_name}`, reminder: 'WEEKLY', sortable: false }
+              { message: `Contrato - ${candidate?.full_name} - ${company?.company_name}`, reminder: 'WEEKLY', sortable: false },
+              uploadFile,
             );
 
             await db.createAutentiqueDocument({

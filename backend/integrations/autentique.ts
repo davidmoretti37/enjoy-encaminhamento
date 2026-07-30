@@ -106,7 +106,13 @@ export async function createDocument(
   name: string,
   pdfBuffer: Buffer,
   signers: AutentiqueSigner[],
-  options: CreateDocumentOptions = {}
+  options: CreateDocumentOptions = {},
+  /**
+   * File type being uploaded. Autentique accepts .docx as well as .pdf and
+   * renders it for signing, which is what lets the platform skip a LibreOffice
+   * PDF conversion that cannot run on Vercel.
+   */
+  file: { ext: "pdf" | "docx"; mime: string } = { ext: "pdf", mime: "application/pdf" },
 ): Promise<CreateDocumentResult> {
   const apiKey = getApiKey();
   const sandbox = ENV.autentique.sandbox;
@@ -161,7 +167,7 @@ export async function createDocument(
   const formData = new FormData();
   formData.append("operations", operations);
   formData.append("map", map);
-  formData.append("0", new Blob([pdfBuffer as any], { type: "application/pdf" }), `${name}.pdf`);
+  formData.append("0", new Blob([pdfBuffer as any], { type: file.mime }), `${name}.${file.ext}`);
 
   console.log(`[Autentique] Creating document "${name}" with ${signers.length} signer(s)${sandbox ? " (SANDBOX)" : ""}`);
 

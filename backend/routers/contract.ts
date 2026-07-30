@@ -442,6 +442,7 @@ export const contractRouter = router({
             template.file_key?.toLowerCase().endsWith('.docx');
 
           let pdfBuffer: Buffer;
+              let uploadFile: { ext: "pdf" | "docx"; mime: string } = { ext: "pdf", mime: "application/pdf" };
 
           if (isDocx && input.companyData) {
             // Fill DOCX placeholders with company data, then convert to PDF
@@ -449,7 +450,11 @@ export const contractRouter = router({
               const { fillDocxTemplate, buildTemplateData } = await import("../lib/fillDocxTemplate");
               const templateData = buildTemplateData(input.companyData);
               console.log(`[Contract] Filling DOCX template "${template.name}" with ${Object.keys(templateData).length} fields`);
-              pdfBuffer = await fillDocxTemplate(fileBuffer, templateData);
+              const filled = await fillDocxTemplate(fileBuffer, templateData);
+                pdfBuffer = filled.buffer;
+                // PDF when LibreOffice is available, otherwise the filled
+                // DOCX — Autentique renders either one for signing.
+                uploadFile = { ext: filled.ext, mime: filled.mime };
               console.log(`[Contract] DOCX filled and converted to PDF: ${pdfBuffer.length} bytes`);
             } catch (fillErr: any) {
               console.error(`[Contract] Failed to fill DOCX template "${template.name}":`, fillErr?.message);
@@ -469,7 +474,8 @@ export const contractRouter = router({
             {
               message: `Por favor, assine o documento "${template.name}".`,
               reminder: "WEEKLY",
-            }
+            },
+            uploadFile,
           );
 
           console.log(`[Contract] Autentique doc created on API: ${result.documentId}, signUrl=${result.signers[0]?.signUrl || "EMPTY"}`);

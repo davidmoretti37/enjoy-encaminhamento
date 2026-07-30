@@ -16,7 +16,7 @@ const convertAsync = promisify(convert);
 export async function fillDocxTemplate(
   docxBuffer: Buffer,
   data: Record<string, string>
-): Promise<Buffer> {
+): Promise<FilledDocument> {
   // 1. Fill placeholders in the DOCX
   //
   // docxtemplater uses single braces, {company_name}. ANEC authors its documents
@@ -41,12 +41,37 @@ export async function fillDocxTemplate(
     mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   });
 
-  // 2. Convert filled DOCX to PDF via LibreOffice
-  console.log("[FillDocx] Converting filled DOCX to PDF via LibreOffice...");
-  const pdfBuffer = await convertAsync(filledDocx, ".pdf", undefined);
-  console.log(`[FillDocx] PDF generated: ${pdfBuffer.length} bytes`);
+  // 2. Try to convert to PDF, but do NOT require it.
+  //
+  // libreoffice-convert shells out to the `soffice` binary. Vercel's Node runtime
+  // has no LibreOffice, so this step always threw in production and took the
+  // whole contract send down with it — "falha na conversão do contrato". That is
+  // why contracts have never gone out from inside the platform.
+  //
+  // Autentique accepts .docx directly and renders it for signing itself, so the
+  // filled DOCX is a perfectly good thing to send. PDF is now a bonus for
+  // environments that do have LibreOffice, not a gate.
+  try {
+    const pdfBuffer = await convertAsync(filledDocx, ".pdf", undefined);
+    console.log(`[FillDocx] PDF generated: ${pdfBuffer.length} bytes`);
+    return { buffer: Buffer.from(pdfBuffer), ext: "pdf", mime: "application/pdf" };
+  } catch (e: any) {
+    console.warn(
+      `[FillDocx] PDF conversion unavailable (${e?.message}); sending the filled DOCX instead.`,
+    );
+    return {
+      buffer: Buffer.from(filledDocx),
+      ext: "docx",
+      mime: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    };
+  }
+}
 
-  return Buffer.from(pdfBuffer);
+/** What fillDocxTemplate produced: a PDF when possible, otherwise the filled DOCX. */
+export interface FilledDocument {
+  buffer: Buffer;
+  ext: "pdf" | "docx";
+  mime: string;
 }
 
 /**
