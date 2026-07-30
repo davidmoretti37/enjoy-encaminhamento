@@ -86,7 +86,14 @@ export default function PaymentPage() {
     enabled: isAdmin || isAgency,
   });
 
-  // Jobs for the selected company (used in create payment modal)
+  // Companies the agency manages. The edit dialog needs this: a payment booked
+  // against the wrong company could not be moved, because the vaga list is scoped
+  // to the payment's current company and there was no way to change it.
+  const companiesQuery = trpc.agency.getCompanies.useQuery(undefined, {
+    enabled: isAdmin || isAgency,
+  });
+
+  // Jobs for the selected company (used in create + edit payment modals)
   const companyJobsQuery = trpc.job.getByCompanyId.useQuery(
     { companyId: createCompanyId },
     { enabled: !!createCompanyId }
@@ -223,6 +230,7 @@ export default function PaymentPage() {
     if (!editingPayment) return;
     updatePaymentMutation.mutate({
       paymentId: editingPayment.id,
+      company_id: createCompanyId || undefined,
       amount: editForm.amount ? Math.round(parseFloat(editForm.amount) * 100) : undefined,
       due_date: editForm.due_date || undefined,
       billing_period: editForm.billing_period || undefined,
@@ -809,6 +817,31 @@ export default function PaymentPage() {
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4">
+              {/* Company first: changing it repopulates the vaga list below, which
+                  is what makes a mis-booked payment fixable at all. */}
+              <div className="grid gap-2">
+                <Label>Empresa</Label>
+                <Select
+                  value={createCompanyId}
+                  onValueChange={(value) => {
+                    setCreateCompanyId(value);
+                    // The old vaga belongs to the old company; clear it so a stale
+                    // job_id cannot be saved against the new one.
+                    setEditForm(prev => ({ ...prev, job_id: '' }));
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione a empresa" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(companiesQuery.data || []).map((c: any) => (
+                      <SelectItem key={c.id} value={c.id}>
+                        {c.company_name || c.trade_name || c.legal_name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
               {companyJobsQuery.data && companyJobsQuery.data.length > 0 && (
                 <div className="grid gap-2">
                   <Label>Vaga</Label>

@@ -170,6 +170,11 @@ export const adminRouter = router({
       due_date: z.string().optional(),
       billing_period: z.string().optional(),
       notes: z.string().optional(),
+      // A payment booked against the wrong company was unfixable: the edit dialog
+      // scoped its vaga list to the payment's existing company, so there was no
+      // way to move it. Operator's words: "não dá pra gente selecionar a vaga da
+      // empresa" — only one vaga showed because that company only has one.
+      company_id: z.string().uuid().nullable().optional(),
       job_id: z.string().uuid().nullable().optional(),
       payment_type: z.enum(['monthly-fee', 'insurance-fee', 'annual-insurance', 'setup-fee', 'clt-fee', 'penalty', 'refund']).optional(),
       status: z.enum(['pending', 'paid', 'overdue', 'failed', 'refunded']).optional(),
@@ -186,6 +191,7 @@ export const adminRouter = router({
       if (fields.due_date !== undefined) updates.due_date = fields.due_date;
       if (fields.billing_period !== undefined) updates.billing_period = fields.billing_period;
       if (fields.notes !== undefined) updates.notes = fields.notes;
+      if (fields.company_id !== undefined) updates.company_id = fields.company_id;
       if (fields.job_id !== undefined) updates.job_id = fields.job_id;
       if (fields.payment_type !== undefined) updates.payment_type = fields.payment_type;
       if (fields.status !== undefined) {
