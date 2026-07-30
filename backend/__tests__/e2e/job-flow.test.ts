@@ -1,15 +1,18 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { SupabaseClient } from '@supabase/supabase-js';
-import { createServiceClient, createTestUser } from './setup';
+import { createServiceClient, createTestUser, getTestAgencyId } from './setup';
 
 describe('Job flow (E2E)', () => {
   let supabase: SupabaseClient;
   const createdUserIds: string[] = [];
+  // jobs.agency_id is NOT NULL; every insert here needs one.
+  let testAgencyId: string;
   const createdCompanyIds: string[] = [];
   const createdJobIds: string[] = [];
 
   beforeAll(async () => {
     supabase = createServiceClient();
+    testAgencyId = await getTestAgencyId(supabase);
 
     // Prerequisites: create user + company
     const user = await createTestUser(supabase, { role: 'company' });
