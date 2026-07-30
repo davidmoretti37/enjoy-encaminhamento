@@ -272,9 +272,18 @@ export const hiringRouter = router({
         });
       }
 
-      // Create hiring process
-      // For estágio: status is awaiting_configuration (agency must configure before contracts go out)
-      // For CLT: status is pending_signatures (immediate)
+      // Create hiring process.
+      //
+      // Both regimes wait for the agency to configure the contract. CLT used to
+      // jump straight to pending_signatures, which skipped
+      // configureAndSendContract entirely — so a CLT hire never produced a
+      // contract and nobody was ever asked to sign one. ANEC has a CONTRATO_CLT
+      // template precisely because that regime does have a contract to send.
+      //
+      // Signer creation is data-driven (parent and school are only added when the
+      // candidate has that data), so a CLT hire correctly yields a single
+      // candidate signer. Safe for existing data: every hiring process on the
+      // platform today is estágio.
       const hiringProcess = await hiringDb.createHiringProcess({
         applicationId: input.applicationId || application?.id,
         batchId: input.batchId,
@@ -287,7 +296,7 @@ export const hiringRouter = router({
         startDate: input.startDate,
         endDate,
         monthlySalary: input.monthlySalary,
-        status: hiringType === "estagio" ? "awaiting_configuration" : "pending_signatures",
+        status: "awaiting_configuration",
       });
 
       // Update application status to 'selected'
