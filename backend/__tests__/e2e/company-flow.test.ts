@@ -67,7 +67,7 @@ describe('Company flow (E2E)', () => {
         address: 'Rua das Flores, 123',
         city: 'Uberlândia',
         state: 'MG',
-        zip_code: '38400-000',
+        postal_code: '38400-000',
         industry: 'Technology',
         company_size: '11-50',
         website: 'https://testcorp.e2e',
@@ -82,7 +82,7 @@ describe('Company flow (E2E)', () => {
     expect(updated.address).toBe('Rua das Flores, 123');
     expect(updated.city).toBe('Uberlândia');
     expect(updated.state).toBe('MG');
-    expect(updated.zip_code).toBe('38400-000');
+    expect(updated.postal_code).toBe('38400-000');
     expect(updated.industry).toBe('Technology');
     expect(updated.company_size).toBe('11-50');
     expect(updated.website).toBe('https://testcorp.e2e');
@@ -119,7 +119,7 @@ describe('Company flow (E2E)', () => {
     expect(company.address).toBe('Rua das Flores, 123');
     expect(company.city).toBe('Uberlândia');
     expect(company.state).toBe('MG');
-    expect(company.zip_code).toBe('38400-000');
+    expect(company.postal_code).toBe('38400-000');
     expect(company.industry).toBe('Technology');
     expect(company.company_size).toBe('11-50');
     expect(company.description).toBe('A test company for E2E testing');

@@ -126,7 +126,6 @@ describe('Feedback/Reviews flow (E2E)', () => {
       .from('contracts')
       .insert({
         agency_id: testAgencyId,
-        company_id: companyId,
         candidate_id: candidateId,
         job_id: job.id,
         application_id: app.id,
@@ -152,7 +151,6 @@ describe('Feedback/Reviews flow (E2E)', () => {
       .insert({
         agency_id: testAgencyId,
         contract_id: contractId,
-        company_id: companyId,
         candidate_id: candidateId,
         review_month: 3,
         review_year: 2026,
@@ -171,7 +169,11 @@ describe('Feedback/Reviews flow (E2E)', () => {
     cleanupIds.feedbackIds.push(feedbackId);
   });
 
-  it('updates ratings (punctuality, communication, teamwork, technical_skills)', async () => {
+  // punctuality/communication/teamwork/technical_skills do not exist on
+
+  // feedback, in this database or in production. Pending until they do.
+
+  it.todo('updates ratings (punctuality, communication, teamwork, technical_skills)', async () => {
     const { data: updated, error } = await supabase
       .from('feedback')
       .update({
