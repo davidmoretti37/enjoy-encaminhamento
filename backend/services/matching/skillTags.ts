@@ -50,6 +50,7 @@ export const SKILL_TAGS: SkillTag[] = [
       'boa comunicacao', 'otima comunicacao', 'comunicacao eficaz', 'comunicacao eficiente',
       'oratoria', 'se comunica bem', 'bom na comunicacao', 'relacionamento interpessoal',
       'escuta ativa', 'extroversao', 'lidar com diferentes perfis',
+      'sociabilidade', 'sociavel',
       'relacoes interpessoais', 'gostar de conversar', 'desenvoltura',
     ],
   },
@@ -87,7 +88,10 @@ export const SKILL_TAGS: SkillTag[] = [
   },
   {
     tag: 'agilidade', label: 'Agilidade',
-    patterns: ['agilidade', 'agil', 'rapidez', 'eficiencia e rapidez', 'dinamico', 'dinamica'],
+    patterns: [
+      'agilidade', 'agil', 'rapidez', 'eficiencia e rapidez', 'dinamico', 'dinamica',
+      'produtividade', 'produtivo', 'produtiva',
+    ],
   },
   {
     tag: 'aprendizado-rapido', label: 'Facilidade de aprendizado',
@@ -98,6 +102,7 @@ export const SKILL_TAGS: SkillTag[] = [
       'facilidade em aprendizado', 'agilidade em aprender', 'vontade de aprender',
       'aprendizado continuo', 'gosto de aprender', 'disposicao para aprender',
       'facil aprendizado', 'facil aprendizagem', 'disposto a aprender', 'aprender',
+      'rapido aprendizado', 'aprendizado veloz',
       'estudioso', 'interesse em aprender', 'aprendo',
     ],
   },
@@ -133,6 +138,7 @@ export const SKILL_TAGS: SkillTag[] = [
       'atencao aos detalhes', 'atencao a detalhes', 'atencao', 'atencioso', 'atenciosa',
       'atento', 'atenta', 'concentrada', 'concentrado', 'concentracao', 'foco',
       'focada', 'focado', 'cuidadoso', 'cuidadosa', 'calmo', 'calma', 'paciencia', 'paciente',
+      'analitica', 'analitico', 'detalhista', 'criteriosa', 'criterioso',
     ],
   },
   {
@@ -173,7 +179,7 @@ export const SKILL_TAGS: SkillTag[] = [
     tag: 'pacote-office', label: 'Pacote Office',
     patterns: ['pacote office', 'microsoft office', 'office 365', 'office'],
   },
-  { tag: 'excel', label: 'Excel', patterns: ['excel', 'planilhas', 'planilha'] },
+  { tag: 'excel', label: 'Excel', patterns: ['excel', 'excell', 'planilhas', 'planilha'] },
   { tag: 'word', label: 'Word', patterns: ['word'] },
   { tag: 'powerpoint', label: 'PowerPoint', patterns: ['powerpoint', 'power point', 'apresentacoes'] },
   { tag: 'canva', label: 'Canva', patterns: ['canva'] },
@@ -190,7 +196,7 @@ export const SKILL_TAGS: SkillTag[] = [
     tag: 'criacao-de-conteudo', label: 'Criação de conteúdo',
     patterns: [
       'criacao de conteudo', 'producao de conteudo', 'ugc', 'edicao de video',
-      'copywriting', 'edicao', 'fotografia', 'fotografo', 'design',
+      'copywriting', 'edicao', 'fotografia', 'fotografo', 'design', 'desenho', 'desenhar',
     ],
   },
   {
@@ -242,6 +248,14 @@ export const SKILL_TAGS: SkillTag[] = [
   { tag: 'email-internet', label: 'E-mail e internet', patterns: ['e mail', 'email', 'internet', 'navegador'] },
   { tag: 'whatsapp', label: 'WhatsApp', patterns: ['whatsapp', 'whats app'] },
   { tag: 'cnh', label: 'CNH', patterns: ['habilitacao', 'cnh', 'carteira de motorista', 'carta de conducao'] },
+  {
+    tag: 'programacao', label: 'Programação',
+    patterns: [
+      'programador', 'programadora', 'programacao', 'desenvolvedor', 'desenvolvedora',
+      'python', 'java', 'javascript', 'java script', 'typescript', 'php', 'react',
+      'desenvolvimento web', 'desenvolvimento de software', 'git', 'github',
+    ],
+  },
   {
     tag: 'idiomas', label: 'Idiomas',
     patterns: ['ingles', 'espanhol', 'idiomas', 'segundo idioma', 'bilingue'],
