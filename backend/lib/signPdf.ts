@@ -1,5 +1,8 @@
 // Embed a signature image + signer info into a PDF's last page
 import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
+// A signer name carrying anything outside CP1252 would throw and fail the
+// signature stamp, which is the worst possible place to fail.
+import { sanitizeLine } from "./pdfText";
 import { storageGetBytes } from "../storage";
 
 export async function embedSignatureInPdf(
@@ -64,7 +67,7 @@ export async function embedSignatureInPdf(
     "$1.$2.$3-$4"
   );
 
-  lastPage.drawText(`${signerName}`, {
+  lastPage.drawText(sanitizeLine(signerName), {
     x: marginX,
     y: marginY + 8,
     size: fontSize,
@@ -72,7 +75,7 @@ export async function embedSignatureInPdf(
     color: rgb(0.2, 0.2, 0.2),
   });
 
-  lastPage.drawText(`CPF: ${cpfFormatted}  |  ${dateStr}`, {
+  lastPage.drawText(sanitizeLine(`CPF: ${cpfFormatted}  |  ${dateStr}`), {
     x: marginX,
     y: marginY,
     size: fontSize - 1,

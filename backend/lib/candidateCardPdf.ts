@@ -1,4 +1,5 @@
 import { PDFDocument, rgb, StandardFonts, PDFFont, PDFPage } from "pdf-lib";
+import { sanitizeLine, wrapText } from "./pdfText";
 import { computeDiscInterpretation } from "./discProfiles";
 
 const BRAND_DARK = rgb(10 / 255, 35 / 255, 66 / 255); // #0A2342
@@ -72,22 +73,19 @@ function drawBar(
   }
 }
 
-function wrapText(text: string, font: PDFFont, fontSize: number, maxWidth: number): string[] {
-  const words = text.split(" ");
-  const lines: string[] = [];
-  let currentLine = "";
-
-  for (const word of words) {
-    const test = currentLine ? `${currentLine} ${word}` : word;
-    if (font.widthOfTextAtSize(test, fontSize) <= maxWidth) {
-      currentLine = test;
-    } else {
-      if (currentLine) lines.push(currentLine);
-      currentLine = word;
-    }
-  }
-  if (currentLine) lines.push(currentLine);
-  return lines;
+/**
+ * Every string drawn on the page goes through here.
+ *
+ * pdf-lib's standard fonts encode with WinAnsi and THROW on anything outside
+ * CP1252, so one emoji or newline in one candidate field failed the entire
+ * export ("WinAnsi cannot encode ... 0x000a"). Sanitising at the single point
+ * where text meets the page means no future field can reintroduce the crash.
+ */
+function drawText(page: PDFPage, text: unknown, options: any): void {
+  const safe = sanitizeLine(text);
+  if (!safe) return;
+  // page.drawText, not drawText — calling the wrapper here recurses forever.
+  page.drawText(safe, options);
 }
 
 const EDUCATION_LABELS: Record<string, string> = {
@@ -133,7 +131,7 @@ export async function generateCandidateCardPdf(
       color: GRAY_400,
     });
     y -= 18;
-    page.drawText(title, { x: margin, y, size: 12, font: fontBold, color: BRAND_DARK });
+    drawText(page, title, { x: margin, y, size: 12, font: fontBold, color: BRAND_DARK });
     y -= 16;
   };
 
@@ -147,7 +145,7 @@ export async function generateCandidateCardPdf(
     color: BRAND_DARK,
   });
 
-  page.drawText("Ficha do Candidato", {
+  drawText(page, "Ficha do Candidato", {
     x: margin,
     y: pageHeight - 40,
     size: 20,
@@ -156,7 +154,7 @@ export async function generateCandidateCardPdf(
   });
 
   if (data.jobTitle) {
-    page.drawText(data.jobTitle, {
+    drawText(page, data.jobTitle, {
       x: margin,
       y: pageHeight - 54,
       size: 10,
@@ -168,7 +166,7 @@ export async function generateCandidateCardPdf(
   y = pageHeight - 60 - 20;
 
   // ─── Name & Info ─────────────────────────────────────────────────────
-  page.drawText(data.name, {
+  drawText(page, data.name, {
     x: margin,
     y,
     size: 18,
@@ -183,7 +181,7 @@ export async function generateCandidateCardPdf(
   if (data.education) infoParts.push(EDUCATION_LABELS[data.education] || data.education);
 
   if (infoParts.length > 0) {
-    page.drawText(infoParts.join("  |  "), {
+    drawText(page, infoParts.join("  |  "), {
       x: margin,
       y,
       size: 9,
@@ -194,7 +192,7 @@ export async function generateCandidateCardPdf(
   }
 
   if (data.matchScore) {
-    page.drawText(`Score de Compatibilidade: ${Math.round(data.matchScore)}%`, {
+    drawText(page, `Score de Compatibilidade: ${Math.round(data.matchScore)}%`, {
       x: margin,
       y,
       size: 9,
@@ -218,7 +216,7 @@ export async function generateCandidateCardPdf(
     const timeStr = date.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
     const typeStr = iv.interview_type === "online" ? "Online" : "Presencial";
 
-    page.drawText(`${typeStr} — ${dateStr} às ${timeStr}`, {
+    drawText(page, `${typeStr} — ${dateStr} às ${timeStr}`, {
       x: margin,
       y,
       size: 10,
@@ -228,7 +226,7 @@ export async function generateCandidateCardPdf(
     y -= 14;
 
     if (iv.duration_minutes) {
-      page.drawText(`Duração: ${iv.duration_minutes} minutos`, {
+      drawText(page, `Duração: ${iv.duration_minutes} minutos`, {
         x: margin,
         y,
         size: 9,
@@ -242,7 +240,7 @@ export async function generateCandidateCardPdf(
       const loc = [iv.location_address, iv.location_city, iv.location_state]
         .filter(Boolean)
         .join(", ");
-      page.drawText(`Local: ${loc}`, {
+      drawText(page, `Local: ${loc}`, {
         x: margin,
         y,
         size: 9,
@@ -253,7 +251,7 @@ export async function generateCandidateCardPdf(
     }
 
     if (iv.meeting_link) {
-      page.drawText(`Link: ${iv.meeting_link}`, {
+      drawText(page, `Link: ${iv.meeting_link}`, {
         x: margin,
         y,
         size: 9,
@@ -270,7 +268,7 @@ export async function generateCandidateCardPdf(
     const summaryLines = wrapText(data.summary, font, 9, contentWidth);
     for (const line of summaryLines) {
       addNewPageIfNeeded(14);
-      page.drawText(line, { x: margin, y, size: 9, font, color: GRAY_600 });
+      drawText(page, line, { x: margin, y, size: 9, font, color: GRAY_600 });
       y -= 13;
     }
   }
@@ -288,7 +286,7 @@ export async function generateCandidateCardPdf(
     drawSectionTitle("Perfil DISC");
     for (const disc of discValues) {
       addNewPageIfNeeded(18);
-      page.drawText(disc.label, {
+      drawText(page, disc.label, {
         x: margin,
         y: y + 2,
         size: 9,
@@ -298,7 +296,7 @@ export async function generateCandidateCardPdf(
       const barX = margin + 100;
       const barW = contentWidth - 100 - 40;
       drawBar(page, barX, y, barW, 10, disc.value || 0, disc.color);
-      page.drawText(`${disc.value || 0}%`, {
+      drawText(page, `${disc.value || 0}%`, {
         x: barX + barW + 6,
         y: y + 1,
         size: 8,
@@ -321,14 +319,14 @@ export async function generateCandidateCardPdf(
     const drawParagraph = (text: string, size = 9, color = GRAY_600) => {
       for (const line of wrapText(text, font, size, contentWidth)) {
         addNewPageIfNeeded(size + 4);
-        page.drawText(line, { x: margin, y, size, font, color });
+        drawText(page, line, { x: margin, y, size, font, color });
         y -= size + 4;
       }
     };
     const drawLabeled = (label: string, value: string) => {
       for (const line of wrapText(`${label}: ${value}`, font, 9, contentWidth)) {
         addNewPageIfNeeded(13);
-        page.drawText(line, { x: margin, y, size: 9, font, color: GRAY_600 });
+        drawText(page, line, { x: margin, y, size: 9, font, color: GRAY_600 });
         y -= 13;
       }
     };
@@ -336,7 +334,7 @@ export async function generateCandidateCardPdf(
     if (interp.primary) {
       y -= 6;
       addNewPageIfNeeded(16);
-      page.drawText(`Perfil Predominante: ${interp.primary.title} (${interp.primary.value}%)`, {
+      drawText(page, `Perfil Predominante: ${interp.primary.title} (${interp.primary.value}%)`, {
         x: margin, y, size: 11, font: fontBold, color: BRAND_DARK,
       });
       y -= 16;
@@ -350,7 +348,7 @@ export async function generateCandidateCardPdf(
       if (interp.secondary) {
         y -= 6;
         addNewPageIfNeeded(15);
-        page.drawText(`Perfil Secundário: ${interp.secondary.title} (${interp.secondary.value}%)`, {
+        drawText(page, `Perfil Secundário: ${interp.secondary.title} (${interp.secondary.value}%)`, {
           x: margin, y, size: 10, font: fontBold, color: BRAND_MED,
         });
         y -= 15;
@@ -361,7 +359,7 @@ export async function generateCandidateCardPdf(
       if (interp.combined) {
         y -= 6;
         addNewPageIfNeeded(15);
-        page.drawText(`Perfil Combinado: ${interp.combined.name}`, {
+        drawText(page, `Perfil Combinado: ${interp.combined.name}`, {
           x: margin, y, size: 10, font: fontBold, color: BRAND_MED,
         });
         y -= 15;
@@ -378,7 +376,7 @@ export async function generateCandidateCardPdf(
     drawSectionTitle("Top Competências (PDP)");
     for (let i = 0; i < data.pdp_top_10_competencies.length; i++) {
       addNewPageIfNeeded(14);
-      page.drawText(`${i + 1}. ${data.pdp_top_10_competencies[i]}`, {
+      drawText(page, `${i + 1}. ${data.pdp_top_10_competencies[i]}`, {
         x: margin,
         y,
         size: 9,
@@ -393,7 +391,7 @@ export async function generateCandidateCardPdf(
     drawSectionTitle("Áreas de Desenvolvimento");
     for (const comp of data.pdp_develop_competencies) {
       addNewPageIfNeeded(14);
-      page.drawText(`• ${comp}`, { x: margin, y, size: 9, font, color: GRAY_600 });
+      drawText(page, `• ${comp}`, { x: margin, y, size: 9, font, color: GRAY_600 });
       y -= 13;
     }
   }
@@ -405,7 +403,7 @@ export async function generateCandidateCardPdf(
     const skillLines = wrapText(skillsText, font, 9, contentWidth);
     for (const line of skillLines) {
       addNewPageIfNeeded(14);
-      page.drawText(line, { x: margin, y, size: 9, font, color: GRAY_600 });
+      drawText(page, line, { x: margin, y, size: 9, font, color: GRAY_600 });
       y -= 13;
     }
   }
@@ -416,7 +414,7 @@ export async function generateCandidateCardPdf(
     for (const lang of data.languages) {
       addNewPageIfNeeded(14);
       const text = typeof lang === "string" ? lang : `${lang.language}${lang.level ? ` (${lang.level})` : ""}`;
-      page.drawText(`• ${text}`, { x: margin, y, size: 9, font, color: GRAY_600 });
+      drawText(page, `• ${text}`, { x: margin, y, size: 9, font, color: GRAY_600 });
       y -= 13;
     }
   }
@@ -425,7 +423,7 @@ export async function generateCandidateCardPdf(
   if (data.institution || data.course) {
     drawSectionTitle("Formação");
     if (data.institution) {
-      page.drawText(data.institution, {
+      drawText(page, data.institution, {
         x: margin,
         y,
         size: 10,
@@ -435,11 +433,11 @@ export async function generateCandidateCardPdf(
       y -= 14;
     }
     if (data.course) {
-      page.drawText(data.course, { x: margin, y, size: 9, font, color: GRAY_600 });
+      drawText(page, data.course, { x: margin, y, size: 9, font, color: GRAY_600 });
       y -= 13;
     }
     if (data.currently_studying) {
-      page.drawText("Cursando atualmente", { x: margin, y, size: 9, font, color: BRAND_MED });
+      drawText(page, "Cursando atualmente", { x: margin, y, size: 9, font, color: BRAND_MED });
       y -= 13;
     }
   }
@@ -450,7 +448,7 @@ export async function generateCandidateCardPdf(
     for (const exp of data.experience) {
       addNewPageIfNeeded(30);
       if (exp.role) {
-        page.drawText(exp.role, {
+        drawText(page, exp.role, {
           x: margin,
           y,
           size: 10,
@@ -460,14 +458,14 @@ export async function generateCandidateCardPdf(
         y -= 14;
       }
       if (exp.company) {
-        page.drawText(exp.company, { x: margin, y, size: 9, font, color: BRAND_MED });
+        drawText(page, exp.company, { x: margin, y, size: 9, font, color: BRAND_MED });
         y -= 13;
       }
       if (exp.description) {
         const descLines = wrapText(exp.description, font, 9, contentWidth);
         for (const line of descLines.slice(0, 3)) {
           addNewPageIfNeeded(14);
-          page.drawText(line, { x: margin, y, size: 9, font, color: GRAY_600 });
+          drawText(page, line, { x: margin, y, size: 9, font, color: GRAY_600 });
           y -= 13;
         }
       }
@@ -484,16 +482,16 @@ export async function generateCandidateCardPdf(
     drawSectionTitle("Disponibilidade");
     addNewPageIfNeeded(20);
     const availLine = availTypes.join("  •  ");
-    page.drawText(availLine, { x: margin, y, size: 10, font, color: BRAND_MED });
+    drawText(page, availLine, { x: margin, y, size: 10, font, color: BRAND_MED });
     y -= 14;
     if (data.is_school_student) {
-      page.drawText("Inexxa Formação Profissionalizante", { x: margin, y, size: 9, font: fontBold, color: BRAND_ORANGE });
+      drawText(page, "Inexxa Formação Profissionalizante", { x: margin, y, size: 9, font: fontBold, color: BRAND_ORANGE });
       y -= 13;
     }
   } else if (data.is_school_student) {
     drawSectionTitle("Informações Adicionais");
     addNewPageIfNeeded(20);
-    page.drawText("Inexxa Formação Profissionalizante", { x: margin, y, size: 9, font: fontBold, color: BRAND_ORANGE });
+    drawText(page, "Inexxa Formação Profissionalizante", { x: margin, y, size: 9, font: fontBold, color: BRAND_ORANGE });
     y -= 13;
   }
 

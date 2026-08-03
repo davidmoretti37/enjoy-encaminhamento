@@ -2,6 +2,7 @@
 // The default wording below is a sensible template; ANEC can hand over its final
 // legal text and it swaps into BODY_TEMPLATE without touching the layout.
 import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
+import { sanitizeLine, wrapText } from "./pdfText";
 
 const BRAND_DARK = rgb(10 / 255, 35 / 255, 66 / 255); // #0A2342
 const GRAY = rgb(71 / 255, 85 / 255, 105 / 255);
@@ -44,36 +45,24 @@ export async function buildReferralLetterPdf(data: ReferralLetterData): Promise<
   const width = page.getWidth() - margin * 2;
   let y = page.getHeight() - margin;
 
-  const wrap = (text: string, size: number): string[] => {
-    const words = text.split(/\s+/);
-    const lines: string[] = [];
-    let line = "";
-    for (const w of words) {
-      const test = line ? `${line} ${w}` : w;
-      if (font.widthOfTextAtSize(test, size) > width && line) {
-        lines.push(line);
-        line = w;
-      } else {
-        line = test;
-      }
-    }
-    if (line) lines.push(line);
-    return lines;
-  };
+  // Shared wrapper: strips what WinAnsi cannot encode (an emoji in a candidate
+  // name used to throw and fail the whole letter) and keeps the line breaks the
+  // author typed, which splitting on /\s+/ silently flattened.
+  const wrap = (text: string, size: number): string[] => wrapText(text, font, size, width);
 
   const draw = (text: string, size: number, bold = false, color = GRAY, gap = 6) => {
     for (const line of wrap(text, size)) {
-      page.drawText(line, { x: margin, y, size, font: bold ? fontBold : font, color });
+      if (line) page.drawText(line, { x: margin, y, size, font: bold ? fontBold : font, color });
       y -= size + gap;
     }
   };
 
   // Header
-  page.drawText("ANEC — Inexxa Formação Profissionalizante", {
+  page.drawText(sanitizeLine("ANEC — Inexxa Formação Profissionalizante"), {
     x: margin, y, size: 14, font: fontBold, color: BRAND_DARK,
   });
   y -= 24;
-  page.drawText("CARTA DE ENCAMINHAMENTO", {
+  page.drawText(sanitizeLine("CARTA DE ENCAMINHAMENTO"), {
     x: margin, y, size: 16, font: fontBold, color: BRAND_DARK,
   });
   y -= 34;
