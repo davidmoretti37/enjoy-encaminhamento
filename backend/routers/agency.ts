@@ -1929,6 +1929,58 @@ Regras:
       return { success: true, file: newFile };
     }),
 
+  /**
+   * Remove a company document.
+   *
+   * The operator ended up with three copies of the same contrato de estágio
+   * because the old upload button reported success while filing the document out
+   * of sight, so she retried. She needs to be able to clear duplicates herself.
+   *
+   * The storage object is removed too, so nothing is left orphaned and paid for.
+   * The list entry is removed even if the storage delete fails: a file she cannot
+   * see and cannot reach is worse than an orphaned object, and she still holds the
+   * original on her machine.
+   */
+  deleteCompanyDocument: agencyProcedure
+    .input(z.object({
+      companyId: z.string().uuid(),
+      key: z.string().min(1),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await assertAgencyOwnsCompany(ctx, input.companyId);
+
+      const { data: company } = await supabaseAdmin
+        .from("companies")
+        .select("contract_files")
+        .eq("id", input.companyId)
+        .single();
+
+      const files: CompanyFile[] = Array.isArray(company?.contract_files)
+        ? (company!.contract_files as CompanyFile[])
+        : [];
+
+      const target = files.find((f) => f.key === input.key);
+      if (!target) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Documento não encontrado" });
+      }
+
+      await supabaseAdmin
+        .from("companies")
+        .update({ contract_files: files.filter((f) => f.key !== input.key) })
+        .eq("id", input.companyId);
+
+      try {
+        const { storageDelete } = await import("../storage");
+        await storageDelete(input.key);
+      } catch (err) {
+        // Entry is already gone from her view; an orphaned object is the lesser
+        // problem and must not surface as a failed delete.
+        console.error("[agency] storage delete failed for", input.key, err);
+      }
+
+      return { success: true, name: target.name ?? null };
+    }),
+
   /** Correct the category or owner of an already-uploaded file. */
   updateCompanyDocumentMeta: agencyProcedure
     .input(z.object({

@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Upload, Download, ExternalLink, User, Pencil, Check, X } from "lucide-react";
+import { Upload, Download, ExternalLink, User, Pencil, Check, X, Trash2 } from "lucide-react";
 
 /**
  * Documents belonging to the people a company has hired.
@@ -59,6 +59,9 @@ export function EmployeeDocumentsPanel({ companyId }: { companyId: string }) {
   const [busy, setBusy] = useState(false);
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
+  // Two-step delete: the first click arms this key, the second confirms. Avoids a
+  // browser dialog and makes an accidental click harmless.
+  const [confirmingKey, setConfirmingKey] = useState<string | null>(null);
 
   const { data, isLoading } = trpc.agency.listCompanyDocuments.useQuery(
     { companyId },
@@ -80,6 +83,18 @@ export function EmployeeDocumentsPanel({ companyId }: { companyId: string }) {
     onError: (e: any) => {
       toast.error(e.message || "Erro ao enviar documento");
       setBusy(false);
+    },
+  });
+
+  const removeDoc = trpc.agency.deleteCompanyDocument.useMutation({
+    onSuccess: (r: any) => {
+      toast.success(r?.name ? `"${r.name}" removido.` : "Documento removido.");
+      setConfirmingKey(null);
+      invalidate();
+    },
+    onError: (e: any) => {
+      toast.error(e.message || "Erro ao remover documento");
+      setConfirmingKey(null);
     },
   });
 
@@ -216,16 +231,51 @@ export function EmployeeDocumentsPanel({ companyId }: { companyId: string }) {
                         <ExternalLink className="h-3 w-3 shrink-0" />
                       </a>
                       {d.key && editingKey !== d.key && (
-                        <button
-                          onClick={() => {
-                            setEditingKey(d.key!);
-                            setEditName(d.employee || "");
-                          }}
-                          className="ml-auto text-slate-400 hover:text-slate-700 shrink-0"
-                          title="Corrigir a quem pertence"
-                        >
-                          <Pencil className="h-3.5 w-3.5" />
-                        </button>
+                        <div className="ml-auto flex items-center gap-1 shrink-0">
+                          {confirmingKey === d.key ? (
+                            <>
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                className="h-7 text-xs"
+                                disabled={removeDoc.isPending}
+                                onClick={() =>
+                                  removeDoc.mutate({ companyId, key: d.key! })
+                                }
+                              >
+                                {removeDoc.isPending ? "Excluindo..." : "Excluir mesmo?"}
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 text-xs"
+                                onClick={() => setConfirmingKey(null)}
+                              >
+                                Manter
+                              </Button>
+                            </>
+                          ) : (
+                            <>
+                              <button
+                                onClick={() => {
+                                  setEditingKey(d.key!);
+                                  setEditName(d.employee || "");
+                                }}
+                                className="text-slate-400 hover:text-slate-700 p-1"
+                                title="Corrigir a quem pertence"
+                              >
+                                <Pencil className="h-3.5 w-3.5" />
+                              </button>
+                              <button
+                                onClick={() => setConfirmingKey(d.key!)}
+                                className="text-slate-400 hover:text-red-600 p-1"
+                                title="Excluir este documento"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            </>
+                          )}
+                        </div>
                       )}
                     </div>
 
@@ -239,7 +289,7 @@ export function EmployeeDocumentsPanel({ companyId }: { companyId: string }) {
                         />
                         <Button
                           size="sm"
-                          className="h-8"
+                          className="h-8 text-xs gap-1"
                           onClick={() =>
                             updateMeta.mutate({
                               companyId,
@@ -249,14 +299,17 @@ export function EmployeeDocumentsPanel({ companyId }: { companyId: string }) {
                           }
                         >
                           <Check className="h-3.5 w-3.5" />
+                          Salvar
                         </Button>
+                        {/* Labelled: an unlabelled X here was read as "delete". */}
                         <Button
                           size="sm"
                           variant="outline"
-                          className="h-8"
+                          className="h-8 text-xs gap-1"
                           onClick={() => setEditingKey(null)}
                         >
                           <X className="h-3.5 w-3.5" />
+                          Cancelar
                         </Button>
                       </div>
                     )}
