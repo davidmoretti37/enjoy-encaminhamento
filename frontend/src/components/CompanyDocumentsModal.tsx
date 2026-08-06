@@ -39,6 +39,7 @@ import {
   Briefcase,
 } from "lucide-react";
 import { toast } from "sonner";
+import { EmployeeDocumentsPanel } from "@/components/EmployeeDocumentsPanel";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { trpc } from "@/lib/trpc";
@@ -109,15 +110,15 @@ export default function CompanyDocumentsModal({
     },
   });
 
-  const uploadEmployeeContractMutation = trpc.agency.uploadEmployeeContract.useMutation({
-    onSuccess: () => {
-      toast.success("Contrato do funcionário enviado!");
-      refetch();
-    },
-    onError: (error: any) => {
-      toast.error(error.message || "Erro ao enviar contrato");
-    },
-  });
+  // Badge count for the employee-documents section. Same query the panel uses,
+  // so React Query serves it from cache rather than refetching.
+  const { data: employeeDocsData } = trpc.agency.listCompanyDocuments.useQuery(
+    { companyId: (historyData?.company as any)?.id ?? "" },
+    { enabled: !!(historyData?.company as any)?.id && open },
+  );
+  const employeeDocCount = (employeeDocsData?.files ?? []).filter(
+    (f: any) => f.category !== "contrato_empresa",
+  ).length;
 
   const updateCompanyMutation = trpc.agency.updateCompanyProfile.useMutation({
     onSuccess: () => {
@@ -822,238 +823,22 @@ export default function CompanyDocumentsModal({
                         <ChevronRight className="h-5 w-5 text-gray-500" />
                       )}
                       <Users className="h-5 w-5 text-orange-600" />
-                      <span className="font-medium">Contratos de Funcionários</span>
+                      <span className="font-medium">Documentos dos Funcionários</span>
                     </div>
-                    <Badge variant="secondary">{hiringProcesses.length}</Badge>
+                    <Badge variant="secondary">{employeeDocCount}</Badge>
                   </div>
                 </CollapsibleTrigger>
                 <CollapsibleContent>
                   <div className="px-4 py-3 ml-8 border-l-2 border-gray-200">
                     <p className="text-xs text-muted-foreground mb-3">
-                      Contratos individuais de candidatos contratados por esta empresa (estágio, CLT, jovem aprendiz).
+                      Documentos dos jovens contratados por esta empresa: contrato de estágio,
+                      termos, apólice de seguro, atestados e o que mais for entregue.
                     </p>
-                    {hiringProcesses.length > 0 ? (
-                      <div className="space-y-4">
-                        {hiringProcesses.map((hp: any) => {
-                          const hpInvitations = signingInvitations.filter(
-                            (inv: any) => inv.hiring_process_id === hp.id
-                          );
-                          const typeLabels: Record<string, string> = {
-                            estagio: "Estágio",
-                            clt: "CLT",
-                            menor_aprendiz: "Jovem Aprendiz",
-                            "menor-aprendiz": "Jovem Aprendiz",
-                          };
-                          const statusLabels: Record<string, string> = {
-                            active: "Ativo",
-                            pending_signatures: "Aguardando Assinaturas",
-                            pending_payment: "Aguardando Pagamento",
-                            completed: "Concluído",
-                          };
-                          const roleLabels: Record<string, string> = {
-                            candidate: "Candidato",
-                            parent_guardian: "Responsável",
-                            educational_institution: "Inst. de Ensino",
-                          };
-                          return (
-                            <div key={hp.id} className="rounded-lg border bg-gray-50 p-3 space-y-3">
-                              <div className="flex items-center justify-between">
-                                <div>
-                                  <p className="font-medium">{hp.candidate?.full_name || "Candidato"}</p>
-                                  <p className="text-sm text-muted-foreground">
-                                    {hp.job?.title || "Vaga"} · {typeLabels[hp.hiring_type] || hp.hiring_type}
-                                  </p>
-                                </div>
-                                <Badge
-                                  className={
-                                    hp.status === "active"
-                                      ? "bg-green-100 text-green-700"
-                                      : "bg-amber-100 text-amber-700"
-                                  }
-                                >
-                                  {statusLabels[hp.status] || hp.status}
-                                </Badge>
-                              </div>
-
-                              {/* Signing status for each party */}
-                              <div className="space-y-1.5 pl-3 border-l-2 border-gray-300">
-                                {/* Company signature (from hiring_processes fields) */}
-                                <div
-                                  className={`flex items-center justify-between text-sm ${hp.company_signed ? "cursor-pointer hover:bg-gray-100 -mx-1 px-1 rounded" : ""}`}
-                                  onClick={() => hp.company_signed && setViewingSignature({
-                                    name: hp.company_signer_name || "Empresa",
-                                    role: "Empresa",
-                                    date: hp.company_signed_at ? new Date(hp.company_signed_at).toLocaleDateString("pt-BR") : "",
-                                    signature: hp.company_signature || null,
-                                  })}
-                                >
-                                  <div className="flex items-center gap-2">
-                                    {hp.company_signed ? (
-                                      <CheckCircle2 className="h-3.5 w-3.5 text-green-600 shrink-0" />
-                                    ) : (
-                                      <Clock className="h-3.5 w-3.5 text-amber-500 shrink-0" />
-                                    )}
-                                    <span className="text-gray-700">
-                                      Empresa
-                                      {hp.company_signer_name && (
-                                        <span className="text-gray-500"> — {hp.company_signer_name}</span>
-                                      )}
-                                    </span>
-                                  </div>
-                                  {hp.company_signed_at && (
-                                    <span className="text-xs text-gray-500">
-                                      {new Date(hp.company_signed_at).toLocaleDateString("pt-BR")}
-                                    </span>
-                                  )}
-                                  {!hp.company_signed && (
-                                    <span className="text-xs text-amber-600">Pendente</span>
-                                  )}
-                                </div>
-
-                                {/* Candidate, Parent, School signatures (from signing_invitations) */}
-                                {hpInvitations.map((inv: any) => (
-                                  <div
-                                    key={inv.id}
-                                    className={`flex items-center justify-between text-sm ${inv.signed_at ? "cursor-pointer hover:bg-gray-100 -mx-1 px-1 rounded" : ""}`}
-                                    onClick={() => inv.signed_at && setViewingSignature({
-                                      name: inv.signer_name,
-                                      role: roleLabels[inv.signer_role] || inv.signer_role,
-                                      date: new Date(inv.signed_at).toLocaleDateString("pt-BR"),
-                                      signature: inv.signature || null,
-                                    })}
-                                  >
-                                    <div className="flex items-center gap-2">
-                                      {inv.signed_at ? (
-                                        <CheckCircle2 className="h-3.5 w-3.5 text-green-600 shrink-0" />
-                                      ) : (
-                                        <Clock className="h-3.5 w-3.5 text-amber-500 shrink-0" />
-                                      )}
-                                      <span className="text-gray-700">
-                                        {roleLabels[inv.signer_role] || inv.signer_role}
-                                        <span className="text-gray-500"> — {inv.signer_name}</span>
-                                      </span>
-                                    </div>
-                                    {inv.signed_at ? (
-                                      <span className="text-xs text-gray-500">
-                                        {new Date(inv.signed_at).toLocaleDateString("pt-BR")}
-                                      </span>
-                                    ) : (
-                                      <span className="text-xs text-amber-600">Pendente</span>
-                                    )}
-                                  </div>
-                                ))}
-                              </div>
-
-                              {/* Upload contract document for this employee */}
-                              <div className="pt-2 border-t border-gray-200">
-                                {hp.contract_document_url ? (
-                                  <a href={hp.contract_document_url} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 hover:underline flex items-center gap-1">
-                                    <FileText className="h-3.5 w-3.5" />
-                                    Ver contrato do funcionário
-                                  </a>
-                                ) : (
-                                  <label className={`cursor-pointer inline-flex items-center gap-2 px-3 py-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm ${uploadEmployeeContractMutation.isPending ? 'opacity-50' : ''}`}>
-                                    <Upload className="h-3.5 w-3.5" />
-                                    {uploadEmployeeContractMutation.isPending ? 'Enviando...' : 'Upload Contrato'}
-                                    <input
-                                      type="file"
-                                      accept=".pdf"
-                                      className="hidden"
-                                      disabled={uploadEmployeeContractMutation.isPending}
-                                      onChange={(e) => {
-                                        const file = e.target.files?.[0];
-                                        if (!file) return;
-                                        const reader = new FileReader();
-                                        reader.onload = () => {
-                                          const base64 = (reader.result as string).split(',')[1];
-                                          uploadEmployeeContractMutation.mutate({
-                                            hiringProcessId: hp.id,
-                                            fileName: file.name,
-                                            fileData: base64,
-                                            contentType: file.type,
-                                          });
-                                        };
-                                        reader.readAsDataURL(file);
-                                        e.target.value = '';
-                                      }}
-                                    />
-                                  </label>
-                                )}
-                              </div>
-
-                              {/* Autentique documents for this hiring process */}
-                              {(() => {
-                                const hpDocs = signedHiringDocs.filter((d: any) => d.context_id === hp.id);
-                                if (hpDocs.length === 0) return null;
-                                return (
-                                  <div className="mt-2 pt-2 border-t border-gray-200">
-                                    <p className="text-xs font-medium text-gray-500 mb-1.5">Documentos Autentique</p>
-                                    <div className="space-y-1.5">
-                                      {hpDocs.map((doc: any) => {
-                                        const signers = doc.signers || [];
-                                        const allSigned = signers.every((s: any) => s.signed_at);
-                                        return (
-                                          <div key={doc.id} className="text-xs bg-white rounded border p-2">
-                                            <div className="flex items-center justify-between mb-1">
-                                              <span className="font-medium text-gray-700">{doc.document_name}</span>
-                                              <span className={`text-[10px] px-1.5 py-0.5 rounded ${allSigned ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
-                                                {allSigned ? 'Completo' : 'Pendente'}
-                                              </span>
-                                            </div>
-                                            <div className="flex gap-2">
-                                              {signers.map((s: any, i: number) => (
-                                                <span key={i} className={`flex items-center gap-0.5 ${s.signed_at ? 'text-green-600' : 'text-gray-400'}`}>
-                                                  {s.signed_at ? <CheckCircle2 className="h-2.5 w-2.5" /> : <Clock className="h-2.5 w-2.5" />}
-                                                  {s.name || s.role}
-                                                </span>
-                                              ))}
-                                            </div>
-                                          </div>
-                                        );
-                                      })}
-                                    </div>
-                                  </div>
-                                );
-                              })()}
-                            </div>
-                          );
-                        })}
-                      </div>
+                    {companyData?.id ? (
+                      <EmployeeDocumentsPanel companyId={companyData.id} />
                     ) : (
-                      <p className="text-sm text-muted-foreground mb-3">
-                        Nenhum contrato de funcionário registrado.
-                      </p>
+                      <p className="text-sm text-muted-foreground">Empresa não identificada.</p>
                     )}
-
-                    {/* Always show upload button */}
-                    <div className="mt-3 pt-3 border-t border-gray-200">
-                      <p className="text-xs text-muted-foreground mb-2">Adicionar documento de contrato:</p>
-                      <label className="cursor-pointer inline-flex items-center gap-2 px-3 py-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm">
-                        <Upload className="h-3.5 w-3.5" />
-                        Upload Contrato de Funcionário
-                        <input
-                          type="file"
-                          accept=".pdf"
-                          className="hidden"
-                          onChange={(e) => {
-                            const file = e.target.files?.[0];
-                            if (!file) return;
-                            const reader = new FileReader();
-                            reader.onload = () => {
-                              const base64 = (reader.result as string).split(',')[1];
-                              const sanitizedName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-                              uploadMutation.mutate({
-                                companyEmail: meeting?.company_email || '',
-                                fileBase64: base64,
-                                fileName: `employee-contract-${sanitizedName}`,
-                              });
-                            };
-                            reader.readAsDataURL(file);
-                            e.target.value = '';
-                          }}
-                        />
-                      </label>
-                    </div>
                   </div>
                 </CollapsibleContent>
               </Collapsible>

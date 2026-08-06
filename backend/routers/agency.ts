@@ -6,6 +6,12 @@ import { publicProcedure } from "../_core/trpc";
 import { adminProcedure, agencyProcedure } from "./procedures";
 import { sendEmail } from "./email";
 import { parseCompensation } from "../lib/parseCompensation";
+import {
+  DOC_CATEGORIES,
+  withInferredMeta,
+  type CompanyFile,
+  type DocCategory,
+} from "../lib/companyDocuments";
 import * as _db from "../db";
 const db: any = _db;
 import { supabaseAdmin as _supabaseAdmin } from "../supabase";
@@ -1844,6 +1850,129 @@ Regras:
     }),
 
   // Upload employee contract document (agency)
+  /**
+   * Company documents, filed by type and by the person they belong to.
+   *
+   * The employee-documents panel used to upload through outreach.uploadSignedContract,
+   * which files everything as a COMPANY service-contract file and also stamps
+   * contract_signed_at on the meeting. So each employee document she uploaded
+   * reported success, was filed under the wrong heading, was invisible in the
+   * panel she was looking at, and silently re-marked the service contract as
+   * freshly signed. She re-uploaded the same TCE three times.
+   *
+   * This writes the file WITH its category and owner and touches nothing else.
+   * It deliberately does not require a hiring_process: the operator does not
+   * create them, and every company in production has zero.
+   */
+  listCompanyDocuments: agencyProcedure
+    .input(z.object({ companyId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      await assertAgencyOwnsCompany(ctx, input.companyId);
+      const { data: company } = await supabaseAdmin
+        .from("companies")
+        .select("contract_files")
+        .eq("id", input.companyId)
+        .single();
+      const files: CompanyFile[] = Array.isArray(company?.contract_files)
+        ? (company!.contract_files as CompanyFile[])
+        : [];
+      // Files uploaded before categories existed get theirs derived on read, so
+      // the panel is correct immediately without a migration.
+      return { files: files.map(withInferredMeta) };
+    }),
+
+  uploadCompanyDocument: agencyProcedure
+    .input(z.object({
+      companyId: z.string().uuid(),
+      fileName: z.string().min(1),
+      fileData: z.string().min(1),
+      contentType: z.string().default("application/pdf"),
+      category: z.enum(DOC_CATEGORIES.map((c) => c.value) as [DocCategory, ...DocCategory[]]),
+      employee: z.string().trim().max(120).nullable().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await assertAgencyOwnsCompany(ctx, input.companyId);
+
+      const { storagePut } = await import("../storage");
+      const sanitized = input.fileName.replace(/[^a-zA-Z0-9._-]/g, "_");
+      const key = `contracts/company/${input.companyId}/${Date.now()}-${sanitized}`;
+      const { url } = await storagePut(
+        key,
+        Buffer.from(input.fileData, "base64"),
+        input.contentType,
+      );
+
+      const { data: company } = await supabaseAdmin
+        .from("companies")
+        .select("contract_files")
+        .eq("id", input.companyId)
+        .single();
+
+      const existing: CompanyFile[] = Array.isArray(company?.contract_files)
+        ? (company!.contract_files as CompanyFile[])
+        : [];
+
+      const newFile: CompanyFile = {
+        url,
+        key,
+        name: input.fileName,
+        category: input.category,
+        employee: input.employee?.trim() || null,
+        uploadedAt: new Date().toISOString(),
+      };
+
+      await supabaseAdmin
+        .from("companies")
+        .update({ contract_files: [...existing, newFile] })
+        .eq("id", input.companyId);
+
+      return { success: true, file: newFile };
+    }),
+
+  /** Correct the category or owner of an already-uploaded file. */
+  updateCompanyDocumentMeta: agencyProcedure
+    .input(z.object({
+      companyId: z.string().uuid(),
+      key: z.string().min(1),
+      category: z.enum(DOC_CATEGORIES.map((c) => c.value) as [DocCategory, ...DocCategory[]]).optional(),
+      employee: z.string().trim().max(120).nullable().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await assertAgencyOwnsCompany(ctx, input.companyId);
+
+      const { data: company } = await supabaseAdmin
+        .from("companies")
+        .select("contract_files")
+        .eq("id", input.companyId)
+        .single();
+
+      const files: CompanyFile[] = Array.isArray(company?.contract_files)
+        ? (company!.contract_files as CompanyFile[])
+        : [];
+
+      const target = files.find((f) => f.key === input.key);
+      if (!target) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Documento não encontrado" });
+      }
+
+      const updated = files.map((f) =>
+        f.key === input.key
+          ? {
+              ...withInferredMeta(f),
+              ...(input.category ? { category: input.category } : {}),
+              ...(input.employee !== undefined ? { employee: input.employee?.trim() || null } : {}),
+            }
+          : f,
+      );
+
+      await supabaseAdmin
+        .from("companies")
+        .update({ contract_files: updated })
+        .eq("id", input.companyId);
+
+      return { success: true };
+    }),
+
   uploadEmployeeContract: agencyProcedure
     .input(z.object({
       hiringProcessId: z.string(),
