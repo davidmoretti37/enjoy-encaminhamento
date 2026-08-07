@@ -1851,6 +1851,66 @@ Regras:
 
   // Upload employee contract document (agency)
   /**
+   * The sender identity candidates see on this agency's email.
+   *
+   * The address stays the verified ANEC mailbox (sending as an address we do not
+   * control fails SPF/DKIM). What the operator controls is the display name and,
+   * the part that actually matters day to day, where candidate replies land.
+   */
+  getSenderIdentity: agencyProcedure.query(async ({ ctx }) => {
+    const agency = await db.getAgencyForUserContext(ctx.user.id, ctx.user.role);
+    if (!agency) {
+      throw new TRPCError({ code: "NOT_FOUND", message: "Agência não encontrada." });
+    }
+    return {
+      agencyName: agency.agency_name ?? null,
+      senderDisplayName: (agency as any).sender_display_name ?? null,
+      replyToEmail: (agency as any).reply_to_email ?? null,
+      // What is actually in use right now, including fallbacks, so the screen can
+      // show the truth rather than only what has been explicitly typed in.
+      effectiveDisplayName:
+        (agency as any).sender_display_name || agency.agency_name || null,
+      effectiveReplyTo: (agency as any).reply_to_email || agency.email || null,
+    };
+  }),
+
+  updateSenderIdentity: agencyProcedure
+    .input(z.object({
+      senderDisplayName: z.string().trim().max(80).nullable().optional(),
+      replyToEmail: z
+        .string()
+        .trim()
+        .email("Informe um e-mail válido.")
+        .nullable()
+        .optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const agency = await db.getAgencyForUserContext(ctx.user.id, ctx.user.role);
+      if (!agency) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Agência não encontrada." });
+      }
+
+      const patch: Record<string, string | null> = {};
+      if (input.senderDisplayName !== undefined) {
+        patch.sender_display_name = input.senderDisplayName || null;
+      }
+      if (input.replyToEmail !== undefined) {
+        patch.reply_to_email = input.replyToEmail || null;
+      }
+      if (Object.keys(patch).length === 0) return { success: true };
+
+      const { error } = await supabaseAdmin
+        .from("agencies")
+        .update(patch)
+        .eq("id", agency.id);
+      if (error) {
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: error.message });
+      }
+
+      return { success: true };
+    }),
+
+  /**
    * Company documents, filed by type and by the person they belong to.
    *
    * The employee-documents panel used to upload through outreach.uploadSignedContract,

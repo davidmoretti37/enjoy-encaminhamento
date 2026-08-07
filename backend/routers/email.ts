@@ -26,6 +26,34 @@ function resolveUnitFromAgency(agency: any): SenderUnit {
   return "default";
 }
 
+/**
+ * How an agency presents itself on outgoing candidate mail.
+ *
+ * The address is always the verified ANEC mailbox — sending as an address we do
+ * not control fails SPF/DKIM and lands in spam. What the agency controls is the
+ * display name candidates see and, crucially, where their replies go. Before
+ * this, every reply went to whoever owned the global SMTP account.
+ */
+export type SenderIdentity = {
+  unit: SenderUnit;
+  fromName?: string | null;
+  replyTo?: string | null;
+};
+
+export async function senderIdentityForAgencyId(agencyId?: string | null): Promise<SenderIdentity> {
+  if (!agencyId) return { unit: "default" };
+  try {
+    const agency: any = await (db as any).getAgencyById(agencyId);
+    return {
+      unit: resolveUnitFromAgency(agency),
+      fromName: agency?.sender_display_name || agency?.agency_name || null,
+      replyTo: agency?.reply_to_email || agency?.email || null,
+    };
+  } catch {
+    return { unit: "default" };
+  }
+}
+
 /** Resolve the sender unit for a given agency id (best-effort; 'default' on any miss). */
 export async function senderUnitForAgencyId(agencyId?: string | null): Promise<SenderUnit> {
   if (!agencyId) return "default";
@@ -81,6 +109,7 @@ export async function sendEmail(
   subject: string,
   html: string,
   unit: SenderUnit = "default",
+  identity?: { fromName?: string | null; replyTo?: string | null },
 ): Promise<boolean> {
   const mailbox = resolveMailbox(unit);
   if (!mailbox.user || !mailbox.pass) {
@@ -90,13 +119,25 @@ export async function sendEmail(
 
   try {
     const transporter = createEmailTransporter(mailbox);
+
+    // Display name only. The address stays the authenticated mailbox, otherwise
+    // the message fails SPF/DKIM and is filed as spam.
+    const fromName = identity?.fromName?.trim();
+    const from = fromName ? `"${fromName.replace(/"/g, "")}" <${mailbox.from}>` : mailbox.from;
+
+    // Reply-To is what actually routes a candidate's answer to the right person.
+    const replyTo = identity?.replyTo?.trim() || undefined;
+
     await transporter.sendMail({
-      from: mailbox.from,
+      from,
       to,
       subject,
       html,
+      ...(replyTo ? { replyTo } : {}),
     });
-    console.log(`[Email] Sent successfully to: ${to} (from ${mailbox.from})`);
+    console.log(
+      `[Email] Sent successfully to: ${to} (from ${from}${replyTo ? `, reply-to ${replyTo}` : ""})`,
+    );
     return true;
   } catch (err: any) {
     console.error("[Email] Failed to send:", err.message);

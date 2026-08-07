@@ -3,6 +3,7 @@ import ContentTransition from "@/components/ui/ContentTransition";
 import { FormSkeleton } from "@/components/ui/skeletons";
 import DashboardLayout from "@/components/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { SenderIdentityCard } from "@/components/SenderIdentityCard";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
@@ -495,6 +496,9 @@ export default function SettingsPage() {
             </CardContent>
           </Card>
         )}
+
+        {/* Sender identity — who candidates see, and where their replies land */}
+        {canManageDocs && <SenderIdentityCard />}
 
         {/* Public Links Section */}
         {canManageDocs && user && (
